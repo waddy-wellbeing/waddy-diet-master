@@ -1,8 +1,7 @@
-import { createBrowserClient } from '@supabase/ssr'
-
-export function createClient() {
-  return createBrowserClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-  )
-}
+/**
+ * @deprecated Use '@/lib/supabase/client' or '@/lib/supabase/server' instead.
+ * 
+ * - Client Components: import { createClient } from '@/lib/supabase/client'
+ * - Server Components: import { createClient } from '@/lib/supabase/server'
+ */
+export { createClient } from './supabase/client'

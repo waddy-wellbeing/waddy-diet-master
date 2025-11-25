@@ -64,8 +64,11 @@ CREATE TABLE nutri_foods (
   
   -- Basic food info
   name VARCHAR(255) NOT NULL,
+  name_ar TEXT, -- Arabic name for i18n support
   brand VARCHAR(255),
   category VARCHAR(100), -- e.g., "protein", "grain", "vegetable", "fruit", "dairy"
+  food_group TEXT, -- e.g., "Meat", "Vegetables", "Grains" (from nutrition databases)
+  subgroup TEXT, -- e.g., "Poultry", "Leafy Greens" (more specific classification)
   
   -- Serving information
   serving_size DECIMAL(10, 2) NOT NULL,
@@ -125,9 +128,9 @@ CREATE TABLE nutri_recipes (
   
   -- Ingredients as JSONB array for flexibility
   -- Example: [
-  --   { "food_id": "uuid", "name": "chicken breast", "amount": 200, "unit": "g" },
-  --   { "food_id": "uuid", "name": "olive oil", "amount": 1, "unit": "tbsp" },
-  --   { "food_id": null, "name": "salt", "amount": 1, "unit": "pinch" }
+  --   { "food_id": "uuid", "raw_name": "chicken breast", "quantity": 200, "unit": "g", "is_spice": false, "is_optional": false },
+  --   { "food_id": "uuid", "raw_name": "olive oil", "quantity": 1, "unit": "tbsp", "is_spice": false, "is_optional": false },
+  --   { "food_id": null, "raw_name": "salt", "quantity": 1, "unit": "pinch", "is_spice": true, "is_optional": false }
   -- ]
   ingredients JSONB NOT NULL DEFAULT '[]',
   
