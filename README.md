@@ -29,8 +29,30 @@ To learn more about Next.js, take a look at the following resources:
 
 You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
 
-## Deploy on Vercel
+## Database Seeding
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+We ship curated CSV datasets for foods, spices, and recipes under `docs/datasets/`.
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+1. **Configure environment** – copy `.env.local.example` to `.env.local` and fill:
+
+	```env
+	NEXT_PUBLIC_SUPABASE_URL=...
+	NEXT_PUBLIC_SUPABASE_ANON_KEY=...
+	SUPABASE_URL=...
+	SUPABASE_ANON_KEY=...
+	SUPABASE_SERVICE_ROLE_KEY=...   # keep private – needed for seeding
+	```
+
+2. **Dry run (safe)** – validates FK lookups and shows inserts/updates without touching the DB:
+
+	```bash
+	npm run seed:dry-run
+	```
+
+3. **Seed the database** – upserts foods ➜ spices ➜ recipes using the service role key:
+
+	```bash
+	npm run seed
+	```
+
+The seeding scripts automatically resolve ingredient → food relationships, flag spices, and compute recipe macros per serving. Any ingredient that cannot be matched logs a warning and keeps a `null` `food_id` so admins can reconcile it later.
