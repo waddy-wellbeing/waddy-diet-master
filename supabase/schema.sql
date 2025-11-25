@@ -103,6 +103,32 @@ CREATE INDEX nutri_foods_category_idx ON nutri_foods(category);
 CREATE INDEX nutri_foods_created_by_idx ON nutri_foods(created_by);
 
 -- =============================================================================
+-- NUTRI_SPICES
+-- =============================================================================
+-- Spice reference table for recipe ingredient autocomplete
+-- Spices do NOT participate in macro calculations (is_spice = true in recipes)
+
+CREATE TABLE nutri_spices (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  
+  -- Basic spice info
+  name TEXT NOT NULL,
+  name_ar TEXT, -- Arabic name for i18n support
+  aliases TEXT[] DEFAULT '{}', -- Alternative names for search/autocomplete
+  
+  -- Whether this is a default system spice (vs user-created)
+  is_default BOOLEAN NOT NULL DEFAULT TRUE,
+  
+  -- Timestamps
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+-- Indexes for common queries
+CREATE INDEX nutri_spices_name_idx ON nutri_spices(name);
+CREATE INDEX nutri_spices_is_default_idx ON nutri_spices(is_default);
+
+-- =============================================================================
 -- NUTRI_RECIPES
 -- =============================================================================
 -- Recipe storage with ingredients as JSONB array
@@ -268,6 +294,7 @@ CREATE INDEX nutri_daily_logs_user_date_idx ON nutri_daily_logs(user_id, log_dat
 -- Enable RLS on all tables
 ALTER TABLE nutri_profiles ENABLE ROW LEVEL SECURITY;
 ALTER TABLE nutri_foods ENABLE ROW LEVEL SECURITY;
+ALTER TABLE nutri_spices ENABLE ROW LEVEL SECURITY;
 ALTER TABLE nutri_recipes ENABLE ROW LEVEL SECURITY;
 ALTER TABLE nutri_daily_plans ENABLE ROW LEVEL SECURITY;
 ALTER TABLE nutri_daily_logs ENABLE ROW LEVEL SECURITY;
@@ -297,6 +324,11 @@ CREATE POLICY nutri_foods_update_own ON nutri_foods
 
 CREATE POLICY nutri_foods_delete_own ON nutri_foods
   FOR DELETE USING (auth.uid() = created_by);
+
+-- Spices: Read-only access to default spices for all authenticated users
+-- INSERT/UPDATE/DELETE managed via service role (admin only)
+CREATE POLICY nutri_spices_select_default ON nutri_spices
+  FOR SELECT USING (is_default = TRUE);
 
 -- Recipes: Users can see public recipes and their own
 CREATE POLICY nutri_recipes_select ON nutri_recipes
@@ -357,6 +389,10 @@ CREATE TRIGGER nutri_profiles_updated_at
 
 CREATE TRIGGER nutri_foods_updated_at
   BEFORE UPDATE ON nutri_foods
+  FOR EACH ROW EXECUTE FUNCTION nutri_update_updated_at();
+
+CREATE TRIGGER nutri_spices_updated_at
+  BEFORE UPDATE ON nutri_spices
   FOR EACH ROW EXECUTE FUNCTION nutri_update_updated_at();
 
 CREATE TRIGGER nutri_recipes_updated_at

@@ -73,17 +73,37 @@ export interface FoodMicros {
 }
 
 // =============================================================================
+// NUTRI_SPICES
+// =============================================================================
+
+/** A spice from the nutri_spices reference table */
+export interface NutriSpice {
+  id: string
+  name: string
+  name_ar?: string | null
+  aliases: string[]
+  is_default: boolean
+  created_at: string
+  updated_at: string
+}
+
+// =============================================================================
 // NUTRI_RECIPES
 // =============================================================================
 
-/** Single ingredient in a recipe */
+/** 
+ * Single ingredient in a recipe (stored in nutri_recipes.ingredients JSONB)
+ * 
+ * For regular ingredients: food_id is set, quantity/unit are required
+ * For spices: food_id is null, is_spice is true, quantity/unit can be null (meaning "as desired")
+ */
 export interface RecipeIngredient {
   food_id: string | null
   raw_name: string
-  quantity: number
-  unit: string
-  is_spice?: boolean
-  is_optional?: boolean
+  quantity: number | null
+  unit: string | null
+  is_spice: boolean
+  is_optional: boolean
 }
 
 /** Single instruction step */

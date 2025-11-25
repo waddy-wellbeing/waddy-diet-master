@@ -89,5 +89,13 @@ npm run lint  # Run ESLint
 
 ## Documentation
 - `docs/main/architecture.md` - System architecture and design decisions
+- `docs/main/database-erd.md` - Database ERD diagrams and JSONB structures
 - `docs/main/user-story.md` - Primary user persona and journey
 - `docs/main/scenarios.md` - Detailed user flows and scenarios
+
+## Schema Change Checklist
+When modifying the database schema, update these files:
+1. `supabase/schema.sql` - The source of truth
+2. `docs/main/database-erd.md` - ERD diagrams and JSONB examples
+3. `lib/types/nutri.ts` - TypeScript interfaces
+4. This file if major structural changes
