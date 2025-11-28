@@ -1,0 +1,9 @@
+id,name,name_ar,aliases,is_default,created_at,updated_at
+,Salt,ملح,"[]",true,,
+,Black pepper,فلفل أسود,"[]",true,,
+,Cumin,كمون,"[]",true,,
+,Paprika,بابريكا,"[]",true,,
+,Garlic powder,بودرة ثوم,"[]",true,,
+,Turmeric,كركم,"[]",true,,
+,Cinnamon,قرفة,"[]",true,,
+,Thyme,زعتر,"[]",true,,

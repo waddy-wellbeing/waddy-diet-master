@@ -1,6 +1,6 @@
 # BiteRight Database Schema
 
-> **Last updated:** 2024-11-25
+> **Last updated:** 2025-11-28
 > 
 > ⚠️ **Keep this document in sync with `supabase/schema.sql`**
 > When you modify the database schema, update the ERD diagrams below.
@@ -9,13 +9,13 @@
 
 | Term | Entity | Description |
 |------|--------|-------------|
-| **Food/Ingredient** | `nutri_foods` | Atomic items with nutrition data (chicken breast, rice, olive oil) |
-| **Spice** | `nutri_spices` | Reference spices for recipes - do NOT count towards macros |
-| **Recipe** | `nutri_recipes` | A dish made from multiple foods with instructions (Grilled Chicken Salad) |
+| **Ingredient** | `ingredients` | Atomic items with nutrition data (chicken breast, rice, olive oil) |
+| **Spice** | `spices` | Reference spices for recipes - do NOT count towards macros |
+| **Recipe** | `recipes` | A dish made from multiple foods with instructions (Grilled Chicken Salad) |
 | **Meal** | *Concept only* | A time slot in the day: `breakfast`, `lunch`, `dinner`, `snacks` - not a table |
-| **Plan** | `nutri_daily_plans` | What you *should* eat - recipes assigned to meal slots for a day |
-| **Log** | `nutri_daily_logs` | What you *actually* ate - foods/recipes logged to meal slots |
-| **Profile** | `nutri_profiles` | User settings, nutritional targets, and preferences |
+| **Plan** | `daily_plans` | What you *should* eat - recipes assigned to meal slots for a day |
+| **Log** | `daily_logs` | What you *actually* ate - ingredients/recipes logged to meal slots |
+| **Profile** | `profiles` | User settings, nutritional targets, and preferences |
 
 ---
 
@@ -23,19 +23,19 @@
 
 ```mermaid
 erDiagram
-    auth_users ||--o| nutri_profiles : "has one"
-    auth_users ||--o{ nutri_foods : "creates"
-    auth_users ||--o{ nutri_recipes : "creates"
-    auth_users ||--o{ nutri_daily_plans : "has"
-    auth_users ||--o{ nutri_daily_logs : "has"
+    auth_users ||--o| profiles : "has one"
+    auth_users ||--o{ ingredients : "creates"
+    auth_users ||--o{ recipes : "creates"
+    auth_users ||--o{ daily_plans : "has"
+    auth_users ||--o{ daily_logs : "has"
     
-    nutri_foods ||--o{ nutri_recipes : "used in (via ingredients JSONB)"
-    nutri_spices ||--o{ nutri_recipes : "referenced in (via ingredients JSONB, is_spice=true)"
-    nutri_recipes ||--o{ nutri_daily_plans : "assigned to (via plan JSONB)"
-    nutri_recipes ||--o{ nutri_daily_logs : "logged in (via log JSONB)"
-    nutri_foods ||--o{ nutri_daily_logs : "logged in (via log JSONB)"
+    ingredients ||--o{ recipes : "used in (via ingredients JSONB)"
+    spices ||--o{ recipes : "referenced in (via ingredients JSONB, is_spice=true)"
+    recipes ||--o{ daily_plans : "assigned to (via plan JSONB)"
+    recipes ||--o{ daily_logs : "logged in (via log JSONB)"
+    ingredients ||--o{ daily_logs : "logged in (via log JSONB)"
 
-    nutri_profiles {
+    profiles {
         uuid id PK
         uuid user_id FK
         jsonb basic_info "name, age, height, weight, sex, activity_level"
@@ -46,7 +46,7 @@ erDiagram
         int onboarding_step
     }
 
-    nutri_foods {
+    ingredients {
         uuid id PK
         string name
         string name_ar "Arabic name"
@@ -64,7 +64,7 @@ erDiagram
         boolean is_public
     }
 
-    nutri_spices {
+    spices {
         uuid id PK
         string name
         string name_ar "Arabic name"
@@ -72,7 +72,7 @@ erDiagram
         boolean is_default "system vs user-created"
     }
 
-    nutri_recipes {
+    recipes {
         uuid id PK
         string name
         text description
@@ -84,7 +84,7 @@ erDiagram
         int cook_time_minutes
         int servings
         string difficulty
-        jsonb ingredients "array of food/spice references"
+        jsonb ingredients "array of ingredient/spice references"
         jsonb instructions "array of steps"
         jsonb nutrition_per_serving "calculated macros"
         boolean is_vegetarian
@@ -95,7 +95,7 @@ erDiagram
         boolean is_public
     }
 
-    nutri_daily_plans {
+    daily_plans {
         uuid id PK
         uuid user_id FK
         date plan_date
@@ -104,7 +104,7 @@ erDiagram
         boolean is_generated
     }
 
-    nutri_daily_logs {
+    daily_logs {
         uuid id PK
         uuid user_id FK
         date log_date
@@ -125,14 +125,14 @@ This shows how data flows through the system:
 ```mermaid
 flowchart TB
     subgraph "Reference Data (shared)"
-        F[🥕 nutri_foods<br/>Ingredients Database]
-        R[🍽️ nutri_recipes<br/>Recipe Collection]
+        F[🥕 ingredients<br/>Ingredient Database]
+        R[🍽️ recipes<br/>Recipe Collection]
     end
     
     subgraph "User Data (per user)"
-        P[👤 nutri_profiles<br/>User Settings & Targets]
-        DP[📅 nutri_daily_plans<br/>Meal Plans]
-        DL[✅ nutri_daily_logs<br/>Food Diary]
+        P[👤 profiles<br/>User Settings & Targets]
+        DP[📅 daily_plans<br/>Meal Plans]
+        DL[✅ daily_logs<br/>Food Diary]
     end
     
     F -->|"ingredients[]"| R
@@ -150,17 +150,17 @@ flowchart TB
 ```
 
 **Flow explanation:**
-1. **Foods** are the building blocks (ingredients)
-2. **Recipes** are composed from foods via the `ingredients` JSONB array
+1. **Ingredients** are the building blocks (single items)
+2. **Recipes** are composed from ingredients via the `ingredients` JSONB array
 3. **Plans** schedule recipes into meal slots for specific dates
-4. **Logs** track what was actually eaten (can be planned recipes OR ad-hoc foods)
+4. **Logs** track what was actually eaten (can be planned recipes OR ad-hoc ingredients)
 5. **Profiles** provide the nutritional targets that guide plan generation
 
 ---
 
 ## JSONB Structure Reference
 
-### nutri_profiles.basic_info
+### profiles.basic_info
 ```json
 {
   "name": "Sarah",
@@ -172,7 +172,7 @@ flowchart TB
 }
 ```
 
-### nutri_profiles.targets
+### profiles.targets
 ```json
 {
   "calories": 1800,
@@ -183,11 +183,11 @@ flowchart TB
 }
 ```
 
-### nutri_recipes.ingredients
+### recipes.ingredients
 ```json
 [
   {
-    "food_id": "uuid-here",
+    "ingredient_id": "uuid-here",
     "raw_name": "chicken breast",
     "quantity": 200,
     "unit": "g",
@@ -195,7 +195,7 @@ flowchart TB
     "is_optional": false
   },
   {
-    "food_id": null,
+    "ingredient_id": null,
     "raw_name": "cumin",
     "quantity": null,
     "unit": null,
@@ -205,12 +205,12 @@ flowchart TB
 ]
 ```
 
-> **Note on spices:** When `is_spice: true`, the ingredient references a spice from `nutri_spices`.
-> - `food_id` is `null` (spices don't have macro data)
+> **Note on spices:** When `is_spice: true`, the ingredient references a spice from `spices`.
+> - `ingredient_id` is `null` (spices don't have macro data)
 > - `quantity` and `unit` can be `null` (meaning "as desired")
 > - Spices do NOT contribute to `nutrition_per_serving` calculations
 
-### nutri_daily_plans.plan
+### daily_plans.plan
 ```json
 {
   "breakfast": { "recipe_id": "uuid", "servings": 1 },
@@ -218,12 +218,12 @@ flowchart TB
   "dinner": { "recipe_id": "uuid", "servings": 1 },
   "snacks": [
     { "recipe_id": "uuid", "servings": 1 },
-    { "food_id": "uuid", "amount": 1, "unit": "piece" }
+    { "ingredient_id": "uuid", "amount": 1, "unit": "piece" }
   ]
 }
 ```
 
-### nutri_daily_logs.log
+### daily_logs.log
 ```json
 {
   "breakfast": {

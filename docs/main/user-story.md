@@ -60,7 +60,7 @@ Over time:
 1. **Simplicity First**: No complicated calorie counting – just follow the plan
 2. **Personalized**: Every meal plan is tailored to individual goals and preferences
 3. **Flexible**: Easy to swap meals and adapt to real life
-4. **Quick Logging**: One tap to log a planned meal, simple search for unplanned foods
+4. **Quick Logging**: One tap to log a planned meal, simple search for unplanned ingredients
 5. **Sustainable**: Focus on building healthy habits, not restrictive dieting
 
 ---

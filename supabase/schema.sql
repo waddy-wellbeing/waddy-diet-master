@@ -1,380 +1,243 @@
 -- =============================================================================
--- BiteRight Database Schema
+-- BiteRight Database Schema (prefix-free)
 -- =============================================================================
--- All tables, functions, and triggers are prefixed with `nutri_`
--- Uses JSONB for flexible nested data where appropriate
+-- Tables, functions, and policies without the historic `nutri_` prefix.
+-- JSONB columns remain for flexible nested data structures.
 -- =============================================================================
 
 -- Enable necessary extensions
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 
 -- =============================================================================
--- NUTRI_PROFILES
+-- PROFILES
 -- =============================================================================
 -- Stores user profile data including basic info, targets, and preferences
--- All flexible/nested data stored in JSONB columns for easy extension
 
-CREATE TABLE nutri_profiles (
+CREATE TABLE profiles (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
-  
-  -- Basic profile info stored as JSONB for flexibility
-  -- Example: { "name": "Sarah", "age": 32, "height_cm": 165, "weight_kg": 65, 
-  --            "sex": "female", "activity_level": "moderate" }
   basic_info JSONB NOT NULL DEFAULT '{}',
-  
-  -- Calculated nutritional targets stored as JSONB
-  -- Example: { "calories": 1800, "protein_g": 120, "carbs_g": 180, "fat_g": 60,
-  --            "fiber_g": 25 }
   targets JSONB NOT NULL DEFAULT '{}',
-  
-  -- User dietary preferences and restrictions as JSONB
-  -- Example: { "diet_type": "omnivore", "allergies": ["nuts", "shellfish"],
-  --            "dislikes": ["mushrooms"], "cuisine_preferences": ["mediterranean", "asian"],
-  --            "cooking_skill": "intermediate", "max_prep_time_minutes": 30 }
   preferences JSONB NOT NULL DEFAULT '{}',
-  
-  -- Goal information
-  -- Example: { "goal_type": "lose_weight", "target_weight_kg": 60, "pace": "moderate" }
   goals JSONB NOT NULL DEFAULT '{}',
-  
-  -- Onboarding status
   onboarding_completed BOOLEAN NOT NULL DEFAULT FALSE,
   onboarding_step INTEGER NOT NULL DEFAULT 0,
-  
-  -- Timestamps
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-  
-  -- Each user can only have one profile
-  CONSTRAINT nutri_profiles_user_id_unique UNIQUE (user_id)
+  CONSTRAINT profiles_user_id_unique UNIQUE (user_id)
 );
 
--- Index for fast user lookups
-CREATE INDEX nutri_profiles_user_id_idx ON nutri_profiles(user_id);
+CREATE INDEX profiles_user_id_idx ON profiles(user_id);
 
 -- =============================================================================
--- NUTRI_FOODS
+-- INGREDIENTS
 -- =============================================================================
--- Food database with nutritional information
--- Macros and micros stored as JSONB for flexibility
+-- Ingredient database with nutritional information per serving
 
-CREATE TABLE nutri_foods (
+CREATE TABLE ingredients (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-  
-  -- Basic food info
   name VARCHAR(255) NOT NULL,
-  name_ar TEXT, -- Arabic name for i18n support
+  name_ar TEXT,
   brand VARCHAR(255),
-  category VARCHAR(100), -- e.g., "protein", "grain", "vegetable", "fruit", "dairy"
-  food_group TEXT, -- e.g., "Meat", "Vegetables", "Grains" (from nutrition databases)
-  subgroup TEXT, -- e.g., "Poultry", "Leafy Greens" (more specific classification)
-  
-  -- Serving information
+  category VARCHAR(100),
+  food_group TEXT,
+  subgroup TEXT,
   serving_size DECIMAL(10, 2) NOT NULL,
-  serving_unit VARCHAR(50) NOT NULL, -- e.g., "g", "ml", "piece", "cup"
-  
-  -- Macronutrients per serving as JSONB
-  -- Example: { "calories": 165, "protein_g": 31, "carbs_g": 0, "fat_g": 3.6,
-  --            "fiber_g": 0, "sugar_g": 0, "saturated_fat_g": 1 }
+  serving_unit VARCHAR(50) NOT NULL,
   macros JSONB NOT NULL DEFAULT '{}',
-  
-  -- Micronutrients per serving as JSONB (optional, extensible)
-  -- Example: { "vitamin_a_iu": 0, "vitamin_c_mg": 0, "calcium_mg": 11,
-  --            "iron_mg": 1.1, "potassium_mg": 256, "sodium_mg": 74 }
   micros JSONB DEFAULT '{}',
-  
-  -- Metadata
   is_verified BOOLEAN NOT NULL DEFAULT FALSE,
-  source VARCHAR(100), -- e.g., "usda", "user_submitted", "partner"
-  
-  -- For user-created foods
+  source VARCHAR(100),
   created_by UUID REFERENCES auth.users(id) ON DELETE SET NULL,
   is_public BOOLEAN NOT NULL DEFAULT TRUE,
-  
-  -- Timestamps
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  CONSTRAINT ingredients_name_unique UNIQUE (name)
 );
 
--- Indexes for common queries
-CREATE INDEX nutri_foods_name_idx ON nutri_foods(name);
-CREATE INDEX nutri_foods_category_idx ON nutri_foods(category);
-CREATE INDEX nutri_foods_created_by_idx ON nutri_foods(created_by);
+CREATE INDEX ingredients_name_idx ON ingredients(name);
+CREATE INDEX ingredients_category_idx ON ingredients(category);
+CREATE INDEX ingredients_created_by_idx ON ingredients(created_by);
 
 -- =============================================================================
--- NUTRI_SPICES
+-- SPICES
 -- =============================================================================
--- Spice reference table for recipe ingredient autocomplete
--- Spices do NOT participate in macro calculations (is_spice = true in recipes)
+-- Reference spice table for recipe ingredient autocomplete
 
-CREATE TABLE nutri_spices (
+CREATE TABLE spices (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-  
-  -- Basic spice info
   name TEXT NOT NULL,
-  name_ar TEXT, -- Arabic name for i18n support
-  aliases TEXT[] DEFAULT '{}', -- Alternative names for search/autocomplete
-  
-  -- Whether this is a default system spice (vs user-created)
+  name_ar TEXT,
+  aliases TEXT[] DEFAULT '{}',
   is_default BOOLEAN NOT NULL DEFAULT TRUE,
-  
-  -- Timestamps
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  CONSTRAINT spices_name_unique UNIQUE (name)
 );
 
--- Indexes for common queries
-CREATE INDEX nutri_spices_name_idx ON nutri_spices(name);
-CREATE INDEX nutri_spices_is_default_idx ON nutri_spices(is_default);
+CREATE INDEX spices_name_idx ON spices(name);
+CREATE INDEX spices_is_default_idx ON spices(is_default);
 
 -- =============================================================================
--- NUTRI_RECIPES
+-- RECIPES
 -- =============================================================================
--- Recipe storage with ingredients as JSONB array
+-- Recipes with JSONB ingredients/instructions and nutrition metadata
 
-CREATE TABLE nutri_recipes (
+CREATE TABLE recipes (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-  
-  -- Basic recipe info
   name VARCHAR(255) NOT NULL,
   description TEXT,
   image_url VARCHAR(500),
-  
-  -- Categorization
-  meal_type VARCHAR(50)[], -- e.g., ['breakfast', 'snack'] - can be used for multiple
-  cuisine VARCHAR(100), -- e.g., "mediterranean", "asian", "american"
-  tags VARCHAR(100)[], -- e.g., ['high-protein', 'quick', 'vegetarian']
-  
-  -- Cooking info
+  meal_type VARCHAR(50)[],
+  cuisine VARCHAR(100),
+  tags VARCHAR(100)[],
   prep_time_minutes INTEGER,
   cook_time_minutes INTEGER,
   servings INTEGER NOT NULL DEFAULT 1,
-  difficulty VARCHAR(20), -- "easy", "medium", "hard"
-  
-  -- Ingredients as JSONB array for flexibility
-  -- Example: [
-  --   { "food_id": "uuid", "raw_name": "chicken breast", "quantity": 200, "unit": "g", "is_spice": false, "is_optional": false },
-  --   { "food_id": "uuid", "raw_name": "olive oil", "quantity": 1, "unit": "tbsp", "is_spice": false, "is_optional": false },
-  --   { "food_id": null, "raw_name": "salt", "quantity": 1, "unit": "pinch", "is_spice": true, "is_optional": false }
-  -- ]
+  difficulty VARCHAR(20),
   ingredients JSONB NOT NULL DEFAULT '[]',
-  
-  -- Instructions as JSONB array
-  -- Example: [
-  --   { "step": 1, "instruction": "Preheat oven to 375°F" },
-  --   { "step": 2, "instruction": "Season chicken with salt and pepper" }
-  -- ]
   instructions JSONB NOT NULL DEFAULT '[]',
-  
-  -- Calculated nutrition per serving as JSONB
-  -- Example: { "calories": 350, "protein_g": 45, "carbs_g": 10, "fat_g": 15 }
   nutrition_per_serving JSONB NOT NULL DEFAULT '{}',
-  
-  -- Dietary flags (computed from ingredients, stored for fast filtering)
   is_vegetarian BOOLEAN DEFAULT FALSE,
   is_vegan BOOLEAN DEFAULT FALSE,
   is_gluten_free BOOLEAN DEFAULT FALSE,
   is_dairy_free BOOLEAN DEFAULT FALSE,
-  
-  -- For user-created recipes
+  admin_notes TEXT,
   created_by UUID REFERENCES auth.users(id) ON DELETE SET NULL,
   is_public BOOLEAN NOT NULL DEFAULT FALSE,
-  
-  -- Timestamps
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  CONSTRAINT recipes_name_unique UNIQUE (name)
 );
 
--- Indexes for common queries
-CREATE INDEX nutri_recipes_meal_type_idx ON nutri_recipes USING GIN(meal_type);
-CREATE INDEX nutri_recipes_tags_idx ON nutri_recipes USING GIN(tags);
-CREATE INDEX nutri_recipes_created_by_idx ON nutri_recipes(created_by);
-CREATE INDEX nutri_recipes_cuisine_idx ON nutri_recipes(cuisine);
+CREATE INDEX recipes_meal_type_idx ON recipes USING GIN(meal_type);
+CREATE INDEX recipes_tags_idx ON recipes USING GIN(tags);
+CREATE INDEX recipes_created_by_idx ON recipes(created_by);
+CREATE INDEX recipes_cuisine_idx ON recipes(cuisine);
 
 -- =============================================================================
--- NUTRI_DAILY_PLANS
+-- DAILY PLANS
 -- =============================================================================
--- Daily meal plans with the full plan stored as JSONB
+-- Daily meal plans with full plan stored as JSONB
 
-CREATE TABLE nutri_daily_plans (
+CREATE TABLE daily_plans (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
-  
-  -- The date this plan is for
   plan_date DATE NOT NULL,
-  
-  -- The full daily plan as JSONB
-  -- Example: {
-  --   "breakfast": { "recipe_id": "uuid", "servings": 1, "swapped": false },
-  --   "lunch": { "recipe_id": "uuid", "servings": 1, "swapped": true, "original_recipe_id": "uuid" },
-  --   "dinner": { "recipe_id": "uuid", "servings": 1, "swapped": false },
-  --   "snacks": [
-  --     { "recipe_id": "uuid", "servings": 1 },
-  --     { "food_id": "uuid", "amount": 1, "unit": "piece" }
-  --   ]
-  -- }
   plan JSONB NOT NULL DEFAULT '{}',
-  
-  -- Calculated daily totals for quick access
-  -- Example: { "calories": 1850, "protein_g": 125, "carbs_g": 175, "fat_g": 62 }
   daily_totals JSONB NOT NULL DEFAULT '{}',
-  
-  -- Plan status
-  is_generated BOOLEAN NOT NULL DEFAULT TRUE, -- false if manually created
-  
-  -- Timestamps
+  is_generated BOOLEAN NOT NULL DEFAULT TRUE,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-  
-  -- Each user can only have one plan per day
-  CONSTRAINT nutri_daily_plans_user_date_unique UNIQUE (user_id, plan_date)
+  CONSTRAINT daily_plans_user_date_unique UNIQUE (user_id, plan_date)
 );
 
--- Indexes for common queries
-CREATE INDEX nutri_daily_plans_user_id_idx ON nutri_daily_plans(user_id);
-CREATE INDEX nutri_daily_plans_plan_date_idx ON nutri_daily_plans(plan_date);
-CREATE INDEX nutri_daily_plans_user_date_idx ON nutri_daily_plans(user_id, plan_date);
+CREATE INDEX daily_plans_user_id_idx ON daily_plans(user_id);
+CREATE INDEX daily_plans_plan_date_idx ON daily_plans(plan_date);
+CREATE INDEX daily_plans_user_date_idx ON daily_plans(user_id, plan_date);
 
 -- =============================================================================
--- NUTRI_DAILY_LOGS
+-- DAILY LOGS
 -- =============================================================================
--- Daily food logging with flexible log structure
+-- Daily food logging with flexible JSONB payload
 
-CREATE TABLE nutri_daily_logs (
+CREATE TABLE daily_logs (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
-  
-  -- The date this log is for
   log_date DATE NOT NULL,
-  
-  -- The full daily log as JSONB
-  -- Example: {
-  --   "breakfast": {
-  --     "logged_at": "2024-11-25T08:30:00Z",
-  --     "items": [
-  --       { "type": "recipe", "recipe_id": "uuid", "servings": 1, "from_plan": true },
-  --       { "type": "food", "food_id": "uuid", "amount": 200, "unit": "ml", "from_plan": false }
-  --     ]
-  --   },
-  --   "lunch": { ... },
-  --   "dinner": { ... },
-  --   "snacks": { ... }
-  -- }
   log JSONB NOT NULL DEFAULT '{}',
-  
-  -- Calculated daily totals for quick access
-  -- Example: { "calories": 1650, "protein_g": 110, "carbs_g": 160, "fat_g": 55 }
   logged_totals JSONB NOT NULL DEFAULT '{}',
-  
-  -- Quick stats
   meals_logged INTEGER NOT NULL DEFAULT 0,
-  adherence_score DECIMAL(5, 2), -- percentage of plan followed (0-100)
-  
-  -- Notes for the day (optional)
+  adherence_score DECIMAL(5, 2),
   notes TEXT,
-  
-  -- Timestamps
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-  
-  -- Each user can only have one log per day
-  CONSTRAINT nutri_daily_logs_user_date_unique UNIQUE (user_id, log_date)
+  CONSTRAINT daily_logs_user_date_unique UNIQUE (user_id, log_date)
 );
 
--- Indexes for common queries
-CREATE INDEX nutri_daily_logs_user_id_idx ON nutri_daily_logs(user_id);
-CREATE INDEX nutri_daily_logs_log_date_idx ON nutri_daily_logs(log_date);
-CREATE INDEX nutri_daily_logs_user_date_idx ON nutri_daily_logs(user_id, log_date);
+CREATE INDEX daily_logs_user_id_idx ON daily_logs(user_id);
+CREATE INDEX daily_logs_log_date_idx ON daily_logs(log_date);
+CREATE INDEX daily_logs_user_date_idx ON daily_logs(user_id, log_date);
 
 -- =============================================================================
--- ROW LEVEL SECURITY (RLS) POLICIES
+-- ROW LEVEL SECURITY (RLS)
 -- =============================================================================
 
--- Enable RLS on all tables
-ALTER TABLE nutri_profiles ENABLE ROW LEVEL SECURITY;
-ALTER TABLE nutri_foods ENABLE ROW LEVEL SECURITY;
-ALTER TABLE nutri_spices ENABLE ROW LEVEL SECURITY;
-ALTER TABLE nutri_recipes ENABLE ROW LEVEL SECURITY;
-ALTER TABLE nutri_daily_plans ENABLE ROW LEVEL SECURITY;
-ALTER TABLE nutri_daily_logs ENABLE ROW LEVEL SECURITY;
+ALTER TABLE profiles ENABLE ROW LEVEL SECURITY;
+ALTER TABLE ingredients ENABLE ROW LEVEL SECURITY;
+ALTER TABLE spices ENABLE ROW LEVEL SECURITY;
+ALTER TABLE recipes ENABLE ROW LEVEL SECURITY;
+ALTER TABLE daily_plans ENABLE ROW LEVEL SECURITY;
+ALTER TABLE daily_logs ENABLE ROW LEVEL SECURITY;
 
--- Profiles: Users can only access their own profile
-CREATE POLICY nutri_profiles_select_own ON nutri_profiles
+CREATE POLICY profiles_select_own ON profiles
   FOR SELECT USING (auth.uid() = user_id);
 
-CREATE POLICY nutri_profiles_insert_own ON nutri_profiles
+CREATE POLICY profiles_insert_own ON profiles
   FOR INSERT WITH CHECK (auth.uid() = user_id);
 
-CREATE POLICY nutri_profiles_update_own ON nutri_profiles
+CREATE POLICY profiles_update_own ON profiles
   FOR UPDATE USING (auth.uid() = user_id);
 
-CREATE POLICY nutri_profiles_delete_own ON nutri_profiles
+CREATE POLICY profiles_delete_own ON profiles
   FOR DELETE USING (auth.uid() = user_id);
 
--- Foods: Users can see public foods and their own
-CREATE POLICY nutri_foods_select ON nutri_foods
+CREATE POLICY ingredients_select ON ingredients
   FOR SELECT USING (is_public = TRUE OR auth.uid() = created_by);
 
-CREATE POLICY nutri_foods_insert ON nutri_foods
+CREATE POLICY ingredients_insert ON ingredients
   FOR INSERT WITH CHECK (auth.uid() = created_by);
 
-CREATE POLICY nutri_foods_update_own ON nutri_foods
+CREATE POLICY ingredients_update_own ON ingredients
   FOR UPDATE USING (auth.uid() = created_by);
 
-CREATE POLICY nutri_foods_delete_own ON nutri_foods
+CREATE POLICY ingredients_delete_own ON ingredients
   FOR DELETE USING (auth.uid() = created_by);
 
--- Spices: Read-only access to default spices for all authenticated users
--- INSERT/UPDATE/DELETE managed via service role (admin only)
-CREATE POLICY nutri_spices_select_default ON nutri_spices
+CREATE POLICY spices_select_default ON spices
   FOR SELECT USING (is_default = TRUE);
 
--- Recipes: Users can see public recipes and their own
-CREATE POLICY nutri_recipes_select ON nutri_recipes
+CREATE POLICY recipes_select ON recipes
   FOR SELECT USING (is_public = TRUE OR auth.uid() = created_by);
 
-CREATE POLICY nutri_recipes_insert ON nutri_recipes
+CREATE POLICY recipes_insert ON recipes
   FOR INSERT WITH CHECK (auth.uid() = created_by);
 
-CREATE POLICY nutri_recipes_update_own ON nutri_recipes
+CREATE POLICY recipes_update_own ON recipes
   FOR UPDATE USING (auth.uid() = created_by);
 
-CREATE POLICY nutri_recipes_delete_own ON nutri_recipes
+CREATE POLICY recipes_delete_own ON recipes
   FOR DELETE USING (auth.uid() = created_by);
 
--- Daily Plans: Users can only access their own plans
-CREATE POLICY nutri_daily_plans_select_own ON nutri_daily_plans
+CREATE POLICY daily_plans_select_own ON daily_plans
   FOR SELECT USING (auth.uid() = user_id);
 
-CREATE POLICY nutri_daily_plans_insert_own ON nutri_daily_plans
+CREATE POLICY daily_plans_insert_own ON daily_plans
   FOR INSERT WITH CHECK (auth.uid() = user_id);
 
-CREATE POLICY nutri_daily_plans_update_own ON nutri_daily_plans
+CREATE POLICY daily_plans_update_own ON daily_plans
   FOR UPDATE USING (auth.uid() = user_id);
 
-CREATE POLICY nutri_daily_plans_delete_own ON nutri_daily_plans
+CREATE POLICY daily_plans_delete_own ON daily_plans
   FOR DELETE USING (auth.uid() = user_id);
 
--- Daily Logs: Users can only access their own logs
-CREATE POLICY nutri_daily_logs_select_own ON nutri_daily_logs
+CREATE POLICY daily_logs_select_own ON daily_logs
   FOR SELECT USING (auth.uid() = user_id);
 
-CREATE POLICY nutri_daily_logs_insert_own ON nutri_daily_logs
+CREATE POLICY daily_logs_insert_own ON daily_logs
   FOR INSERT WITH CHECK (auth.uid() = user_id);
 
-CREATE POLICY nutri_daily_logs_update_own ON nutri_daily_logs
+CREATE POLICY daily_logs_update_own ON daily_logs
   FOR UPDATE USING (auth.uid() = user_id);
 
-CREATE POLICY nutri_daily_logs_delete_own ON nutri_daily_logs
+CREATE POLICY daily_logs_delete_own ON daily_logs
   FOR DELETE USING (auth.uid() = user_id);
 
 -- =============================================================================
 -- TRIGGERS
 -- =============================================================================
 
--- Function to update updated_at timestamp
-CREATE OR REPLACE FUNCTION nutri_update_updated_at()
+CREATE OR REPLACE FUNCTION update_updated_at()
 RETURNS TRIGGER AS $$
 BEGIN
   NEW.updated_at = NOW();
@@ -382,48 +245,26 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
--- Apply updated_at trigger to all tables
-CREATE TRIGGER nutri_profiles_updated_at
-  BEFORE UPDATE ON nutri_profiles
-  FOR EACH ROW EXECUTE FUNCTION nutri_update_updated_at();
+CREATE TRIGGER profiles_updated_at
+  BEFORE UPDATE ON profiles
+  FOR EACH ROW EXECUTE FUNCTION update_updated_at();
 
-CREATE TRIGGER nutri_foods_updated_at
-  BEFORE UPDATE ON nutri_foods
-  FOR EACH ROW EXECUTE FUNCTION nutri_update_updated_at();
+CREATE TRIGGER ingredients_updated_at
+  BEFORE UPDATE ON ingredients
+  FOR EACH ROW EXECUTE FUNCTION update_updated_at();
 
-CREATE TRIGGER nutri_spices_updated_at
-  BEFORE UPDATE ON nutri_spices
-  FOR EACH ROW EXECUTE FUNCTION nutri_update_updated_at();
+CREATE TRIGGER spices_updated_at
+  BEFORE UPDATE ON spices
+  FOR EACH ROW EXECUTE FUNCTION update_updated_at();
 
-CREATE TRIGGER nutri_recipes_updated_at
-  BEFORE UPDATE ON nutri_recipes
-  FOR EACH ROW EXECUTE FUNCTION nutri_update_updated_at();
+CREATE TRIGGER recipes_updated_at
+  BEFORE UPDATE ON recipes
+  FOR EACH ROW EXECUTE FUNCTION update_updated_at();
 
-CREATE TRIGGER nutri_daily_plans_updated_at
-  BEFORE UPDATE ON nutri_daily_plans
-  FOR EACH ROW EXECUTE FUNCTION nutri_update_updated_at();
+CREATE TRIGGER daily_plans_updated_at
+  BEFORE UPDATE ON daily_plans
+  FOR EACH ROW EXECUTE FUNCTION update_updated_at();
 
-CREATE TRIGGER nutri_daily_logs_updated_at
-  BEFORE UPDATE ON nutri_daily_logs
-  FOR EACH ROW EXECUTE FUNCTION nutri_update_updated_at();
-
--- =============================================================================
--- HELPER FUNCTIONS
--- =============================================================================
-
--- Function to create a profile for new users (called via trigger on auth.users)
-CREATE OR REPLACE FUNCTION nutri_handle_new_user()
-RETURNS TRIGGER AS $$
-BEGIN
-  INSERT INTO nutri_profiles (user_id)
-  VALUES (NEW.id);
-  RETURN NEW;
-END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
-
--- Trigger to auto-create profile on signup
--- Note: This trigger should be created in Supabase dashboard or via migration
--- as it references auth.users
--- CREATE TRIGGER nutri_on_auth_user_created
---   AFTER INSERT ON auth.users
---   FOR EACH ROW EXECUTE FUNCTION nutri_handle_new_user();
+CREATE TRIGGER daily_logs_updated_at
+  BEFORE UPDATE ON daily_logs
+  FOR EACH ROW EXECUTE FUNCTION update_updated_at();

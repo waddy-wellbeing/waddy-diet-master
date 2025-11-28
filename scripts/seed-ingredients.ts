@@ -123,7 +123,7 @@ export async function dryRunIngredients(supabase: SupabaseClient): Promise<DryRu
   
   if (error) {
     errors.push(`Database error: ${error.message}`)
-    return { table: 'foods', wouldInsert: 0, wouldUpdate: 0, warnings, errors }
+    return { table: 'ingredients', wouldInsert: 0, wouldUpdate: 0, warnings, errors }
   }
 
   const existingNames = new Set((existing || []).map(f => f.name.toLowerCase()))
@@ -175,16 +175,20 @@ export async function seedIngredients(supabase: SupabaseClient): Promise<SeedRes
   const rows = parseCSV<IngredientCsvRow>(CSV_FILES.ingredients)
   const errors: string[] = []
   
-  // Parse all rows
-  const ingredients: IngredientInsert[] = []
+  // Parse all rows and deduplicate by name (case-insensitive)
+  const ingredientMap = new Map<string, IngredientInsert>()
   for (const row of rows) {
     const ingredient = parseIngredientRow(row)
     if (ingredient) {
-      ingredients.push(ingredient)
+      const key = ingredient.name.toLowerCase()
+      if (!ingredientMap.has(key)) {
+        ingredientMap.set(key, ingredient)
+      }
     }
   }
-
-  log.info(`Parsed ${ingredients.length} ingredients, upserting...`)
+  
+  const ingredients = Array.from(ingredientMap.values())
+  log.info(`Parsed ${ingredients.length} unique ingredients, upserting...`)
 
   // Upsert in batches
   const batchSize = 100

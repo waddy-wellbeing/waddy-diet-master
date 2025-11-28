@@ -12,14 +12,15 @@ BiteRight is a personalized nutrition app built with Next.js 16 (App Router), Ty
 Use **Server Components by default**. Only use Client Components (`"use client"`) when interactivity is required.
 
 ### Database Schema (`supabase/schema.sql`)
-All tables are prefixed with `nutri_`:
-- `nutri_profiles` - User profiles with JSONB: `basic_info`, `targets`, `preferences`, `goals`
-- `nutri_foods` - Food database with JSONB: `macros`, `micros` + optional `name_ar`, `food_group`, `subgroup`
-- `nutri_recipes` - Recipes with JSONB: `ingredients`, `instructions`, `nutrition_per_serving`
-- `nutri_daily_plans` - Meal plans with JSONB: `plan`, `daily_totals`
-- `nutri_daily_logs` - Food logging with JSONB: `log`, `logged_totals`
+Tables are prefix-free for clarity:
+- `profiles` - User profiles with JSONB: `basic_info`, `targets`, `preferences`, `goals`
+- `ingredients` - Ingredient database with JSONB: `macros`, `micros` + optional `name_ar`, `food_group`, `subgroup`
+- `spices` - Reference spices used when `ingredients.is_spice = true`
+- `recipes` - Recipes with JSONB: `ingredients`, `instructions`, `nutrition_per_serving`, `admin_notes`
+- `daily_plans` - Meal plans with JSONB: `plan`, `daily_totals`
+- `daily_logs` - Food logging with JSONB: `log`, `logged_totals`
 
-**RLS is enabled on all tables** - users can only access their own data. Public foods/recipes use `is_public` flag.
+**RLS is enabled on all tables** - users can only access their own data. Public ingredients/recipes use `is_public` flag.
 
 ### JSONB Patterns
 Flexible fields use JSONB for extensibility. See `lib/types/nutri.ts` for all TypeScript interfaces:
@@ -85,7 +86,7 @@ npm run lint  # Run ESLint
 3. **Type safety** - Use TypeScript strictly; import types from `@/lib/types/nutri`
 4. **Meal types** - Use consistent naming: `breakfast`, `lunch`, `dinner`, `snacks`
 5. **Date handling** - Plans and logs use `DATE` type keyed by `user_id + date`
-6. **Recipe ingredients** - Use `{ food_id, raw_name, quantity, unit, is_spice, is_optional }` structure
+6. **Recipe ingredients** - Use `{ ingredient_id, raw_name, quantity, unit, is_spice, is_optional }` structure
 
 ## Documentation
 - `docs/main/architecture.md` - System architecture and design decisions

@@ -2,11 +2,13 @@
 /**
  * BiteRight Database Seeder
  * 
- * Seeds the database with foods, spices, and recipes from CSV files.
+ * Seeds the database with ingredients, spices, and recipes from CSV files.
  * 
  * Usage:
- *   npm run seed           # Run full seed
- *   npm run seed:dry-run   # Validate without inserting
+ *   npm run seed                      # Run full seed
+ *   npm run seed:dry-run              # Validate without inserting
+ *   npm run seed:skip-unmatched       # Seed only recipes with all ingredients matched
+ *   npm run seed:export-unmatched     # Export unmatched recipes to CSV for manual fixing
  * 
  * Environment variables required:
  *   NEXT_PUBLIC_SUPABASE_URL
@@ -15,9 +17,9 @@
 
 import * as dotenv from 'dotenv'
 import { createSeedClient, log } from './utils'
-import { dryRunFoods, seedFoods } from './seed-foods'
+import { dryRunIngredients, seedIngredients } from './seed-ingredients'
 import { dryRunSpices, seedSpices } from './seed-spices'
-import { dryRunRecipes, seedRecipes, validateFKs } from './seed-recipes'
+import { dryRunRecipes, seedRecipes, validateFKs, exportUnmatchedRecipes, exportRecipesTable } from './seed-recipes'
 import type { SeedResult, DryRunResult, FKValidationResult } from './types'
 
 // Load environment variables
@@ -30,8 +32,29 @@ dotenv.config({ path: '.env.local' })
 async function main() {
   const args = process.argv.slice(2)
   const isDryRun = args.includes('--dry-run')
+  const skipUnmatched = args.includes('--skip-unmatched')
+  const exportUnmatched = args.includes('--export-unmatched')
+  const exportRecipesTableFlag = args.includes('--export-recipes')
 
-  log.header(`BiteRight Database Seeder ${isDryRun ? '(DRY RUN)' : ''}`)
+  if (exportUnmatched && exportRecipesTableFlag) {
+    log.error('Cannot combine --export-unmatched with --export-recipes')
+    process.exit(1)
+  }
+
+  if (exportUnmatched) {
+    log.header('BiteRight Database Seeder - Export Unmatched Recipes')
+    await runExportUnmatched()
+    return
+  }
+
+  const modeLabel = exportRecipesTableFlag
+    ? '(EXPORT RECIPES)'
+    : isDryRun
+      ? '(DRY RUN)'
+      : skipUnmatched
+        ? '(SKIP UNMATCHED)'
+        : ''
+  log.header(`BiteRight Database Seeder ${modeLabel}`)
 
   // Validate environment
   if (!process.env.NEXT_PUBLIC_SUPABASE_URL) {
@@ -49,10 +72,15 @@ async function main() {
   const supabase = createSeedClient()
   log.success('Connected to Supabase')
 
+  if (exportRecipesTableFlag) {
+    await runExportRecipesTable(supabase)
+    return
+  }
+
   if (isDryRun) {
     await runDryRun(supabase)
   } else {
-    await runSeed(supabase)
+    await runSeed(supabase, skipUnmatched)
   }
 }
 
@@ -67,8 +95,8 @@ async function runDryRun(supabase: ReturnType<typeof createSeedClient>) {
   let fkValidation: FKValidationResult | null = null
 
   try {
-    // 1. Validate Foods
-    results.push(await dryRunFoods(supabase))
+      // 1. Validate Ingredients
+      results.push(await dryRunIngredients(supabase))
 
     // 2. Validate Spices
     results.push(await dryRunSpices(supabase))
@@ -100,11 +128,11 @@ async function runDryRun(supabase: ReturnType<typeof createSeedClient>) {
   if (fkValidation) {
     console.log('\n--- FK Validation ---')
     console.log(`  Total ingredients: ${fkValidation.totalIngredients}`)
-    console.log(`  ✅ Matched to foods: ${fkValidation.matchedToFood}`)
+    console.log(`  ✅ Matched to ingredients: ${fkValidation.matchedToIngredient}`)
     console.log(`  ✅ Matched to spices: ${fkValidation.matchedToSpice}`)
     console.log(`  ⚠️  Unmatched: ${fkValidation.unmatched.length}`)
     
-    const matchRate = ((fkValidation.matchedToFood + fkValidation.matchedToSpice) / fkValidation.totalIngredients * 100).toFixed(1)
+    const matchRate = ((fkValidation.matchedToIngredient + fkValidation.matchedToSpice) / fkValidation.totalIngredients * 100).toFixed(1)
     console.log(`  📈 Match rate: ${matchRate}%`)
   }
 
@@ -140,20 +168,24 @@ async function runDryRun(supabase: ReturnType<typeof createSeedClient>) {
 // Seed Mode
 // =============================================================================
 
-async function runSeed(supabase: ReturnType<typeof createSeedClient>) {
+async function runSeed(supabase: ReturnType<typeof createSeedClient>, skipUnmatched: boolean = false) {
   log.header('🌱 SEEDING DATABASE')
+
+  if (skipUnmatched) {
+    log.info('⏭️  Skip mode enabled: recipes with unmatched ingredients will be skipped')
+  }
 
   const results: SeedResult[] = []
 
   try {
-    // 1. Seed Foods (must be first - recipes depend on food IDs)
-    results.push(await seedFoods(supabase))
+    // 1. Seed Ingredients (must be first - recipes depend on ingredient IDs)
+    results.push(await seedIngredients(supabase))
 
     // 2. Seed Spices
     results.push(await seedSpices(supabase))
 
-    // 3. Seed Recipes (uses food IDs for FK)
-    results.push(await seedRecipes(supabase))
+    // 3. Seed Recipes (uses ingredient IDs for FK)
+    results.push(await seedRecipes(supabase, skipUnmatched))
 
   } catch (error) {
     log.error(`Seeding failed: ${error}`)
@@ -187,6 +219,36 @@ async function runSeed(supabase: ReturnType<typeof createSeedClient>) {
     log.success(`✅ Seeding complete! ${totalInserted} records inserted/updated.`)
   } else {
     log.warning(`⚠️ Seeding complete with ${totalErrors} errors. ${totalInserted} records inserted/updated.`)
+  }
+}
+
+// =============================================================================
+// Export Unmatched Mode
+// =============================================================================
+
+async function runExportUnmatched() {
+  log.info('Analyzing recipe ingredients and exporting unmatched entries...')
+  
+  try {
+    const outputPath = await exportUnmatchedRecipes()
+    log.success(`✅ Exported unmatched recipes to: ${outputPath}`)
+    log.info('Fix the ingredient names in this file, then run: npm run seed:skip-unmatched')
+  } catch (error) {
+    log.error(`Export failed: ${error}`)
+    process.exit(1)
+  }
+}
+
+async function runExportRecipesTable(supabase: ReturnType<typeof createSeedClient>) {
+  log.info('Exporting current recipes table to CSV...')
+
+  try {
+    const outputPath = await exportRecipesTable(supabase)
+    log.success(`✅ Exported recipes to: ${outputPath}`)
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error)
+    log.error(`Export failed: ${message}`)
+    process.exit(1)
   }
 }
 

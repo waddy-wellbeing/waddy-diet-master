@@ -8,7 +8,7 @@
 // CSV Row Types (as parsed from CSV files)
 // =============================================================================
 
-export interface FoodCsvRow {
+export interface IngredientCsvRow {
   'English Name': string
   'Amount': string
   'English Unit': string
@@ -74,7 +74,7 @@ export interface DryRunResult {
 export interface FKValidationResult {
   valid: boolean
   totalIngredients: number
-  matchedToFood: number
+  matchedToIngredient: number
   matchedToSpice: number
   unmatched: string[]
   unmatchedDetails: Array<{
@@ -87,7 +87,7 @@ export interface FKValidationResult {
 // Database Insert Types
 // =============================================================================
 
-export interface FoodInsert {
+export interface IngredientInsert {
   name: string
   name_ar: string | null
   brand: string | null
@@ -130,7 +130,7 @@ export interface RecipeInsert {
   servings: number
   difficulty: string | null
   ingredients: Array<{
-    food_id: string | null
+    ingredient_id: string | null
     raw_name: string
     quantity: number | null
     unit: string | null
@@ -151,5 +151,6 @@ export interface RecipeInsert {
   is_vegan: boolean
   is_gluten_free: boolean
   is_dairy_free: boolean
+  admin_notes: string | null
   is_public: boolean
 }

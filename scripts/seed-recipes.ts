@@ -2,14 +2,16 @@
  * Recipes Seeder
  * 
  * Parses recipies_dataset.csv, resolves FKs, calculates nutrition,
- * and upserts into nutri_recipes table
+ * and upserts into recipes table
  */
 
 import type { SupabaseClient } from '@supabase/supabase-js'
-import type { RecipeCsvRow, RecipeInsert, SeedResult, DryRunResult, FKValidationResult, FoodInsert } from './types'
-import { parseCSV, parseNumber, cleanText, log, CSV_FILES, createLookupKey } from './utils'
-import { buildFoodLookup, buildFoodLookupFromCSV } from './seed-foods'
+import type { RecipeCsvRow, RecipeInsert, SeedResult, DryRunResult, FKValidationResult, IngredientInsert } from './types'
+import { parseCSV, parseNumber, cleanText, log, CSV_FILES, createLookupKey, createLookupVariants, IMAGES_PATH } from './utils'
+import { buildIngredientLookup, buildIngredientLookupFromCSV } from './seed-ingredients'
 import { buildSpiceLookup, buildSpiceLookupFromCSV } from './seed-spices'
+import * as fs from 'fs'
+import * as path from 'path'
 
 // =============================================================================
 // Types for intermediate processing
@@ -32,12 +34,18 @@ interface GroupedRecipe {
 // CSV Parsing - Group rows by recipe
 // =============================================================================
 
+// Skip header/placeholder row names
+const PLACEHOLDER_RECIPE_NAMES = new Set(['recipe name', 'اسم الوصفة'])
+
 function groupRecipeRows(rows: RecipeCsvRow[]): Map<string, GroupedRecipe> {
   const recipes = new Map<string, GroupedRecipe>()
 
   for (const row of rows) {
     const recipeName = cleanText(row['Recipe Name'])
     if (!recipeName) continue
+    
+    // Skip placeholder/header rows
+    if (PLACEHOLDER_RECIPE_NAMES.has(recipeName.toLowerCase())) continue
 
     // Get or create recipe
     if (!recipes.has(recipeName)) {
@@ -70,8 +78,9 @@ function groupRecipeRows(rows: RecipeCsvRow[]): Map<string, GroupedRecipe> {
 // =============================================================================
 
 interface RecipeBuildContext {
-  foodLookup: Map<string, { id?: string; macros: FoodInsert['macros'] }>
+  ingredientLookup: Map<string, { id?: string; macros: IngredientInsert['macros'] }>
   spiceLookup: Set<string>
+  imageLookup?: Map<string, string> // Added imageLookup to context
 }
 
 function buildRecipe(
@@ -80,6 +89,17 @@ function buildRecipe(
   includeIds: boolean = true
 ): { recipe: RecipeInsert; unmatchedIngredients: string[] } {
   const unmatchedIngredients: string[] = []
+
+  let imagePath: string | null = null
+  if (context.imageLookup) {
+    for (const key of createLookupVariants(grouped.name)) {
+      const match = context.imageLookup.get(key)
+      if (match) {
+        imagePath = match
+        break
+      }
+    }
+  }
   
   // Initialize nutrition totals
   let totalCalories = 0
@@ -91,33 +111,48 @@ function buildRecipe(
   const ingredients: RecipeInsert['ingredients'] = []
 
   for (const ing of grouped.ingredients) {
-    const lookupKey = createLookupKey(ing.raw_name)
-    const isSpice = context.spiceLookup.has(lookupKey)
-    const foodData = context.foodLookup.get(lookupKey)
+    const lookupKeys = createLookupVariants(ing.raw_name)
+    let isSpice = false
+    let ingredientData: { id?: string; macros: IngredientInsert['macros'] } | undefined
 
-    let food_id: string | null = null
+    for (const key of lookupKeys) {
+      if (!isSpice && context.spiceLookup.has(key)) {
+        isSpice = true
+      }
+      if (!ingredientData) {
+        const candidate = context.ingredientLookup.get(key)
+        if (candidate) {
+          ingredientData = candidate
+        }
+      }
+      if (isSpice && ingredientData) {
+        break
+      }
+    }
+
+    let ingredient_id: string | null = null
     
-    if (!isSpice && foodData) {
-      // Found matching food - get ID and add to nutrition
-      if (includeIds && 'id' in foodData && foodData.id) {
-        food_id = foodData.id
+    if (!isSpice && ingredientData) {
+      // Found matching ingredient - get ID and add to nutrition
+      if (includeIds && 'id' in ingredientData && ingredientData.id) {
+        ingredient_id = ingredientData.id
       }
       
       // Calculate nutrition contribution
-      // Assuming serving_size is 100g in the food database
+      // Assuming serving_size is 100g in the ingredient database
       const servingMultiplier = (ing.quantity || 100) / 100
-      totalCalories += (foodData.macros.calories || 0) * servingMultiplier
-      totalProtein += (foodData.macros.protein_g || 0) * servingMultiplier
-      totalCarbs += (foodData.macros.carbs_g || 0) * servingMultiplier
-      totalFat += (foodData.macros.fat_g || 0) * servingMultiplier
+      totalCalories += (ingredientData.macros.calories || 0) * servingMultiplier
+      totalProtein += (ingredientData.macros.protein_g || 0) * servingMultiplier
+      totalCarbs += (ingredientData.macros.carbs_g || 0) * servingMultiplier
+      totalFat += (ingredientData.macros.fat_g || 0) * servingMultiplier
     } else if (!isSpice) {
-      // Not a spice and not found in foods - track as unmatched
+      // Not a spice and not found in ingredients - track as unmatched
       unmatchedIngredients.push(ing.raw_name)
     }
     // Spices don't contribute to nutrition
 
     ingredients.push({
-      food_id,
+      ingredient_id,
       raw_name: ing.raw_name,
       quantity: ing.quantity,
       unit: ing.unit,
@@ -158,10 +193,14 @@ function buildRecipe(
   const isVegetarian = !hasChicken && !hasMeat && !hasFish
   const isVegan = isVegetarian && !hasEgg && !hasDairy
 
+  const adminNotes = unmatchedIngredients.length > 0
+    ? `Missing ingredients: ${unmatchedIngredients.join(', ')}`
+    : null
+
   const recipe: RecipeInsert = {
     name: grouped.name,
     description: null,
-    image_url: null, // Could be matched from images folder later
+    image_url: imagePath, // Updated to use imagePath
     meal_type: [grouped.meal_type],
     cuisine: 'egyptian', // Default for this dataset
     tags: [],
@@ -181,10 +220,55 @@ function buildRecipe(
     is_vegan: isVegan,
     is_gluten_free: false, // Would need more analysis
     is_dairy_free: !hasDairy,
+    admin_notes: adminNotes,
     is_public: true,
   }
 
   return { recipe, unmatchedIngredients }
+}
+
+// =============================================================================
+// Image Lookup Helpers
+// =============================================================================
+
+const ALLOWED_IMAGE_EXTENSIONS = new Set(['.jpg', '.jpeg', '.png', '.webp', '.avif', '.gif'])
+
+function buildImageLookupFromDisk(): Map<string, string> {
+  const lookup = new Map<string, string>()
+
+  if (!fs.existsSync(IMAGES_PATH)) {
+    return lookup
+  }
+
+  const walk = (dir: string) => {
+    const entries = fs.readdirSync(dir, { withFileTypes: true })
+    for (const entry of entries) {
+      const entryPath = path.join(dir, entry.name)
+
+      if (entry.isDirectory()) {
+        walk(entryPath)
+        continue
+      }
+
+      if (!entry.isFile()) continue
+
+      const ext = path.extname(entry.name).toLowerCase()
+      if (!ALLOWED_IMAGE_EXTENSIONS.has(ext)) continue
+
+      const baseName = path.parse(entry.name).name
+      const relativeToImages = path.relative(IMAGES_PATH, entryPath).replace(/\\/g, '/')
+      const datasetPath = `docs/datasets/images/${relativeToImages}`
+
+      for (const key of createLookupVariants(baseName)) {
+        if (!lookup.has(key)) {
+          lookup.set(key, datasetPath)
+        }
+      }
+    }
+  }
+
+  walk(IMAGES_PATH)
+  return lookup
 }
 
 // =============================================================================
@@ -197,11 +281,11 @@ export function validateFKs(): FKValidationResult {
   const rows = parseCSV<RecipeCsvRow>(CSV_FILES.recipes)
   const groupedRecipes = groupRecipeRows(rows)
   
-  const foodLookup = buildFoodLookupFromCSV()
+  const ingredientLookup = buildIngredientLookupFromCSV()
   const spiceLookup = buildSpiceLookupFromCSV()
 
   let totalIngredients = 0
-  let matchedToFood = 0
+  let matchedToIngredient = 0
   let matchedToSpice = 0
   const unmatchedSet = new Set<string>()
   const unmatchedDetails: FKValidationResult['unmatchedDetails'] = []
@@ -209,13 +293,23 @@ export function validateFKs(): FKValidationResult {
   for (const [recipeName, grouped] of groupedRecipes) {
     for (const ing of grouped.ingredients) {
       totalIngredients++
-      const lookupKey = createLookupKey(ing.raw_name)
-      
-      if (spiceLookup.has(lookupKey)) {
-        matchedToSpice++
-      } else if (foodLookup.has(lookupKey)) {
-        matchedToFood++
-      } else {
+      const lookupKeys = createLookupVariants(ing.raw_name)
+      let matched = false
+
+      for (const key of lookupKeys) {
+        if (spiceLookup.has(key)) {
+          matchedToSpice++
+          matched = true
+          break
+        }
+        if (ingredientLookup.has(key)) {
+          matchedToIngredient++
+          matched = true
+          break
+        }
+      }
+
+      if (!matched) {
         if (!unmatchedSet.has(ing.raw_name)) {
           unmatchedSet.add(ing.raw_name)
           unmatchedDetails.push({ recipe: recipeName, ingredient: ing.raw_name })
@@ -228,7 +322,7 @@ export function validateFKs(): FKValidationResult {
   const valid = unmatched.length === 0
 
   log.info(`Total ingredients: ${totalIngredients}`)
-  log.info(`Matched to foods: ${matchedToFood}`)
+  log.info(`Matched to ingredients: ${matchedToIngredient}`)
   log.info(`Matched to spices: ${matchedToSpice}`)
   
   if (unmatched.length > 0) {
@@ -247,7 +341,7 @@ export function validateFKs(): FKValidationResult {
   return {
     valid,
     totalIngredients,
-    matchedToFood,
+    matchedToIngredient,
     matchedToSpice,
     unmatched,
     unmatchedDetails,
@@ -273,17 +367,46 @@ export async function dryRunRecipes(supabase: SupabaseClient): Promise<DryRunRes
   
   if (!fkResult.valid) {
     const sample = fkResult.unmatched.slice(0, 5).join(', ')
-    warnings.push(`${fkResult.unmatched.length} ingredients could not be matched to foods or spices. Examples: ${sample}`)
+    warnings.push(`${fkResult.unmatched.length} ingredients could not be matched to ingredient records or spices. Examples: ${sample}`)
+  }
+
+  const recipesWithUnmatched = new Set(fkResult.unmatchedDetails.map(detail => detail.recipe))
+  const fullyMatchedCount = groupedRecipes.size - recipesWithUnmatched.size
+  log.info(`Recipes with all ingredients matched: ${fullyMatchedCount}`)
+
+  if (recipesWithUnmatched.size > 0) {
+    warnings.push(`${recipesWithUnmatched.size} recipes contain ingredients without ingredient matches. They will seed with null ingredient_id unless you run with --skip-unmatched.`)
+  }
+
+  // Validate image availability
+  const imageLookup = buildImageLookupFromDisk()
+  const missingImages: string[] = []
+  const foundImages: string[] = []
+
+  for (const [recipeName] of groupedRecipes) {
+    const hasImage = createLookupVariants(recipeName).some(key => imageLookup.has(key))
+    if (hasImage) {
+      foundImages.push(recipeName)
+    } else {
+      missingImages.push(recipeName)
+    }
+  }
+
+  log.info(`Images found: ${foundImages.length}, missing: ${missingImages.length}`)
+
+  if (missingImages.length > 0) {
+    const preview = missingImages.slice(0, 5).join(', ')
+    warnings.push(`${missingImages.length} recipes are missing matching images in docs/datasets/images. Examples: ${preview}`)
   }
 
   // Check existing records in database
   const { data: existing, error } = await supabase
-    .from('nutri_recipes')
+    .from('recipes')
     .select('name')
   
   if (error) {
     errors.push(`Database error: ${error.message}`)
-    return { table: 'nutri_recipes', wouldInsert: 0, wouldUpdate: 0, warnings, errors }
+    return { table: 'recipes', wouldInsert: 0, wouldUpdate: 0, warnings, errors }
   }
 
   const existingNames = new Set((existing || []).map(r => r.name.toLowerCase()))
@@ -301,76 +424,243 @@ export async function dryRunRecipes(supabase: SupabaseClient): Promise<DryRunRes
 
   log.info(`Would insert: ${wouldInsert}, Would update: ${wouldUpdate}`)
 
-  return { table: 'nutri_recipes', wouldInsert, wouldUpdate, warnings, errors }
+  return { table: 'recipes', wouldInsert, wouldUpdate, warnings, errors }
 }
 
 // =============================================================================
 // Seed Execution
 // =============================================================================
 
-export async function seedRecipes(supabase: SupabaseClient): Promise<SeedResult> {
+export async function seedRecipes(supabase: SupabaseClient, skipUnmatched: boolean = false): Promise<SeedResult> {
   log.subheader('Recipes - Seeding')
   
   const rows = parseCSV<RecipeCsvRow>(CSV_FILES.recipes)
   const groupedRecipes = groupRecipeRows(rows)
   const errors: string[] = []
-
+  
   log.info(`Parsed ${groupedRecipes.size} unique recipes`)
-
+  
   // Build lookups from database
-  log.info('Building food lookup from database...')
-  const foodLookup = await buildFoodLookup(supabase)
-  log.info(`  Food lookup: ${foodLookup.size} entries`)
-
+  log.info('Building ingredient lookup from database...')
+  const ingredientLookup = await buildIngredientLookup(supabase)
+  log.info(`  Ingredient lookup: ${ingredientLookup.size} entries`)
+  
   log.info('Building spice lookup from database...')
   const spiceLookup = await buildSpiceLookup(supabase)
   log.info(`  Spice lookup: ${spiceLookup.size} entries`)
-
+  
+  log.info('Building image lookup from dataset...')
+  const imageLookup = buildImageLookupFromDisk()
+  log.info(`  Image lookup: ${imageLookup.size} entries`)
+  
   // Build all recipes
   const recipes: RecipeInsert[] = []
   let totalUnmatched = 0
-
+  let skippedForUnmatched = 0
+  
   for (const [, grouped] of groupedRecipes) {
-    const { recipe, unmatchedIngredients } = buildRecipe(grouped, { foodLookup, spiceLookup })
+    const { recipe, unmatchedIngredients } = buildRecipe(grouped, { ingredientLookup, spiceLookup, imageLookup })
+    
+    // Skip recipes with unmatched ingredients if flag is set
+    if (skipUnmatched && unmatchedIngredients.length > 0) {
+      skippedForUnmatched++
+      continue
+    }
+    
     recipes.push(recipe)
     totalUnmatched += unmatchedIngredients.length
   }
-
-  if (totalUnmatched > 0) {
-    log.warning(`${totalUnmatched} ingredient references will have null food_id`)
+  
+  if (skipUnmatched && skippedForUnmatched > 0) {
+    log.info(`Skipped ${skippedForUnmatched} recipes with unmatched ingredients`)
   }
-
+  
+  if (!skipUnmatched && totalUnmatched > 0) {
+    log.warning(`${totalUnmatched} ingredient references will have null ingredient_id`)
+  }
+  
   log.info(`Upserting ${recipes.length} recipes...`)
-
+  
   // Upsert in batches
   const batchSize = 50
   let inserted = 0
-  let skipped = 0
-
+  let skippedDueToErrors = 0
+  
   for (let i = 0; i < recipes.length; i += batchSize) {
     const batch = recipes.slice(i, i + batchSize)
     
     const { data, error } = await supabase
-      .from('nutri_recipes')
+      .from('recipes')
       .upsert(batch, { 
         onConflict: 'name',
         ignoreDuplicates: false 
       })
       .select('id')
-
+  
     if (error) {
       errors.push(`Batch ${Math.floor(i / batchSize) + 1} error: ${error.message}`)
-      skipped += batch.length
+      skippedDueToErrors += batch.length
     } else {
       inserted += data?.length || batch.length
     }
-
+  
     process.stdout.write(`\r  Progress: ${Math.min(i + batchSize, recipes.length)}/${recipes.length}`)
   }
   
-  console.log() // New line
+  console.log()
 
-  log.success(`Recipes seeded: ${inserted} inserted/updated, ${skipped} skipped`)
+  log.success(`Recipes seeded: ${inserted} inserted/updated, ${skippedDueToErrors} skipped`)
+
+  return { table: 'recipes', inserted, updated: 0, skipped: skippedDueToErrors + skippedForUnmatched, errors }
+}
+// =============================================================================
+// Export Unmatched Recipes
+// =============================================================================
+
+export async function exportUnmatchedRecipes(): Promise<string> {
+  const rows = parseCSV<RecipeCsvRow>(CSV_FILES.recipes)
+  const groupedRecipes = groupRecipeRows(rows)
   
-  return { table: 'nutri_recipes', inserted, updated: 0, skipped, errors }
+  const ingredientLookup = buildIngredientLookupFromCSV()
+  const spiceLookup = buildSpiceLookupFromCSV()
+
+  // Collect recipes with unmatched ingredients
+  const unmatchedRecipes: Array<{
+    recipeName: string
+    ingredient: string
+    quantity: string
+    unit: string
+  }> = []
+
+  const placeholderRecipeKeys = new Set([createLookupKey('Recipe Name'), createLookupKey('اسم الوصفة')])
+  const placeholderIngredientKeys = new Set([createLookupKey('Ingredient'), createLookupKey('المكون')])
+
+  for (const [recipeName, grouped] of groupedRecipes) {
+    const recipeKey = createLookupKey(recipeName)
+    if (placeholderRecipeKeys.has(recipeKey)) {
+      continue
+    }
+
+    for (const ing of grouped.ingredients) {
+      const lookupKeys = createLookupVariants(ing.raw_name)
+      const isSpice = lookupKeys.some(key => spiceLookup.has(key))
+      const hasIngredient = lookupKeys.some(key => ingredientLookup.has(key))
+
+      if (lookupKeys.some(key => placeholderIngredientKeys.has(key))) {
+        continue
+      }
+
+      if (!isSpice && !hasIngredient) { // Check for unmatched ingredients
+        unmatchedRecipes.push({
+          recipeName,
+          ingredient: ing.raw_name,
+          quantity: ing.quantity?.toString() || '',
+          unit: ing.unit || '',
+        })
+      }
+    }
+  }
+
+  // Generate CSV content
+  const csvLines = [
+    'Recipe Name,Ingredient,Quantity,Unit,Suggested Ingredient Name',
+    ...unmatchedRecipes.map(r => 
+      `"${r.recipeName}","${r.ingredient}","${r.quantity}","${r.unit}",""`
+    )
+  ]
+
+  const outputPath = path.join(process.cwd(), 'docs', 'datasets', 'unmatched-recipes.csv')
+  fs.writeFileSync(outputPath, csvLines.join('\n'), 'utf-8')
+
+  log.info(`Exported ${unmatchedRecipes.length} unmatched ingredient entries`)
+  log.info(`Unique recipes affected: ${new Set(unmatchedRecipes.map(r => r.recipeName)).size}`)
+  
+  return outputPath
+}
+
+function toCsvValue(value: unknown): string {
+  if (value === null || value === undefined) {
+    return ''
+  }
+
+  let str: string
+
+  if (typeof value === 'string') {
+    str = value
+  } else if (typeof value === 'number' || typeof value === 'boolean') {
+    str = String(value)
+  } else {
+    str = JSON.stringify(value)
+  }
+
+  const needsQuotes = /[",\n]/.test(str)
+  const escaped = str.replace(/"/g, '""')
+  return needsQuotes ? `"${escaped}"` : escaped
+}
+
+export async function exportRecipesTable(supabase: SupabaseClient): Promise<string> {
+  log.subheader('Exporting existing recipes to CSV')
+
+  const { data, error } = await supabase
+    .from('recipes')
+    .select('id,name,image_url,meal_type,cuisine,tags,servings,is_public,ingredients,instructions,nutrition_per_serving,admin_notes,created_at,updated_at')
+    .order('name', { ascending: true })
+
+  if (error) {
+    throw new Error(`Database error: ${error.message}`)
+  }
+
+  const records = data ?? []
+  const header = [
+    'id',
+    'name',
+    'image_url',
+    'meal_type',
+    'cuisine',
+    'tags',
+    'servings',
+    'is_public',
+    'ingredient_count',
+    'instruction_count',
+    'nutrition_per_serving',
+    'admin_notes',
+    'created_at',
+    'updated_at'
+  ]
+
+  const csvLines = [
+    header.join(','),
+    ...records.map(record => {
+      const ingredients = Array.isArray(record?.ingredients) ? record.ingredients : []
+      const instructions = Array.isArray(record?.instructions) ? record.instructions : []
+
+      return [
+        record?.id ?? '',
+        record?.name ?? '',
+        record?.image_url ?? '',
+        Array.isArray(record?.meal_type) ? record.meal_type.join(';') : record?.meal_type ?? '',
+        record?.cuisine ?? '',
+        Array.isArray(record?.tags) ? record.tags.join(';') : record?.tags ?? '',
+        record?.servings ?? '',
+        typeof record?.is_public === 'boolean' ? record.is_public : '',
+        ingredients.length,
+        instructions.length,
+        record?.nutrition_per_serving ?? {},
+        record?.admin_notes ?? '',
+        record?.created_at ?? '',
+        record?.updated_at ?? ''
+      ].map(toCsvValue).join(',')
+    })
+  ]
+
+  const outputDir = path.join(process.cwd(), 'docs', 'datasets')
+  if (!fs.existsSync(outputDir)) {
+    fs.mkdirSync(outputDir, { recursive: true })
+  }
+
+  const outputPath = path.join(outputDir, 'existing-recipes.csv')
+  fs.writeFileSync(outputPath, csvLines.join('\n'), 'utf-8')
+
+  log.info(`Exported ${records.length} recipes to ${outputPath}`)
+  return outputPath
 }

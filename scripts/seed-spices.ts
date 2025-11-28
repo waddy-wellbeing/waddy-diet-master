@@ -1,12 +1,12 @@
 /**
  * Spices Seeder
  * 
- * Parses spices_dataset.csv and upserts into nutri_spices table
+ * Parses spices_dataset.csv and upserts into spices table
  */
 
 import type { SupabaseClient } from '@supabase/supabase-js'
 import type { SpiceCsvRow, SpiceInsert, SeedResult, DryRunResult } from './types'
-import { parseCSV, cleanText, log, CSV_FILES, createLookupKey } from './utils'
+import { parseCSV, cleanText, log, CSV_FILES, createLookupVariants } from './utils'
 
 // =============================================================================
 // CSV Parsing
@@ -76,12 +76,12 @@ export async function dryRunSpices(supabase: SupabaseClient): Promise<DryRunResu
 
   // Check existing records in database
   const { data: existing, error } = await supabase
-    .from('nutri_spices')
+    .from('spices')
     .select('name')
   
   if (error) {
     errors.push(`Database error: ${error.message}`)
-    return { table: 'nutri_spices', wouldInsert: 0, wouldUpdate: 0, warnings, errors }
+    return { table: 'spices', wouldInsert: 0, wouldUpdate: 0, warnings, errors }
   }
 
   const existingNames = new Set((existing || []).map(s => s.name.toLowerCase()))
@@ -120,7 +120,7 @@ export async function dryRunSpices(supabase: SupabaseClient): Promise<DryRunResu
     log.warning(`${warnings.length} warnings`)
   }
 
-  return { table: 'nutri_spices', wouldInsert, wouldUpdate, warnings, errors }
+  return { table: 'spices', wouldInsert, wouldUpdate, warnings, errors }
 }
 
 // =============================================================================
@@ -133,20 +133,24 @@ export async function seedSpices(supabase: SupabaseClient): Promise<SeedResult> 
   const rows = parseCSV<SpiceCsvRow>(CSV_FILES.spices)
   const errors: string[] = []
   
-  // Parse all rows
-  const spices: SpiceInsert[] = []
+  // Parse all rows and deduplicate by name (case-insensitive)
+  const spiceMap = new Map<string, SpiceInsert>()
   for (const row of rows) {
     const spice = parseSpiceRow(row)
     if (spice) {
-      spices.push(spice)
+      const key = spice.name.toLowerCase()
+      if (!spiceMap.has(key)) {
+        spiceMap.set(key, spice)
+      }
     }
   }
-
-  log.info(`Parsed ${spices.length} spices, upserting...`)
+  
+  const spices = Array.from(spiceMap.values())
+  log.info(`Parsed ${spices.length} unique spices, upserting...`)
 
   // Upsert all at once (small dataset)
   const { data, error } = await supabase
-    .from('nutri_spices')
+    .from('spices')
     .upsert(spices, { 
       onConflict: 'name',
       ignoreDuplicates: false 
@@ -156,13 +160,13 @@ export async function seedSpices(supabase: SupabaseClient): Promise<SeedResult> 
   if (error) {
     errors.push(`Upsert error: ${error.message}`)
     log.error(`Failed to seed spices: ${error.message}`)
-    return { table: 'nutri_spices', inserted: 0, updated: 0, skipped: spices.length, errors }
+    return { table: 'spices', inserted: 0, updated: 0, skipped: spices.length, errors }
   }
 
   const inserted = data?.length || spices.length
   log.success(`Spices seeded: ${inserted} inserted/updated`)
   
-  return { table: 'nutri_spices', inserted, updated: 0, skipped: 0, errors }
+  return { table: 'spices', inserted, updated: 0, skipped: 0, errors }
 }
 
 // =============================================================================
@@ -171,7 +175,7 @@ export async function seedSpices(supabase: SupabaseClient): Promise<SeedResult> 
 
 export async function buildSpiceLookup(supabase: SupabaseClient): Promise<Set<string>> {
   const { data, error } = await supabase
-    .from('nutri_spices')
+    .from('spices')
     .select('name, name_ar')
 
   if (error) {
@@ -183,11 +187,15 @@ export async function buildSpiceLookup(supabase: SupabaseClient): Promise<Set<st
   for (const spice of data || []) {
     // Add lookup by English name
     if (spice.name) {
-      lookup.add(createLookupKey(spice.name))
+      for (const key of createLookupVariants(spice.name)) {
+        lookup.add(key)
+      }
     }
     // Add lookup by Arabic name
     if (spice.name_ar) {
-      lookup.add(createLookupKey(spice.name_ar))
+      for (const key of createLookupVariants(spice.name_ar)) {
+        lookup.add(key)
+      }
     }
   }
 
@@ -207,11 +215,15 @@ export function buildSpiceLookupFromCSV(): Set<string> {
     if (!spice) continue
     
     // Add lookup by English name
-    lookup.add(createLookupKey(spice.name))
+    for (const key of createLookupVariants(spice.name)) {
+      lookup.add(key)
+    }
     
     // Add lookup by Arabic name
     if (spice.name_ar) {
-      lookup.add(createLookupKey(spice.name_ar))
+      for (const key of createLookupVariants(spice.name_ar)) {
+        lookup.add(key)
+      }
     }
   }
 

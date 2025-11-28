@@ -32,7 +32,7 @@ A new user has just signed up and needs to complete onboarding to get their pers
 4. **Dietary Preferences**
    - Diet type: Omnivore, Vegetarian, Vegan, Pescatarian, Keto, etc.
    - Allergies/intolerances: Gluten, Dairy, Nuts, Shellfish, etc.
-   - Dislikes: Foods to exclude from plans
+   - Dislikes: Ingredients to exclude from plans
 
 5. **Lifestyle & Cooking**
    - Cooking skill: Beginner, Intermediate, Advanced
@@ -158,16 +158,16 @@ User has eaten a meal and wants to log it to track their nutrition.
    - Tap "+" button or "Log Food" from nav
    - Search bar prominent
 
-2. **Food Search**
-   - Type food name (e.g., "chicken salad")
-   - Results from:
-     - User's recent foods
-     - Recipes in the system
-     - Generic food database
-   - Each result shows name, serving size, calories
+2. **Ingredient Search**
+    - Type ingredient name (e.g., "chicken breast")
+    - Results from:
+       - User's recent ingredients
+       - Recipes in the system
+       - Ingredient database
+    - Each result shows name, serving size, calories
 
 3. **Select & Customize**
-   - Tap a food item
+   - Tap an ingredient item
    - Adjust quantity/serving size
    - See macro breakdown update in real-time
 
@@ -177,7 +177,7 @@ User has eaten a meal and wants to log it to track their nutrition.
 
 5. **Confirmation**
    - Progress updates
-   - Food added to history for easy re-logging
+   - Ingredient added to history for easy re-logging
 
 #### Path C: Quick Add (Calories Only)
 
@@ -233,11 +233,11 @@ User wants to see how they've been doing over the past week.
 
 | Scenario | Primary Tables | Key JSONB Fields |
 |----------|---------------|------------------|
-| Onboarding | `nutri_profiles` | `basic_info`, `targets`, `preferences` |
-| View Plan | `nutri_daily_plans`, `nutri_recipes` | `plan`, `ingredients` |
-| Swap Meal | `nutri_daily_plans`, `nutri_recipes` | `plan` |
-| Log Meal | `nutri_daily_logs`, `nutri_foods` | `log`, `macros` |
-| Progress | `nutri_daily_logs`, `nutri_profiles` | `log`, `targets` |
+| Onboarding | `profiles` | `basic_info`, `targets`, `preferences` |
+| View Plan | `daily_plans`, `recipes` | `plan`, `ingredients` |
+| Swap Meal | `daily_plans`, `recipes` | `plan` |
+| Log Meal | `daily_logs`, `ingredients` | `log`, `macros` |
+| Progress | `daily_logs`, `profiles` | `log`, `targets` |
 
 ---
 

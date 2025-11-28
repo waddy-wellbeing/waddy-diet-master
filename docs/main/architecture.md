@@ -53,15 +53,15 @@ bite-right/
 
 ## Database Design
 
-### Tables (all prefixed with `nutri_`)
+### Tables (all prefixed with ``)
 
 | Table | Purpose | Key JSONB Fields |
 |-------|---------|------------------|
-| `nutri_profiles` | User profiles, targets, preferences | `basic_info`, `targets`, `preferences`, `goals` |
-| `nutri_foods` | Food database | `macros`, `micros` |
-| `nutri_recipes` | Recipe collection | `ingredients`, `instructions`, `nutrition_per_serving` |
-| `nutri_daily_plans` | Daily meal plans | `plan`, `daily_totals` |
-| `nutri_daily_logs` | Food logging | `log`, `logged_totals` |
+| `profiles` | User profiles, targets, preferences | `basic_info`, `targets`, `preferences`, `goals` |
+| `ingredients` | Ingredient database | `macros`, `micros` |
+| `recipes` | Recipe collection | `ingredients`, `instructions`, `nutrition_per_serving` |
+| `daily_plans` | Daily meal plans | `plan`, `daily_totals` |
+| `daily_logs` | Food logging | `log`, `logged_totals` |
 
 ### JSONB Strategy
 
@@ -74,7 +74,7 @@ We use JSONB columns for:
 
 All tables have RLS policies:
 - Users can only access their own data
-- Public foods/recipes are visible to all
+- Public ingredients/recipes are visible to all
 - User-created content is private by default
 
 ---
@@ -82,7 +82,7 @@ All tables have RLS policies:
 ## Authentication Flow
 
 1. User signs up via Supabase Auth
-2. Trigger creates `nutri_profiles` record
+2. Trigger creates `profiles` record
 3. User is redirected to onboarding
 4. After onboarding, user accesses main app
 

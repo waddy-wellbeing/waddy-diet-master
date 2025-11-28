@@ -108,10 +108,28 @@ export function normalizeArabic(text: string): string {
 }
 
 /**
- * Create a lookup key for matching ingredients to foods
+ * Create a lookup key for matching ingredients to ingredient records
  */
 export function createLookupKey(name: string): string {
-  return normalizeArabic(name)
+  const normalized = name.replace(/[_-]+/g, ' ')
+  return normalizeArabic(normalized)
+}
+
+const ARABIC_LETTER_REGEX = /[\u0621-\u064A]/
+
+export function createLookupVariants(name: string): string[] {
+  const baseKey = createLookupKey(name)
+  const variants = new Set<string>([baseKey])
+
+  if (baseKey.startsWith('ال') && baseKey.length > 2) {
+    const withoutArticle = baseKey.slice(2).trim()
+    const firstChar = withoutArticle[0]
+    if (withoutArticle && firstChar && ARABIC_LETTER_REGEX.test(firstChar)) {
+      variants.add(withoutArticle)
+    }
+  }
+
+  return Array.from(variants)
 }
 
 // =============================================================================
@@ -161,10 +179,10 @@ export async function processBatch<T, R>(
 // =============================================================================
 
 export const DATASETS_PATH = path.join(process.cwd(), 'docs', 'datasets')
-export const IMAGES_PATH = path.join(process.cwd(), 'images')
+export const IMAGES_PATH = path.join(DATASETS_PATH, 'images')
 
 export const CSV_FILES = {
-  foods: path.join(DATASETS_PATH, 'food_dataset.csv'),
+  ingredients: path.join(DATASETS_PATH, 'food_dataset.csv'),
   spices: path.join(DATASETS_PATH, 'spices_dataset.csv'),
   recipes: path.join(DATASETS_PATH, 'recipies_dataset.csv'),
 }
