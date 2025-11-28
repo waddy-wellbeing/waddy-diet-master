@@ -4,7 +4,7 @@ import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { toast } from 'sonner'
 import { useRouter } from 'next/navigation'
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import {
   Dialog,
   DialogContent,
@@ -15,6 +15,7 @@ import {
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { Checkbox } from '@/components/ui/checkbox'
 import {
   Select,
   SelectContent,
@@ -47,6 +48,7 @@ interface Ingredient {
   micros?: IngredientMicros | null
   is_verified: boolean
   is_public: boolean
+  source?: string | null
 }
 
 interface IngredientFormDialogProps {
@@ -74,29 +76,59 @@ export function IngredientFormDialog({
     formState: { errors },
   } = useForm({
     resolver: zodResolver(ingredientSchema),
-    defaultValues: ingredient
-      ? {
-          name: ingredient.name,
-          name_ar: ingredient.name_ar,
-          brand: ingredient.brand,
-          category: ingredient.category,
-          food_group: ingredient.food_group,
-          subgroup: ingredient.subgroup,
-          serving_size: ingredient.serving_size,
-          serving_unit: ingredient.serving_unit,
-          macros: ingredient.macros ?? {},
-          micros: ingredient.micros,
-          is_verified: ingredient.is_verified,
-          is_public: ingredient.is_public,
-        }
-      : {
-          serving_size: 100,
-          serving_unit: 'g',
-          macros: {},
-          is_verified: false,
-          is_public: true,
-        },
+    defaultValues: {
+      name: '',
+      name_ar: null,
+      brand: null,
+      category: null,
+      food_group: null,
+      subgroup: null,
+      serving_size: 100,
+      serving_unit: 'g',
+      macros: {},
+      micros: null,
+      is_verified: false,
+      is_public: true,
+      source: null,
+    },
   })
+
+  // Reset form when ingredient changes (for edit mode)
+  useEffect(() => {
+    if (open && ingredient && mode === 'edit') {
+      reset({
+        name: ingredient.name,
+        name_ar: ingredient.name_ar,
+        brand: ingredient.brand,
+        category: ingredient.category,
+        food_group: ingredient.food_group,
+        subgroup: ingredient.subgroup,
+        serving_size: ingredient.serving_size,
+        serving_unit: ingredient.serving_unit,
+        macros: ingredient.macros ?? {},
+        micros: ingredient.micros ?? null,
+        source: ingredient.source ?? null,
+        is_verified: ingredient.is_verified,
+        is_public: ingredient.is_public,
+      })
+    } else if (open && mode === 'create') {
+      reset({
+        name: '',
+        name_ar: null,
+        brand: null,
+        category: null,
+        food_group: null,
+        subgroup: null,
+        serving_size: 100,
+        serving_unit: 'g',
+        macros: {},
+        micros: null,
+        is_verified: false,
+        is_public: true,
+        source: null,
+      })
+    }
+  }, [open, ingredient, mode, reset])
 
   const servingUnit = watch('serving_unit')
   const foodGroup = watch('food_group')
@@ -213,6 +245,15 @@ export function IngredientFormDialog({
                 </div>
               </div>
 
+              <div className="space-y-2">
+                <Label htmlFor="subgroup">Subgroup</Label>
+                <Input
+                  id="subgroup"
+                  placeholder="e.g., Lean meats"
+                  {...register('subgroup')}
+                />
+              </div>
+
               <Separator />
 
               <div className="grid gap-4 sm:grid-cols-2">
@@ -276,6 +317,36 @@ export function IngredientFormDialog({
                     placeholder="e.g., USDA, manual"
                     {...register('source')}
                   />
+                </div>
+              </div>
+
+              <Separator />
+
+              <div className="flex gap-6">
+                <div className="flex items-center space-x-2">
+                  <Checkbox
+                    id="is_verified"
+                    checked={watch('is_verified')}
+                    onCheckedChange={(checked) => 
+                      setValue('is_verified', checked === true)
+                    }
+                  />
+                  <Label htmlFor="is_verified" className="font-normal cursor-pointer">
+                    Verified ingredient
+                  </Label>
+                </div>
+
+                <div className="flex items-center space-x-2">
+                  <Checkbox
+                    id="is_public"
+                    checked={watch('is_public')}
+                    onCheckedChange={(checked) => 
+                      setValue('is_public', checked === true)
+                    }
+                  />
+                  <Label htmlFor="is_public" className="font-normal cursor-pointer">
+                    Public (visible to all users)
+                  </Label>
                 </div>
               </div>
             </TabsContent>
@@ -379,89 +450,171 @@ export function IngredientFormDialog({
                 Micronutrients per serving (optional)
               </p>
 
-              <div className="grid gap-4 sm:grid-cols-2">
-                <div className="space-y-2">
-                  <Label htmlFor="micros.vitamin_a_iu">Vitamin A (IU)</Label>
-                  <Input
-                    id="micros.vitamin_a_iu"
-                    type="number"
-                    step="0.1"
-                    min="0"
-                    placeholder="0"
-                    {...register('micros.vitamin_a_iu')}
-                  />
-                </div>
+              {/* Vitamins */}
+              <div className="space-y-2">
+                <h4 className="text-sm font-medium">Vitamins</h4>
+                <div className="grid gap-4 sm:grid-cols-3">
+                  <div className="space-y-2">
+                    <Label htmlFor="micros.vitamin_a_ug">Vitamin A (μg)</Label>
+                    <Input
+                      id="micros.vitamin_a_ug"
+                      type="number"
+                      step="0.1"
+                      min="0"
+                      placeholder="0"
+                      {...register('micros.vitamin_a_ug')}
+                    />
+                  </div>
 
-                <div className="space-y-2">
-                  <Label htmlFor="micros.vitamin_c_mg">Vitamin C (mg)</Label>
-                  <Input
-                    id="micros.vitamin_c_mg"
-                    type="number"
-                    step="0.1"
-                    min="0"
-                    placeholder="0"
-                    {...register('micros.vitamin_c_mg')}
-                  />
-                </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="micros.vitamin_c_mg">Vitamin C (mg)</Label>
+                    <Input
+                      id="micros.vitamin_c_mg"
+                      type="number"
+                      step="0.1"
+                      min="0"
+                      placeholder="0"
+                      {...register('micros.vitamin_c_mg')}
+                    />
+                  </div>
 
-                <div className="space-y-2">
-                  <Label htmlFor="micros.vitamin_d_iu">Vitamin D (IU)</Label>
-                  <Input
-                    id="micros.vitamin_d_iu"
-                    type="number"
-                    step="0.1"
-                    min="0"
-                    placeholder="0"
-                    {...register('micros.vitamin_d_iu')}
-                  />
-                </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="micros.vitamin_d_ug">Vitamin D (μg)</Label>
+                    <Input
+                      id="micros.vitamin_d_ug"
+                      type="number"
+                      step="0.1"
+                      min="0"
+                      placeholder="0"
+                      {...register('micros.vitamin_d_ug')}
+                    />
+                  </div>
 
-                <div className="space-y-2">
-                  <Label htmlFor="micros.calcium_mg">Calcium (mg)</Label>
-                  <Input
-                    id="micros.calcium_mg"
-                    type="number"
-                    step="0.1"
-                    min="0"
-                    placeholder="0"
-                    {...register('micros.calcium_mg')}
-                  />
-                </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="micros.vitamin_b12_ug">Vitamin B12 (μg)</Label>
+                    <Input
+                      id="micros.vitamin_b12_ug"
+                      type="number"
+                      step="0.1"
+                      min="0"
+                      placeholder="0"
+                      {...register('micros.vitamin_b12_ug')}
+                    />
+                  </div>
 
-                <div className="space-y-2">
-                  <Label htmlFor="micros.iron_mg">Iron (mg)</Label>
-                  <Input
-                    id="micros.iron_mg"
-                    type="number"
-                    step="0.1"
-                    min="0"
-                    placeholder="0"
-                    {...register('micros.iron_mg')}
-                  />
-                </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="micros.vitamin_k_ug">Vitamin K (μg)</Label>
+                    <Input
+                      id="micros.vitamin_k_ug"
+                      type="number"
+                      step="0.1"
+                      min="0"
+                      placeholder="0"
+                      {...register('micros.vitamin_k_ug')}
+                    />
+                  </div>
 
-                <div className="space-y-2">
-                  <Label htmlFor="micros.potassium_mg">Potassium (mg)</Label>
-                  <Input
-                    id="micros.potassium_mg"
-                    type="number"
-                    step="0.1"
-                    min="0"
-                    placeholder="0"
-                    {...register('micros.potassium_mg')}
-                  />
+                  <div className="space-y-2">
+                    <Label htmlFor="micros.folate_ug">Folate (μg)</Label>
+                    <Input
+                      id="micros.folate_ug"
+                      type="number"
+                      step="0.1"
+                      min="0"
+                      placeholder="0"
+                      {...register('micros.folate_ug')}
+                    />
+                  </div>
                 </div>
+              </div>
 
-                <div className="space-y-2 sm:col-span-2">
-                  <Label htmlFor="micros.sodium_mg">Sodium (mg)</Label>
-                  <Input
-                    id="micros.sodium_mg"
-                    type="number"
-                    step="0.1"
-                    min="0"
-                    placeholder="0"
-                    {...register('micros.sodium_mg')}
-                  />
+              {/* Minerals */}
+              <div className="space-y-2">
+                <h4 className="text-sm font-medium">Minerals</h4>
+                <div className="grid gap-4 sm:grid-cols-3">
+                  <div className="space-y-2">
+                    <Label htmlFor="micros.calcium_mg">Calcium (mg)</Label>
+                    <Input
+                      id="micros.calcium_mg"
+                      type="number"
+                      step="0.1"
+                      min="0"
+                      placeholder="0"
+                      {...register('micros.calcium_mg')}
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="micros.iron_mg">Iron (mg)</Label>
+                    <Input
+                      id="micros.iron_mg"
+                      type="number"
+                      step="0.1"
+                      min="0"
+                      placeholder="0"
+                      {...register('micros.iron_mg')}
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="micros.magnesium_mg">Magnesium (mg)</Label>
+                    <Input
+                      id="micros.magnesium_mg"
+                      type="number"
+                      step="0.1"
+                      min="0"
+                      placeholder="0"
+                      {...register('micros.magnesium_mg')}
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="micros.potassium_mg">Potassium (mg)</Label>
+                    <Input
+                      id="micros.potassium_mg"
+                      type="number"
+                      step="0.1"
+                      min="0"
+                      placeholder="0"
+                      {...register('micros.potassium_mg')}
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="micros.sodium_mg">Sodium (mg)</Label>
+                    <Input
+                      id="micros.sodium_mg"
+                      type="number"
+                      step="0.1"
+                      min="0"
+                      placeholder="0"
+                      {...register('micros.sodium_mg')}
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="micros.zinc_mg">Zinc (mg)</Label>
+                    <Input
+                      id="micros.zinc_mg"
+                      type="number"
+                      step="0.1"
+                      min="0"
+                      placeholder="0"
+                      {...register('micros.zinc_mg')}
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="micros.selenium_ug">Selenium (μg)</Label>
+                    <Input
+                      id="micros.selenium_ug"
+                      type="number"
+                      step="0.1"
+                      min="0"
+                      placeholder="0"
+                      {...register('micros.selenium_ug')}
+                    />
+                  </div>
                 </div>
               </div>
             </TabsContent>

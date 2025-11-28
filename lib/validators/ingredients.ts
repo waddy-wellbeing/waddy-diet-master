@@ -15,15 +15,22 @@ export const ingredientMacrosSchema = z.object({
 
 /**
  * Zod schema for ingredient micros
+ * Note: Vitamins use _ug (micrograms) to match database seed data
  */
 export const ingredientMicrosSchema = z.object({
-  vitamin_a_iu: z.coerce.number().min(0).optional(),
+  vitamin_a_ug: z.coerce.number().min(0).optional(),
   vitamin_c_mg: z.coerce.number().min(0).optional(),
-  vitamin_d_iu: z.coerce.number().min(0).optional(),
+  vitamin_d_ug: z.coerce.number().min(0).optional(),
+  vitamin_b12_ug: z.coerce.number().min(0).optional(),
+  vitamin_k_ug: z.coerce.number().min(0).optional(),
+  folate_ug: z.coerce.number().min(0).optional(),
   calcium_mg: z.coerce.number().min(0).optional(),
   iron_mg: z.coerce.number().min(0).optional(),
+  magnesium_mg: z.coerce.number().min(0).optional(),
   potassium_mg: z.coerce.number().min(0).optional(),
   sodium_mg: z.coerce.number().min(0).optional(),
+  zinc_mg: z.coerce.number().min(0).optional(),
+  selenium_ug: z.coerce.number().min(0).optional(),
 }).passthrough() // Allow additional micronutrients
 
 /**
@@ -49,12 +56,15 @@ export type IngredientFormData = z.infer<typeof ingredientSchema>
 
 /**
  * Common food groups for filtering
+ * Includes both singular and plural forms for flexibility
  */
 export const FOOD_GROUPS = [
+  'Protein',
   'Proteins',
   'Vegetables',
   'Fruits',
   'Grains',
+  'Carbs',
   'Dairy',
   'Fats & Oils',
   'Legumes',
@@ -67,15 +77,25 @@ export const FOOD_GROUPS = [
 
 /**
  * Common serving units
+ * Includes both short and long forms for flexibility
  */
 export const SERVING_UNITS = [
   'g',
+  'grams',
   'ml',
+  'milliliters',
   'oz',
+  'ounce',
   'cup',
+  'cups',
   'tbsp',
+  'tablespoon',
   'tsp',
+  'teaspoon',
   'piece',
+  'pieces',
   'slice',
+  'slices',
   'serving',
+  'servings',
 ] as const

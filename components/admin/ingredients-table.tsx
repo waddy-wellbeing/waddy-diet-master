@@ -60,8 +60,10 @@ interface Ingredient {
   serving_size: number
   serving_unit: string
   macros: IngredientMacros
+  micros?: Record<string, number> | null
   is_verified: boolean
   is_public: boolean
+  source?: string | null
   created_at: string
 }
 
@@ -216,6 +218,7 @@ export function IngredientsTable({
                 </Button>
               </TableHead>
               <TableHead>Food Group</TableHead>
+              <TableHead>Subgroup</TableHead>
               <TableHead className="text-right">Serving</TableHead>
               <TableHead className="text-right">Calories</TableHead>
               <TableHead className="text-right">Protein</TableHead>
@@ -227,7 +230,7 @@ export function IngredientsTable({
           <TableBody>
             {ingredients.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={8} className="h-32 text-center">
+                <TableCell colSpan={9} className="h-32 text-center">
                   <div className="flex flex-col items-center gap-2">
                     <p className="text-muted-foreground">No ingredients found</p>
                     <Button
@@ -257,6 +260,13 @@ export function IngredientsTable({
                   <TableCell>
                     {ingredient.food_group ? (
                       <Badge variant="secondary">{ingredient.food_group}</Badge>
+                    ) : (
+                      <span className="text-muted-foreground">—</span>
+                    )}
+                  </TableCell>
+                  <TableCell>
+                    {ingredient.subgroup ? (
+                      <span className="text-sm">{ingredient.subgroup}</span>
                     ) : (
                       <span className="text-muted-foreground">—</span>
                     )}
