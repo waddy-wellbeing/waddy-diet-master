@@ -100,3 +100,30 @@ When modifying the database schema, update these files:
 2. `docs/main/database-erd.md` - ERD diagrams and JSONB examples
 3. `lib/types/nutri.ts` - TypeScript interfaces
 4. This file if major structural changes
+
+## UI/UX & Performance Priorities
+
+**Exceptional UI/UX is a top priority.** Follow these guidelines:
+
+### Design Principles
+1. **Delightful micro-interactions** - Smooth transitions, hover states, loading skeletons
+2. **Consistent visual hierarchy** - Clear typography, spacing, and color usage
+3. **Immediate feedback** - Optimistic updates, loading states, success/error toasts
+4. **Accessibility first** - Proper ARIA labels, keyboard navigation, focus states
+5. **Empty states** - Always design meaningful empty states with CTAs
+
+### Performance Guidelines
+1. **Server Components by default** - Only use `"use client"` when truly needed
+2. **Suspense boundaries** - Wrap async components for streaming
+3. **Image optimization** - Use Next.js Image component, WebP format, proper sizing
+4. **Pagination** - Never load unbounded lists; use cursor or offset pagination
+5. **Debounce search** - 300ms debounce on search inputs
+6. **Skeleton loading** - Show content placeholders during data fetch
+7. **Revalidation** - Use `revalidatePath` for cache invalidation after mutations
+
+### Admin Panel Patterns
+1. **Data tables** - Sortable columns, search, filters, pagination
+2. **Forms** - Inline validation, disabled states during submit, clear error messages
+3. **Modals** - For create/edit, with form reset on close
+4. **Bulk actions** - Select multiple rows for batch operations
+5. **Confirmation dialogs** - For destructive actions (delete)

@@ -87,7 +87,44 @@ app/admin/
 
 ---
 
-## Phase 3: Recipes Module 🔲 TODO
+## Phase 3: Ingredients Module 🔄 IN PROGRESS
+
+### Goals
+- Full CRUD for ingredients
+- Macro/micro editing with exceptional UX
+- Search, filter, pagination
+
+### Tasks
+
+| Task | Status | Notes |
+|------|--------|-------|
+| Ingredient list with DataTable | 🔲 Todo | Sortable, searchable, paginated |
+| Create ingredient dialog | 🔲 Todo | Modal form with validation |
+| Edit ingredient dialog | 🔲 Todo | Pre-populated form |
+| Delete with confirmation | 🔲 Todo | Confirmation dialog |
+| Inline search & filters | 🔲 Todo | By name, food group |
+| Loading skeletons | 🔲 Todo | Smooth loading states |
+| Toast notifications | 🔲 Todo | Success/error feedback |
+
+---
+
+## Phase 4: Spices Module 🔲 TODO
+
+### Goals
+- Simple CRUD for spices
+- Alias management
+
+### Tasks
+
+| Task | Status | Notes |
+|------|--------|-------|
+| Spice list with DataTable | 🔲 Todo | Same patterns as ingredients |
+| Create/edit spice dialog | 🔲 Todo | Name EN/AR, aliases |
+| Delete with confirmation | 🔲 Todo | Confirmation dialog |
+
+---
+
+## Phase 5: Recipes Module 🔲 TODO
 
 ### Goals
 - Full CRUD for recipes
@@ -107,17 +144,7 @@ app/admin/
 
 ---
 
-## Phase 4: Ingredients Module 🔲 TODO
-
-### Goals
-- Full CRUD for ingredients
-- Macro/micro editing
-- Bulk import
-
-### Tasks
-
-| Task | Status | Notes |
-|------|--------|-------|
+## Phase 6: Daily Plans Module 🔲 TODO (Stretch)
 | Ingredient list with search | 🔲 Todo | Filter by food group |
 | Ingredient create/edit form | 🔲 Todo | Macros, micros, serving |
 | Bulk CSV import | 🔲 Todo | Upload & validate |
