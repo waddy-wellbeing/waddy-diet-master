@@ -16,7 +16,7 @@ export default async function HealthPage() {
     
     // Try a simple query to verify connection
     const { data, error } = await supabase
-      .from('nutri_foods')
+      .from('ingredients')
       .select('id')
       .limit(1)
 
@@ -24,7 +24,7 @@ export default async function HealthPage() {
       // If table doesn't exist yet, that's expected before running schema
       if (error.code === '42P01') {
         status = 'ok'
-        message = 'Connected to Supabase, but nutri_foods table does not exist yet. Run the schema.sql first.'
+        message = 'Connected to Supabase, but ingredients table does not exist yet. Run the schema.sql first.'
         details = { hint: 'Run supabase/schema.sql in your Supabase SQL Editor' }
       } else {
         status = 'error'
@@ -33,7 +33,7 @@ export default async function HealthPage() {
       }
     } else {
       details = { 
-        foods_count: data?.length ?? 0,
+        ingredients_count: data?.length ?? 0,
         table_exists: true 
       }
     }

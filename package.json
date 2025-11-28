@@ -8,7 +8,10 @@
     "start": "next start",
     "lint": "eslint",
     "seed": "tsx scripts/seed.ts",
-    "seed:dry-run": "tsx scripts/seed.ts --dry-run"
+    "seed:dry-run": "tsx scripts/seed.ts --dry-run",
+    "seed:skip-unmatched": "tsx scripts/seed.ts --skip-unmatched",
+    "seed:export-unmatched": "tsx scripts/seed.ts --export-unmatched",
+    "seed:export-recipes": "tsx scripts/seed.ts --export-recipes"
   },
   "dependencies": {
     "@radix-ui/react-label": "^2.1.8",

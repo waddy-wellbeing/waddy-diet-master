@@ -1,17 +1,17 @@
 import { createClient } from '@/lib/supabase/server'
-import type { NutriSpice } from '@/lib/types/nutri'
+import type { Spice } from '@/lib/types/nutri'
 
 /**
  * Get all default spices from the database
  * Used for autocomplete/dropdown in recipe ingredient editor
  * 
- * @returns Array of NutriSpice objects ordered by name
+ * @returns Array of Spice objects ordered by name
  */
-export async function getDefaultSpices(): Promise<NutriSpice[]> {
+export async function getDefaultSpices(): Promise<Spice[]> {
   const supabase = await createClient()
   
   const { data, error } = await supabase
-    .from('nutri_spices')
+    .from('spices')
     .select('*')
     .eq('is_default', true)
     .order('name', { ascending: true })
@@ -21,20 +21,20 @@ export async function getDefaultSpices(): Promise<NutriSpice[]> {
     return []
   }
 
-  return data as NutriSpice[]
+  return data as Spice[]
 }
 
 /**
  * Search spices by name or alias
  * 
  * @param query - Search term to match against name, name_ar, or aliases
- * @returns Array of matching NutriSpice objects
+ * @returns Array of matching Spice objects
  */
-export async function searchSpices(query: string): Promise<NutriSpice[]> {
+export async function searchSpices(query: string): Promise<Spice[]> {
   const supabase = await createClient()
   
   const { data, error } = await supabase
-    .from('nutri_spices')
+    .from('spices')
     .select('*')
     .eq('is_default', true)
     .or(`name.ilike.%${query}%,name_ar.ilike.%${query}%`)
@@ -46,5 +46,5 @@ export async function searchSpices(query: string): Promise<NutriSpice[]> {
     return []
   }
 
-  return data as NutriSpice[]
+  return data as Spice[]
 }

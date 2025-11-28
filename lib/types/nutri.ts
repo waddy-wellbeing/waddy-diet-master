@@ -6,7 +6,7 @@
  */
 
 // =============================================================================
-// NUTRI_PROFILES
+// PROFILES
 // =============================================================================
 
 /** User's basic profile information */
@@ -46,11 +46,11 @@ export interface ProfileGoals {
 }
 
 // =============================================================================
-// NUTRI_FOODS
+// INGREDIENTS
 // =============================================================================
 
 /** Macronutrients per serving */
-export interface FoodMacros {
+export interface IngredientMacros {
   calories?: number
   protein_g?: number
   carbs_g?: number
@@ -61,7 +61,7 @@ export interface FoodMacros {
 }
 
 /** Micronutrients per serving (extensible) */
-export interface FoodMicros {
+export interface IngredientMicros {
   vitamin_a_iu?: number
   vitamin_c_mg?: number
   vitamin_d_iu?: number
@@ -73,11 +73,11 @@ export interface FoodMicros {
 }
 
 // =============================================================================
-// NUTRI_SPICES
+// SPICES
 // =============================================================================
 
-/** A spice from the nutri_spices reference table */
-export interface NutriSpice {
+/** A spice from the spices reference table */
+export interface Spice {
   id: string
   name: string
   name_ar?: string | null
@@ -88,17 +88,17 @@ export interface NutriSpice {
 }
 
 // =============================================================================
-// NUTRI_RECIPES
+// RECIPES
 // =============================================================================
 
 /** 
- * Single ingredient in a recipe (stored in nutri_recipes.ingredients JSONB)
+ * Single ingredient in a recipe (stored in recipes.ingredients JSONB)
  * 
- * For regular ingredients: food_id is set, quantity/unit are required
- * For spices: food_id is null, is_spice is true, quantity/unit can be null (meaning "as desired")
+ * For regular ingredients: ingredient_id is set, quantity/unit are required
+ * For spices: ingredient_id is null, is_spice is true, quantity/unit can be null (meaning "as desired")
  */
 export interface RecipeIngredient {
-  food_id: string | null
+  ingredient_id: string | null
   raw_name: string
   quantity: number | null
   unit: string | null
@@ -121,7 +121,7 @@ export interface RecipeNutrition {
 }
 
 // =============================================================================
-// NUTRI_DAILY_PLANS
+// DAILY PLANS
 // =============================================================================
 
 /** A single meal slot in the plan */
@@ -132,10 +132,10 @@ export interface PlanMealSlot {
   original_recipe_id?: string
 }
 
-/** A snack item (can be recipe or food) */
+/** A snack item (can be recipe or ingredient) */
 export interface PlanSnackItem {
   recipe_id?: string
-  food_id?: string
+  ingredient_id?: string
   servings?: number
   amount?: number
   unit?: string
@@ -158,14 +158,14 @@ export interface DailyTotals {
 }
 
 // =============================================================================
-// NUTRI_DAILY_LOGS
+// DAILY LOGS
 // =============================================================================
 
-/** A logged item (food or recipe) */
+/** A logged item (ingredient or recipe) */
 export interface LoggedItem {
-  type: 'recipe' | 'food'
+  type: 'recipe' | 'ingredient'
   recipe_id?: string
-  food_id?: string
+  ingredient_id?: string
   servings?: number
   amount?: number
   unit?: string
@@ -197,8 +197,8 @@ export type MealType = typeof MEAL_TYPES[number]
 // DATABASE ROW TYPES
 // =============================================================================
 
-/** Full nutri_profiles row (for reference - use Supabase generated types in production) */
-export interface NutriProfile {
+/** Full profiles row (for reference - use Supabase generated types in production) */
+export interface ProfileRecord {
   id: string
   user_id: string
   basic_info: ProfileBasicInfo
@@ -211,8 +211,8 @@ export interface NutriProfile {
   updated_at: string
 }
 
-/** Full nutri_foods row */
-export interface NutriFood {
+/** Full ingredients row */
+export interface IngredientRecord {
   id: string
   name: string
   name_ar?: string
@@ -222,8 +222,8 @@ export interface NutriFood {
   subgroup?: string
   serving_size: number
   serving_unit: string
-  macros: FoodMacros
-  micros?: FoodMicros
+  macros: IngredientMacros
+  micros?: IngredientMicros
   is_verified: boolean
   source?: string
   created_by?: string
@@ -232,8 +232,8 @@ export interface NutriFood {
   updated_at: string
 }
 
-/** Full nutri_recipes row */
-export interface NutriRecipe {
+/** Full recipes row */
+export interface RecipeRecord {
   id: string
   name: string
   description?: string
@@ -252,14 +252,15 @@ export interface NutriRecipe {
   is_vegan?: boolean
   is_gluten_free?: boolean
   is_dairy_free?: boolean
+  admin_notes?: string | null
   created_by?: string
   is_public: boolean
   created_at: string
   updated_at: string
 }
 
-/** Full nutri_daily_plans row */
-export interface NutriDailyPlan {
+/** Full daily_plans row */
+export interface DailyPlanRecord {
   id: string
   user_id: string
   plan_date: string // DATE as ISO string
@@ -270,8 +271,8 @@ export interface NutriDailyPlan {
   updated_at: string
 }
 
-/** Full nutri_daily_logs row */
-export interface NutriDailyLog {
+/** Full daily_logs row */
+export interface DailyLogRecord {
   id: string
   user_id: string
   log_date: string // DATE as ISO string

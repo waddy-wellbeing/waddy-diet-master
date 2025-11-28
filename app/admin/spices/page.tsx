@@ -3,7 +3,7 @@ import { getDefaultSpices } from '@/lib/spices'
 /**
  * Admin Spices Page
  * 
- * Lists all default spices from the nutri_spices table.
+ * Lists all default spices from the spices table.
  * This page verifies that the spices table is reachable and types are wired up.
  */
 export default async function AdminSpicesPage() {
@@ -24,7 +24,7 @@ export default async function AdminSpicesPage() {
             No spices found in the database.
           </p>
           <p className="text-sm text-gray-400 dark:text-gray-500">
-            Add spices to the <code className="bg-gray-100 dark:bg-gray-800 px-1 rounded">nutri_spices</code> table
+            Add spices to the <code className="bg-gray-100 dark:bg-gray-800 px-1 rounded">spices</code> table
             using the Supabase dashboard or SQL.
           </p>
         </div>
