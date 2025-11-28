@@ -9,6 +9,12 @@
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 
 -- =============================================================================
+-- ENUMS
+-- =============================================================================
+
+CREATE TYPE user_role AS ENUM ('admin', 'moderator', 'client');
+
+-- =============================================================================
 -- PROFILES
 -- =============================================================================
 -- Stores user profile data including basic info, targets, and preferences
@@ -16,6 +22,7 @@ CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 CREATE TABLE profiles (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  role user_role NOT NULL DEFAULT 'client',
   basic_info JSONB NOT NULL DEFAULT '{}',
   targets JSONB NOT NULL DEFAULT '{}',
   preferences JSONB NOT NULL DEFAULT '{}',
@@ -28,6 +35,7 @@ CREATE TABLE profiles (
 );
 
 CREATE INDEX profiles_user_id_idx ON profiles(user_id);
+CREATE INDEX profiles_role_idx ON profiles(role);
 
 -- =============================================================================
 -- INGREDIENTS
@@ -268,3 +276,21 @@ CREATE TRIGGER daily_plans_updated_at
 CREATE TRIGGER daily_logs_updated_at
   BEFORE UPDATE ON daily_logs
   FOR EACH ROW EXECUTE FUNCTION update_updated_at();
+
+-- =============================================================================
+-- AUTO-CREATE PROFILE ON USER SIGNUP
+-- =============================================================================
+
+CREATE OR REPLACE FUNCTION handle_new_user()
+RETURNS TRIGGER AS $$
+BEGIN
+  INSERT INTO public.profiles (user_id, role)
+  VALUES (NEW.id, 'client');
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+CREATE TRIGGER on_auth_user_created
+  AFTER INSERT ON auth.users
+  FOR EACH ROW
+  EXECUTE FUNCTION handle_new_user();
