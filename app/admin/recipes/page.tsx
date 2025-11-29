@@ -1,6 +1,62 @@
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Suspense } from 'react'
+import { RecipesTable, RecipesTableSkeleton } from '@/components/admin/recipes-table'
+import { getRecipes, getCuisines } from '@/lib/actions/recipes'
 
-export default function AdminRecipesPage() {
+interface PageProps {
+  searchParams: Promise<{
+    search?: string
+    page?: string
+    mealType?: string
+    cuisine?: string
+  }>
+}
+
+async function RecipesTableWrapper({
+  searchParams,
+}: {
+  searchParams: {
+    search?: string
+    page?: string
+    mealType?: string
+    cuisine?: string
+  }
+}) {
+  const page = parseInt(searchParams.page ?? '1', 10)
+  const pageSize = 20
+
+  const [recipesResult, cuisinesResult] = await Promise.all([
+    getRecipes({
+      search: searchParams.search,
+      page,
+      pageSize,
+      mealType: searchParams.mealType,
+      cuisine: searchParams.cuisine,
+    }),
+    getCuisines(),
+  ])
+
+  if (recipesResult.error) {
+    return (
+      <div className="text-center py-8 text-muted-foreground">
+        Failed to load recipes: {recipesResult.error}
+      </div>
+    )
+  }
+
+  return (
+    <RecipesTable
+      recipes={recipesResult.recipes}
+      total={recipesResult.total}
+      page={page}
+      pageSize={pageSize}
+      cuisines={cuisinesResult}
+    />
+  )
+}
+
+export default async function AdminRecipesPage({ searchParams }: PageProps) {
+  const resolvedSearchParams = await searchParams
+
   return (
     <div className="space-y-6">
       <div>
@@ -10,25 +66,9 @@ export default function AdminRecipesPage() {
         </p>
       </div>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Recipe Management</CardTitle>
-          <CardDescription>
-            Full CRUD for recipes coming in Phase 3
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <p className="text-sm text-muted-foreground">
-            This page will include:
-          </p>
-          <ul className="mt-2 list-disc list-inside text-sm text-muted-foreground space-y-1">
-            <li>Recipe list with search and filters</li>
-            <li>Create/edit recipe form</li>
-            <li>Ingredient picker with nutrition calculation</li>
-            <li>Image upload integration</li>
-          </ul>
-        </CardContent>
-      </Card>
+      <Suspense fallback={<RecipesTableSkeleton />}>
+        <RecipesTableWrapper searchParams={resolvedSearchParams} />
+      </Suspense>
     </div>
   )
 }

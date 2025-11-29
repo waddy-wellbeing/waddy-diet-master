@@ -1,6 +1,6 @@
 # Admin Panel Roadmap
 
-> **Last updated:** 2025-11-28
+> **Last updated:** 2025-01-10
 > 
 > This document tracks the implementation progress of the BiteRight admin panel.
 
@@ -87,7 +87,7 @@ app/admin/
 
 ---
 
-## Phase 3: Ingredients Module 🔄 IN PROGRESS
+## Phase 3: Ingredients Module ✅ COMPLETE
 
 ### Goals
 - Full CRUD for ingredients
@@ -98,56 +98,177 @@ app/admin/
 
 | Task | Status | Notes |
 |------|--------|-------|
-| Ingredient list with DataTable | 🔲 Todo | Sortable, searchable, paginated |
-| Create ingredient dialog | 🔲 Todo | Modal form with validation |
-| Edit ingredient dialog | 🔲 Todo | Pre-populated form |
-| Delete with confirmation | 🔲 Todo | Confirmation dialog |
-| Inline search & filters | 🔲 Todo | By name, food group |
-| Loading skeletons | 🔲 Todo | Smooth loading states |
-| Toast notifications | 🔲 Todo | Success/error feedback |
+| Ingredient list with DataTable | ✅ Complete | Sortable, searchable, paginated |
+| Create ingredient dialog | ✅ Complete | Tabbed modal (Basic, Macros, Micros) |
+| Edit ingredient dialog | ✅ Complete | Pre-populated form with useEffect reset |
+| Delete with confirmation | ✅ Complete | Confirmation dialog |
+| Inline search & filters | ✅ Complete | By name, food group filter |
+| Loading skeletons | ✅ Complete | Suspense with skeleton component |
+| Toast notifications | ✅ Complete | Using sonner for success/error |
+| Admin RLS policies | ✅ Complete | Migration 002 for admin bypass |
+
+### Files Created
+- `lib/validators/ingredients.ts` - Zod schemas
+- `lib/actions/ingredients.ts` - Server actions
+- `components/admin/ingredients-table.tsx` - DataTable component
+- `components/admin/ingredient-form-dialog.tsx` - Create/edit modal
 
 ---
 
-## Phase 4: Spices Module 🔲 TODO
+## Phase 3.5: Spices Module ✅ COMPLETE
 
 ### Goals
 - Simple CRUD for spices
-- Alias management
+- Alias management with tag input
 
 ### Tasks
 
 | Task | Status | Notes |
 |------|--------|-------|
-| Spice list with DataTable | 🔲 Todo | Same patterns as ingredients |
-| Create/edit spice dialog | 🔲 Todo | Name EN/AR, aliases |
-| Delete with confirmation | 🔲 Todo | Confirmation dialog |
+| Spice list with DataTable | ✅ Complete | Same patterns as ingredients |
+| Create/edit spice dialog | ✅ Complete | Name EN/AR, aliases as tags |
+| Delete with confirmation | ✅ Complete | Confirmation dialog |
+| Search & pagination | ✅ Complete | Consistent with ingredients |
+
+### Files Created
+- `lib/validators/spices.ts` - Zod schemas
+- `lib/actions/spices.ts` - Server actions
+- `components/admin/spices-table.tsx` - DataTable component
+- `components/admin/spice-form-dialog.tsx` - Create/edit modal
 
 ---
 
-## Phase 5: Recipes Module 🔲 TODO
+## Phase 4: Recipes Module 🔄 IN PROGRESS
 
 ### Goals
 - Full CRUD for recipes
 - Ingredient picker with nutrition calculation
-- Image upload integration
+- Image URL management
+- Multi-step instructions
 
 ### Tasks
 
 | Task | Status | Notes |
 |------|--------|-------|
-| Recipe list with search/filter | 🔲 Todo | Table, pagination |
-| Recipe create/edit form | 🔲 Todo | All fields, validation |
-| Ingredient picker component | 🔲 Todo | Search, add, set quantity |
-| Auto-calculate nutrition | 🔲 Todo | Sum from ingredients |
-| Image upload | 🔲 Todo | Supabase Storage integration |
-| Recipe preview | 🔲 Todo | User-facing view |
+| Recipe validator schema | ✅ Complete | `lib/validators/recipes.ts` with constants |
+| Recipe server actions | ✅ Complete | CRUD + search functions |
+| Recipe list with search/filter | ✅ Complete | DataTable with pagination, filters |
+| Debounce hook utility | ✅ Complete | `lib/hooks/use-debounce.ts` |
+| Ingredient picker component | ✅ Complete | Search ingredients/spices with debounce |
+| Recipe create/edit form | ✅ Complete | 4-tab dialog (Basic, Ingredients, Instructions, Nutrition) |
+| Recipe page integration | ✅ Complete | Server-side data fetching with Suspense |
+| Dietary flags display | ✅ Complete | Badge icons for vegan/vegetarian/GF/DF |
+| Auto-calculate nutrition | 🔲 Todo | Sum from ingredients based on quantity |
+| Image URL input | ✅ Complete | Text input for cover image URL |
+| Recipe preview | 🔲 Todo | Card preview in modal |
+
+### Files Created
+- `lib/validators/recipes.ts` - Zod schemas, MEAL_TYPES, CUISINES, DIFFICULTIES constants
+- `lib/actions/recipes.ts` - Server actions (CRUD + getCuisines + searchIngredients/Spices)
+- `lib/hooks/use-debounce.ts` - Debounced callback and value hooks
+- `components/admin/recipes-table.tsx` - DataTable with filters and dietary badges
+- `components/admin/recipe-form-dialog.tsx` - Multi-tab create/edit modal
+- `components/admin/ingredient-picker.tsx` - Ingredient/spice search component
+
+### Schema Reference
+```typescript
+interface Recipe {
+  id: string
+  name: string
+  description: string | null
+  image_url: string | null
+  meal_type: string[]        // breakfast, lunch, dinner, snack
+  cuisine: string | null
+  tags: string[]
+  prep_time_minutes: number | null
+  cook_time_minutes: number | null
+  servings: number
+  difficulty: string | null  // easy, medium, hard
+  ingredients: RecipeIngredient[]  // JSONB
+  instructions: RecipeInstruction[] // JSONB
+  nutrition_per_serving: RecipeNutrition // JSONB
+  is_vegetarian: boolean
+  is_vegan: boolean
+  is_gluten_free: boolean
+  is_dairy_free: boolean
+  admin_notes: string | null
+  created_by: string | null
+  is_public: boolean
+}
+```
 
 ---
 
-## Phase 6: Daily Plans Module 🔲 TODO (Stretch)
-| Ingredient list with search | 🔲 Todo | Filter by food group |
-| Ingredient create/edit form | 🔲 Todo | Macros, micros, serving |
-| Bulk CSV import | 🔲 Todo | Upload & validate |
+## Phase 5: Users Module 🔲 TODO
+
+### Goals
+- User list with role management
+- Profile viewing
+
+### Tasks
+
+| Task | Status | Notes |
+|------|--------|-------|
+| User list with search | 🔲 Todo | DataTable with roles |
+| Role management | 🔲 Todo | Admin can change user roles |
+| Profile detail view | 🔲 Todo | View user info, targets |
+
+---
+
+## Phase 6: Polish & Deploy 🔲 TODO
+
+### Goals
+- Responsive testing
+- Performance optimization
+- Documentation
+
+### Tasks
+
+| Task | Status | Notes |
+|------|--------|-------|
+| Mobile responsive | 🔲 Todo | Test on various screens |
+| Error boundaries | 🔲 Todo | Graceful error handling |
+| Loading states | 🔲 Todo | All async ops covered |
+| README updates | 🔲 Todo | Document admin features |
+
+---
+
+## Technical Decisions
+
+| Area | Decision |
+|------|----------|
+| **UI Framework** | shadcn/ui components |
+| **Forms** | React Hook Form + Zod |
+| **Data Fetching** | Server Components + Server Actions |
+| **Auth** | Supabase Auth with SSR |
+| **Roles** | admin, moderator, client (stored in profiles.role) |
+| **Admin Check** | Middleware checks role before allowing access |
+| **Toasts** | sonner for notifications |
+
+---
+
+## Progress Legend
+
+- ✅ Complete
+- 🔄 In Progress
+- 🔲 Todo
+- ❌ Blocked
+
+---
+
+## Changelog
+
+| Date | Changes |
+|------|---------|
+| 2025-11-28 | Created roadmap, started Phase 1 (Auth) |
+| 2025-11-28 | Completed Phase 1: login/signup pages, middleware, auth helpers |
+| 2025-11-28 | ✅ Tested: signup creates profile, login works, middleware protects routes |
+| 2025-11-28 | Completed Phase 2: admin layout, sidebar, dashboard, placeholder pages |
+| 2025-11-28 | Completed Phase 3: Ingredients CRUD with full DataTable experience |
+| 2025-11-28 | Fixed ingredient form bindings (useEffect reset, micros field names) |
+| 2025-11-28 | Added subgroup column, created admin RLS policies migration |
+| 2025-11-29 | Completed Phase 3.5: Spices CRUD matching ingredients experience |
+| 2025-11-29 | Started Phase 4: Recipes Module |
 | Duplicate detection | 🔲 Todo | Warn on similar names |
 
 ---
