@@ -88,6 +88,9 @@ export function RecipesTable({
   const [recipeToDelete, setRecipeToDelete] = useState<RecipeListItem | null>(null)
   const [createDialogOpen, setCreateDialogOpen] = useState(false)
   const [editDialogOpen, setEditDialogOpen] = useState(false)
+  const [imagePreviewOpen, setImagePreviewOpen] = useState(false)
+  const [imagePreviewUrl, setImagePreviewUrl] = useState<string | null>(null)
+  const [imagePreviewName, setImagePreviewName] = useState<string>('')
   const [recipeToEdit, setRecipeToEdit] = useState<RecipeListItem | null>(null)
 
   const totalPages = Math.ceil(total / pageSize)
@@ -330,15 +333,23 @@ export function RecipesTable({
                 <TableRow key={recipe.id} className="group">
                   <TableCell>
                     {recipe.image_url ? (
-                      <div className="relative w-12 h-12 rounded-md overflow-hidden bg-muted">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setImagePreviewUrl(recipe.image_url)
+                          setImagePreviewName(recipe.name)
+                          setImagePreviewOpen(true)
+                        }}
+                        className="relative w-12 h-12 rounded-md overflow-hidden bg-muted cursor-pointer group/img hover:ring-2 hover:ring-primary transition-all"
+                      >
                         <Image
                           src={recipe.image_url}
                           alt={recipe.name}
                           fill
-                          className="object-cover"
+                          className="object-cover group-hover/img:scale-110 transition-transform"
                           sizes="48px"
                         />
-                      </div>
+                      </button>
                     ) : (
                       <div className="w-12 h-12 rounded-md bg-muted flex items-center justify-center">
                         <Flame className="h-5 w-5 text-muted-foreground" />
@@ -535,6 +546,26 @@ export function RecipesTable({
               Delete
             </Button>
           </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Image Preview Dialog */}
+      <Dialog open={imagePreviewOpen} onOpenChange={setImagePreviewOpen}>
+        <DialogContent className="max-w-3xl">
+          <DialogHeader>
+            <DialogTitle>{imagePreviewName}</DialogTitle>
+          </DialogHeader>
+          <div className="relative aspect-[4/3] w-full">
+            {imagePreviewUrl && (
+              <Image
+                src={imagePreviewUrl}
+                alt={imagePreviewName}
+                fill
+                className="object-contain rounded-lg"
+                sizes="(max-width: 768px) 100vw, 800px"
+              />
+            )}
+          </div>
         </DialogContent>
       </Dialog>
     </div>

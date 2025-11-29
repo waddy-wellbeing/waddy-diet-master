@@ -290,7 +290,7 @@ export async function createRecipe(
     // Separate ingredients from recipe data
     const { ingredients, ...recipeData } = validated
     
-    // Clean up empty image_url
+    // Clean up empty image URLs
     const cleanedRecipeData = {
       ...recipeData,
       image_url: recipeData.image_url || null,
@@ -371,7 +371,7 @@ export async function updateRecipe(
     // Separate ingredients from recipe data
     const { ingredients, ...recipeData } = validated
     
-    // Clean up empty image_url
+    // Clean up empty image URLs
     const cleanedRecipeData = {
       ...recipeData,
       image_url: recipeData.image_url || null,

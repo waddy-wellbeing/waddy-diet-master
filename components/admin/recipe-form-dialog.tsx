@@ -63,6 +63,7 @@ import {
   searchSpices,
 } from '@/lib/actions/recipes'
 import { IngredientPicker, type IngredientResult } from './ingredient-picker'
+import { RecipeImageUpload } from './recipe-image-upload'
 
 // =============================================================================
 // IngredientEditPopover - Search and match/edit an ingredient
@@ -514,12 +515,18 @@ export function RecipeFormDialog({
                   </div>
 
                   <div className="space-y-2">
-                    <Label htmlFor="image_url">Image URL</Label>
-                    <Input
-                      id="image_url"
-                      placeholder="https://..."
-                      {...register('image_url')}
+                    <RecipeImageUpload
+                      recipeId={mode === 'edit' ? recipeId : undefined}
+                      imageUrl={watch('image_url')}
+                      onUploadComplete={(imageUrl) => {
+                        setValue('image_url', imageUrl)
+                      }}
                     />
+                    {mode === 'create' && (
+                      <p className="text-xs text-muted-foreground">
+                        You can upload an image after creating the recipe.
+                      </p>
+                    )}
                   </div>
                 </div>
 

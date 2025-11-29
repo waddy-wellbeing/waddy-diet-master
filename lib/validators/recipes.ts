@@ -41,7 +41,7 @@ export const recipeIngredientSchema = z.object({
   ingredient_id: z.string().uuid().nullable(),
   spice_id: z.string().uuid().nullable(),
   raw_name: z.string().min(1, 'Name is required'),
-  quantity: z.number().min(0).nullable(),
+  quantity: z.coerce.number().min(0).nullable(),
   unit: z.string().nullable(),
   is_spice: z.boolean().default(false),
   is_optional: z.boolean().default(false),
@@ -62,10 +62,10 @@ export const recipeInstructionSchema = z.object({
  * Recipe nutrition schema (per serving)
  */
 export const recipeNutritionSchema = z.object({
-  calories: z.number().min(0).optional(),
-  protein_g: z.number().min(0).optional(),
-  carbs_g: z.number().min(0).optional(),
-  fat_g: z.number().min(0).optional(),
+  calories: z.coerce.number().min(0).optional(),
+  protein_g: z.coerce.number().min(0).optional(),
+  carbs_g: z.coerce.number().min(0).optional(),
+  fat_g: z.coerce.number().min(0).optional(),
 })
 
 // =============================================================================
