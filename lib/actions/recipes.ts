@@ -104,8 +104,7 @@ export async function getRecipes({
   
   const offset = (page - 1) * pageSize
 
-  // First, get the recipes with their ingredient counts using a raw query approach
-  // We query the base recipes table and compute counts via recipe_ingredients
+  // Build the base query
   let query = supabase
     .from('recipes')
     .select(`
@@ -130,7 +129,6 @@ export async function getRecipes({
       recipe_ingredients(id, is_matched)
     `, { count: 'exact' })
     .order('name', { ascending: true })
-    .range(offset, offset + pageSize - 1)
 
   // Apply search filter
   if (search) {
@@ -145,6 +143,13 @@ export async function getRecipes({
   // Apply cuisine filter
   if (cuisine) {
     query = query.eq('cuisine', cuisine)
+  }
+
+  // For hasIssues filter, we need to fetch all and filter client-side
+  // because we can't filter on computed values (ingredient_count, unmatched_count)
+  // or check for null image_url in combination with ingredient issues
+  if (!hasIssues) {
+    query = query.range(offset, offset + pageSize - 1)
   }
 
   const { data, count, error } = await query
@@ -169,13 +174,27 @@ export async function getRecipes({
   })
 
   // If filtering by issues, do it client-side (since we can't filter on computed values)
-  const filteredRecipes = hasIssues 
-    ? recipes.filter(r => r.ingredient_count === 0 || r.unmatched_count > 0)
-    : recipes
+  // Issues include: no ingredients, unmatched ingredients, or missing image
+  if (hasIssues) {
+    const recipesWithIssues = recipes.filter(r => 
+      r.ingredient_count === 0 || 
+      r.unmatched_count > 0 || 
+      !r.image_url
+    )
+    
+    // Apply pagination to filtered results
+    const paginatedRecipes = recipesWithIssues.slice(offset, offset + pageSize)
+    
+    return {
+      recipes: paginatedRecipes,
+      total: recipesWithIssues.length,
+      error: null,
+    }
+  }
 
   return {
-    recipes: filteredRecipes,
-    total: hasIssues ? filteredRecipes.length : (count ?? 0),
+    recipes,
+    total: count ?? 0,
     error: null,
   }
 }
