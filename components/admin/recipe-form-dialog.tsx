@@ -36,12 +36,18 @@ import {
   ChevronDown,
   AlertCircle,
   Link2,
+  Pencil,
 } from 'lucide-react'
 import {
   Popover,
   PopoverContent,
   PopoverTrigger,
 } from '@/components/ui/popover'
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from '@/components/ui/tooltip'
 import {
   recipeSchema,
   type RecipeFormData,
@@ -59,20 +65,29 @@ import {
 import { IngredientPicker, type IngredientResult } from './ingredient-picker'
 
 // =============================================================================
-// IngredientMatchPopover - Search and match an unmatched ingredient
+// IngredientEditPopover - Search and match/edit an ingredient
 // =============================================================================
 
-interface IngredientMatchPopoverProps {
+interface IngredientEditPopoverProps {
   rawName: string
+  isUnmatched: boolean
+  linkedName?: string | null
   onMatch: (ingredient: IngredientResult) => void
 }
 
-function IngredientMatchPopover({ rawName, onMatch }: IngredientMatchPopoverProps) {
+function IngredientEditPopover({ rawName, isUnmatched, linkedName, onMatch }: IngredientEditPopoverProps) {
   const [open, setOpen] = useState(false)
-  const [query, setQuery] = useState(rawName)
+  const [query, setQuery] = useState('')
   const [ingredients, setIngredients] = useState<IngredientResult[]>([])
   const [spices, setSpices] = useState<{ id: string; name: string; name_ar: string | null }[]>([])
   const [isSearching, setIsSearching] = useState(false)
+
+  // Reset query when popover opens
+  useEffect(() => {
+    if (open) {
+      setQuery(rawName)
+    }
+  }, [open, rawName])
 
   // Search when popover opens or query changes
   useEffect(() => {
@@ -116,18 +131,35 @@ function IngredientMatchPopover({ rawName, onMatch }: IngredientMatchPopoverProp
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          className="h-8 px-2 text-xs border-destructive text-destructive hover:bg-destructive/10"
-        >
-          <Link2 className="h-3 w-3 mr-1" />
-          Match
-        </Button>
+        {isUnmatched ? (
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="h-8 px-2 text-xs border-destructive text-destructive hover:bg-destructive/10"
+          >
+            <Link2 className="h-3 w-3 mr-1" />
+            Match
+          </Button>
+        ) : (
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            className="h-8 w-8"
+            title="Change linked ingredient"
+          >
+            <Pencil className="h-3.5 w-3.5" />
+          </Button>
+        )}
       </PopoverTrigger>
       <PopoverContent className="w-80 p-0" align="end">
         <div className="p-3 border-b">
+          {linkedName && !isUnmatched && (
+            <p className="text-xs text-muted-foreground mb-2">
+              Currently linked to: <span className="font-medium text-foreground">{linkedName}</span>
+            </p>
+          )}
           <Input
             placeholder="Search ingredients or spices..."
             value={query}
@@ -427,7 +459,10 @@ export function RecipeFormDialog({
   if (isLoading) {
     return (
       <Dialog open={open} onOpenChange={handleOpenChange}>
-        <DialogContent className="max-w-4xl">
+        <DialogContent className="max-w-4xl" aria-describedby={undefined}>
+          <DialogHeader>
+            <DialogTitle>Loading Recipe</DialogTitle>
+          </DialogHeader>
           <div className="flex items-center justify-center h-96">
             <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" />
           </div>
@@ -708,7 +743,7 @@ export function RecipeFormDialog({
                     <div className="space-y-2">
                       <Label>Add Ingredients</Label>
                       <IngredientPicker
-                        onSelect={(ingredient) => {
+                        onSelect={(ingredient: IngredientResult) => {
                           appendIngredient({
                             ingredient_id: ingredient.is_spice ? null : ingredient.id,
                             spice_id: ingredient.is_spice ? ingredient.id : null,
@@ -717,6 +752,8 @@ export function RecipeFormDialog({
                             unit: ingredient.is_spice ? null : (ingredient.serving_unit ?? 'g'),
                             is_spice: ingredient.is_spice ?? false,
                             is_optional: false,
+                            linked_name: ingredient.name,
+                            linked_name_ar: ingredient.name_ar,
                           })
                         }}
                       />
@@ -736,8 +773,19 @@ export function RecipeFormDialog({
                             const isSpice = watch(`ingredients.${index}.is_spice`)
                             const ingredientId = watch(`ingredients.${index}.ingredient_id`)
                             const spiceId = watch(`ingredients.${index}.spice_id`)
+                            const rawName = watch(`ingredients.${index}.raw_name`)
+                            const linkedName = watch(`ingredients.${index}.linked_name`)
+                            const linkedNameAr = watch(`ingredients.${index}.linked_name_ar`)
                             // Unmatched if: not a spice and no ingredient_id, OR is a spice but no spice_id
                             const isUnmatched = isSpice ? !spiceId : !ingredientId
+                            
+                            // Build tooltip content
+                            const tooltipContent = linkedName 
+                              ? `Linked: ${linkedName}${linkedNameAr ? ` (${linkedNameAr})` : ''}`
+                              : isUnmatched 
+                                ? 'Unmatched - click Match to link'
+                                : rawName
+                            
                             return (
                               <div
                                 key={field.id}
@@ -753,36 +801,61 @@ export function RecipeFormDialog({
                                     {isUnmatched && (
                                       <AlertCircle className="h-4 w-4 text-destructive shrink-0" />
                                     )}
-                                    <span className={`font-medium truncate ${isUnmatched ? 'text-destructive' : ''}`}>
-                                      {watch(`ingredients.${index}.raw_name`)}
-                                    </span>
+                                    <Tooltip>
+                                      <TooltipTrigger asChild>
+                                        <span className={`font-medium truncate cursor-help ${isUnmatched ? 'text-destructive' : ''}`}>
+                                          {rawName}
+                                        </span>
+                                      </TooltipTrigger>
+                                      <TooltipContent side="top" className="max-w-xs">
+                                        <p className="font-medium">{rawName}</p>
+                                        {linkedName && (
+                                          <p className="text-xs text-muted-foreground mt-1">
+                                            → {linkedName}
+                                            {linkedNameAr && <span className="ml-1" dir="rtl">({linkedNameAr})</span>}
+                                          </p>
+                                        )}
+                                        {isUnmatched && (
+                                          <p className="text-xs text-destructive mt-1">Not linked to any ingredient</p>
+                                        )}
+                                      </TooltipContent>
+                                    </Tooltip>
                                     {isSpice && (
                                       <Badge variant="outline" className="text-xs">Spice</Badge>
                                     )}
                                     {watch(`ingredients.${index}.is_optional`) && (
                                       <Badge variant="secondary" className="text-xs">Optional</Badge>
                                     )}
+                                    {linkedName && !isUnmatched && (
+                                      <span className="text-xs text-muted-foreground truncate hidden sm:inline">
+                                        → {linkedName}
+                                      </span>
+                                    )}
                                   </div>
                                 </div>
                                 <div className="flex items-center gap-2">
-                                  {isUnmatched && (
-                                    <IngredientMatchPopover
-                                      rawName={watch(`ingredients.${index}.raw_name`)}
-                                      onMatch={(matchedIngredient) => {
-                                        if (matchedIngredient.is_spice) {
-                                          setValue(`ingredients.${index}.spice_id`, matchedIngredient.id)
-                                          setValue(`ingredients.${index}.ingredient_id`, null)
-                                          setValue(`ingredients.${index}.is_spice`, true)
-                                          setValue(`ingredients.${index}.quantity`, null)
-                                          setValue(`ingredients.${index}.unit`, null)
-                                        } else {
-                                          setValue(`ingredients.${index}.ingredient_id`, matchedIngredient.id)
-                                          setValue(`ingredients.${index}.spice_id`, null)
-                                          setValue(`ingredients.${index}.is_spice`, false)
-                                        }
-                                      }}
-                                    />
-                                  )}
+                                  <IngredientEditPopover
+                                    rawName={rawName}
+                                    isUnmatched={isUnmatched}
+                                    linkedName={linkedName}
+                                    onMatch={(matchedIngredient) => {
+                                      if (matchedIngredient.is_spice) {
+                                        setValue(`ingredients.${index}.spice_id`, matchedIngredient.id)
+                                        setValue(`ingredients.${index}.ingredient_id`, null)
+                                        setValue(`ingredients.${index}.is_spice`, true)
+                                        setValue(`ingredients.${index}.quantity`, null)
+                                        setValue(`ingredients.${index}.unit`, null)
+                                        setValue(`ingredients.${index}.linked_name`, matchedIngredient.name)
+                                        setValue(`ingredients.${index}.linked_name_ar`, matchedIngredient.name_ar ?? null)
+                                      } else {
+                                        setValue(`ingredients.${index}.ingredient_id`, matchedIngredient.id)
+                                        setValue(`ingredients.${index}.spice_id`, null)
+                                        setValue(`ingredients.${index}.is_spice`, false)
+                                        setValue(`ingredients.${index}.linked_name`, matchedIngredient.name)
+                                        setValue(`ingredients.${index}.linked_name_ar`, matchedIngredient.name_ar ?? null)
+                                      }
+                                    }}
+                                  />
                                   {isSpice ? (
                                     <span className="text-sm text-muted-foreground">حسب الرغبة</span>
                                   ) : (

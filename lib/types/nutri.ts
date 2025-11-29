@@ -108,6 +108,9 @@ export interface RecipeIngredient {
   unit: string | null
   is_spice: boolean
   is_optional: boolean
+  // Linked ingredient/spice info (for display in UI)
+  linked_name?: string | null
+  linked_name_ar?: string | null
 }
 
 /** 

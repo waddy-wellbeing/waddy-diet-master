@@ -201,10 +201,21 @@ export async function getRecipe(id: string): Promise<{
     return { recipe: null, error: recipeError.message }
   }
 
-  // Fetch ingredients from junction table
+  // Fetch ingredients from junction table with related ingredient/spice names
   const { data: ingredientRows, error: ingredientsError } = await supabase
     .from('recipe_ingredients')
-    .select('ingredient_id, spice_id, raw_name, quantity, unit, is_spice, is_optional, sort_order')
+    .select(`
+      ingredient_id, 
+      spice_id, 
+      raw_name, 
+      quantity, 
+      unit, 
+      is_spice, 
+      is_optional, 
+      sort_order,
+      ingredients:ingredient_id(name, name_ar),
+      spices:spice_id(name, name_ar)
+    `)
     .eq('recipe_id', id)
     .order('sort_order', { ascending: true })
 
@@ -213,15 +224,23 @@ export async function getRecipe(id: string): Promise<{
   }
 
   // Transform junction table rows to RecipeIngredient format for the form
-  const ingredients: RecipeIngredient[] = (ingredientRows ?? []).map(row => ({
-    ingredient_id: row.ingredient_id,
-    spice_id: row.spice_id,
-    raw_name: row.raw_name,
-    quantity: row.quantity,
-    unit: row.unit,
-    is_spice: row.is_spice,
-    is_optional: row.is_optional,
-  }))
+  const ingredients: RecipeIngredient[] = (ingredientRows ?? []).map(row => {
+    // Get linked name from the related table (Supabase returns single object for FK relations)
+    const linkedIngredient = row.ingredients as unknown as { name: string; name_ar: string | null } | null
+    const linkedSpice = row.spices as unknown as { name: string; name_ar: string | null } | null
+    
+    return {
+      ingredient_id: row.ingredient_id,
+      spice_id: row.spice_id,
+      raw_name: row.raw_name,
+      quantity: row.quantity,
+      unit: row.unit,
+      is_spice: row.is_spice,
+      is_optional: row.is_optional,
+      linked_name: row.is_spice ? linkedSpice?.name : linkedIngredient?.name,
+      linked_name_ar: row.is_spice ? linkedSpice?.name_ar : linkedIngredient?.name_ar,
+    }
+  })
 
   return {
     recipe: {

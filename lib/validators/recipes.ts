@@ -45,6 +45,9 @@ export const recipeIngredientSchema = z.object({
   unit: z.string().nullable(),
   is_spice: z.boolean().default(false),
   is_optional: z.boolean().default(false),
+  // Optional linked names (for display only, not saved)
+  linked_name: z.string().nullable().optional(),
+  linked_name_ar: z.string().nullable().optional(),
 })
 
 /**
