@@ -839,20 +839,22 @@ export function RecipeFormDialog({
                                     isUnmatched={isUnmatched}
                                     linkedName={linkedName}
                                     onMatch={(matchedIngredient) => {
+                                      // Update the displayed name to match the linked ingredient
+                                      const newName = matchedIngredient.name
+                                      setValue(`ingredients.${index}.raw_name`, newName)
+                                      setValue(`ingredients.${index}.linked_name`, newName)
+                                      setValue(`ingredients.${index}.linked_name_ar`, matchedIngredient.name_ar ?? null)
+                                      
                                       if (matchedIngredient.is_spice) {
                                         setValue(`ingredients.${index}.spice_id`, matchedIngredient.id)
                                         setValue(`ingredients.${index}.ingredient_id`, null)
                                         setValue(`ingredients.${index}.is_spice`, true)
                                         setValue(`ingredients.${index}.quantity`, null)
                                         setValue(`ingredients.${index}.unit`, null)
-                                        setValue(`ingredients.${index}.linked_name`, matchedIngredient.name)
-                                        setValue(`ingredients.${index}.linked_name_ar`, matchedIngredient.name_ar ?? null)
                                       } else {
                                         setValue(`ingredients.${index}.ingredient_id`, matchedIngredient.id)
                                         setValue(`ingredients.${index}.spice_id`, null)
                                         setValue(`ingredients.${index}.is_spice`, false)
-                                        setValue(`ingredients.${index}.linked_name`, matchedIngredient.name)
-                                        setValue(`ingredients.${index}.linked_name_ar`, matchedIngredient.name_ar ?? null)
                                       }
                                     }}
                                   />
