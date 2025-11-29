@@ -99,8 +99,27 @@ export async function POST(request: NextRequest) {
     const timestamp = Date.now()
     const imagePath = `cover/${recipeId}_${timestamp}.webp`
 
-    // Use service role client for storage upload (bypasses RLS)
+    // Use service role client for storage operations (bypasses RLS)
     const serviceClient = getServiceClient()
+
+    // Get the current image_url from the recipe to delete the old image
+    const { data: recipe } = await serviceClient
+      .from('recipes')
+      .select('image_url')
+      .eq('id', recipeId)
+      .single()
+
+    if (recipe?.image_url) {
+      // Extract the path from the old URL and delete it
+      const oldPath = recipe.image_url.split(`/storage/v1/object/public/${BUCKET_NAME}/`)[1]
+      if (oldPath) {
+        await serviceClient.storage
+          .from(BUCKET_NAME)
+          .remove([oldPath])
+      }
+    }
+
+    // Upload new image
     const { error: uploadError } = await serviceClient.storage
       .from(BUCKET_NAME)
       .upload(imagePath, optimizedBuffer, {

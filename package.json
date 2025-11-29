@@ -16,7 +16,9 @@
     "images:upload": "tsx scripts/upload-images.ts",
     "images:upload:dry-run": "tsx scripts/upload-images.ts --dry-run",
     "images:update-urls": "tsx scripts/update-image-urls.ts",
-    "images:update-urls:dry-run": "tsx scripts/update-image-urls.ts --dry-run"
+    "images:update-urls:dry-run": "tsx scripts/update-image-urls.ts --dry-run",
+    "images:audit": "tsx scripts/audit-storage-images.ts",
+    "images:audit:delete": "tsx scripts/audit-storage-images.ts --delete"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.2.2",
