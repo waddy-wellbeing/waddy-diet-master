@@ -302,12 +302,14 @@ export function RecipeFormDialog({
               <TabsTrigger value="nutrition">Nutrition</TabsTrigger>
             </TabsList>
 
-            <ScrollArea className="flex-1 px-1">
+            <div className="flex-1 overflow-hidden mt-4">
               {/* Basic Info Tab */}
-              <TabsContent value="basic" className="space-y-4 mt-4 pr-4">
-                <div className="grid gap-4 sm:grid-cols-2">
-                  <div className="space-y-2">
-                    <Label htmlFor="name">Name *</Label>
+              <TabsContent value="basic" className="mt-0 h-full">
+                <ScrollArea className="h-[calc(60vh-4rem)] pr-4">
+                  <div className="space-y-4 pb-4">
+                    <div className="grid gap-4 sm:grid-cols-2">
+                      <div className="space-y-2">
+                        <Label htmlFor="name">Name *</Label>
                     <Input
                       id="name"
                       placeholder="e.g., Grilled Chicken Salad"
@@ -538,212 +540,235 @@ export function RecipeFormDialog({
                     {...register('admin_notes')}
                   />
                 </div>
+                  </div>
+                </ScrollArea>
               </TabsContent>
 
               {/* Ingredients Tab */}
-              <TabsContent value="ingredients" className="space-y-4 mt-4 pr-4">
-                <div className="space-y-2">
-                  <Label>Add Ingredients</Label>
-                  <IngredientPicker
-                    onSelect={(ingredient) => {
-                      appendIngredient({
-                        ingredient_id: ingredient.id,
-                        raw_name: ingredient.name,
-                        quantity: ingredient.serving_size ?? 100,
-                        unit: ingredient.serving_unit ?? 'g',
-                        is_spice: ingredient.is_spice ?? false,
-                        is_optional: false,
-                      })
-                    }}
-                  />
-                </div>
+              <TabsContent value="ingredients" className="mt-0 h-full">
+                <ScrollArea className="h-[calc(60vh-4rem)] pr-4">
+                  <div className="space-y-4 py-4">
+                    <div className="space-y-2">
+                      <Label>Add Ingredients</Label>
+                      <IngredientPicker
+                        onSelect={(ingredient) => {
+                          appendIngredient({
+                            ingredient_id: ingredient.id,
+                            raw_name: ingredient.name,
+                            quantity: ingredient.is_spice ? 0 : (ingredient.serving_size ?? 100),
+                            unit: ingredient.is_spice ? 'حسب الرغبة' : (ingredient.serving_unit ?? 'g'),
+                            is_spice: ingredient.is_spice ?? false,
+                            is_optional: false,
+                          })
+                        }}
+                      />
+                    </div>
 
                 <Separator />
 
-                <div className="space-y-2">
-                  <Label>Recipe Ingredients ({ingredientFields.length})</Label>
-                  {ingredientFields.length === 0 ? (
-                    <p className="text-sm text-muted-foreground py-4 text-center">
-                      No ingredients added yet. Use the search above to add ingredients.
-                    </p>
-                  ) : (
                     <div className="space-y-2">
-                      {ingredientFields.map((field, index) => (
-                        <div
-                          key={field.id}
-                          className="flex items-center gap-2 p-3 rounded-lg border bg-muted/50"
-                        >
-                          <GripVertical className="h-4 w-4 text-muted-foreground cursor-grab" />
-                          <div className="flex-1 min-w-0">
-                            <div className="flex items-center gap-2">
-                              <span className="font-medium truncate">
-                                {watch(`ingredients.${index}.raw_name`)}
+                      <Label>Recipe Ingredients ({ingredientFields.length})</Label>
+                      {ingredientFields.length === 0 ? (
+                        <p className="text-sm text-muted-foreground py-4 text-center">
+                          No ingredients added yet. Use the search above to add ingredients.
+                        </p>
+                      ) : (
+                        <div className="space-y-2">
+                          {ingredientFields.map((field, index) => {
+                            const isSpice = watch(`ingredients.${index}.is_spice`)
+                            return (
+                              <div
+                                key={field.id}
+                                className="flex items-center gap-2 p-3 rounded-lg border bg-muted/50"
+                              >
+                                <GripVertical className="h-4 w-4 text-muted-foreground cursor-grab" />
+                                <div className="flex-1 min-w-0">
+                                  <div className="flex items-center gap-2">
+                                    <span className="font-medium truncate">
+                                      {watch(`ingredients.${index}.raw_name`)}
+                                    </span>
+                                    {isSpice && (
+                                      <Badge variant="outline" className="text-xs">Spice</Badge>
+                                    )}
+                                    {watch(`ingredients.${index}.is_optional`) && (
+                                      <Badge variant="secondary" className="text-xs">Optional</Badge>
+                                    )}
+                                  </div>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                  {isSpice ? (
+                                    <span className="text-sm text-muted-foreground">حسب الرغبة</span>
+                                  ) : (
+                                    <>
+                                      <Input
+                                        type="number"
+                                        step="0.1"
+                                        min="0"
+                                        className="w-20"
+                                        placeholder="Qty"
+                                        {...register(`ingredients.${index}.quantity`)}
+                                      />
+                                      <Input
+                                        className="w-16"
+                                        placeholder="Unit"
+                                        {...register(`ingredients.${index}.unit`)}
+                                      />
+                                    </>
+                                  )}
+                                  <Checkbox
+                                    checked={watch(`ingredients.${index}.is_optional`)}
+                                    onCheckedChange={(checked) =>
+                                      setValue(`ingredients.${index}.is_optional`, checked === true)
+                                    }
+                                    title="Optional"
+                                  />
+                                  <Button
+                                    type="button"
+                                    variant="ghost"
+                                    size="icon"
+                                    onClick={() => removeIngredient(index)}
+                                  >
+                                    <Trash2 className="h-4 w-4 text-destructive" />
+                                  </Button>
+                                </div>
+                              </div>
+                            )
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </ScrollArea>
+              </TabsContent>
+
+              {/* Instructions Tab */}
+              <TabsContent value="instructions" className="mt-0 h-full">
+                <ScrollArea className="h-[calc(60vh-4rem)] pr-4">
+                  <div className="space-y-4 py-4">
+                    <div className="flex items-center justify-between">
+                      <Label>Cooking Instructions</Label>
+                      <Button type="button" variant="outline" size="sm" onClick={addInstruction}>
+                        <Plus className="h-4 w-4 mr-2" />
+                        Add Step
+                      </Button>
+                    </div>
+
+                    {instructionFields.length === 0 ? (
+                      <p className="text-sm text-muted-foreground py-8 text-center">
+                        No instructions added yet. Click "Add Step" to start.
+                      </p>
+                    ) : (
+                      <div className="space-y-3">
+                        {instructionFields.map((field, index) => (
+                          <div key={field.id} className="flex gap-2">
+                            <div className="flex flex-col gap-1">
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="icon"
+                                className="h-6 w-6"
+                                onClick={() => moveInstructionUp(index)}
+                                disabled={index === 0}
+                              >
+                                <ChevronUp className="h-4 w-4" />
+                              </Button>
+                              <span className="text-center text-sm font-medium text-muted-foreground">
+                                {index + 1}
                               </span>
-                              {watch(`ingredients.${index}.is_spice`) && (
-                                <Badge variant="outline" className="text-xs">Spice</Badge>
-                              )}
-                              {watch(`ingredients.${index}.is_optional`) && (
-                                <Badge variant="secondary" className="text-xs">Optional</Badge>
-                              )}
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="icon"
+                                className="h-6 w-6"
+                                onClick={() => moveInstructionDown(index)}
+                                disabled={index === instructionFields.length - 1}
+                              >
+                                <ChevronDown className="h-4 w-4" />
+                              </Button>
                             </div>
-                          </div>
-                          <div className="flex items-center gap-2">
-                            <Input
-                              type="number"
-                              step="0.1"
-                              min="0"
-                              className="w-20"
-                              placeholder="Qty"
-                              {...register(`ingredients.${index}.quantity`)}
-                            />
-                            <Input
-                              className="w-16"
-                              placeholder="Unit"
-                              {...register(`ingredients.${index}.unit`)}
-                            />
-                            <Checkbox
-                              checked={watch(`ingredients.${index}.is_optional`)}
-                              onCheckedChange={(checked) =>
-                                setValue(`ingredients.${index}.is_optional`, checked === true)
-                              }
-                              title="Optional"
+                            <Textarea
+                              placeholder={`Step ${index + 1}: Describe what to do...`}
+                              rows={2}
+                              className="flex-1"
+                              {...register(`instructions.${index}.instruction`)}
                             />
                             <Button
                               type="button"
                               variant="ghost"
                               size="icon"
-                              onClick={() => removeIngredient(index)}
+                              onClick={() => removeInstruction(index)}
                             >
                               <Trash2 className="h-4 w-4 text-destructive" />
                             </Button>
                           </div>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              </TabsContent>
-
-              {/* Instructions Tab */}
-              <TabsContent value="instructions" className="space-y-4 mt-4 pr-4">
-                <div className="flex items-center justify-between">
-                  <Label>Cooking Instructions</Label>
-                  <Button type="button" variant="outline" size="sm" onClick={addInstruction}>
-                    <Plus className="h-4 w-4 mr-2" />
-                    Add Step
-                  </Button>
-                </div>
-
-                {instructionFields.length === 0 ? (
-                  <p className="text-sm text-muted-foreground py-8 text-center">
-                    No instructions added yet. Click "Add Step" to start.
-                  </p>
-                ) : (
-                  <div className="space-y-3">
-                    {instructionFields.map((field, index) => (
-                      <div key={field.id} className="flex gap-2">
-                        <div className="flex flex-col gap-1">
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="icon"
-                            className="h-6 w-6"
-                            onClick={() => moveInstructionUp(index)}
-                            disabled={index === 0}
-                          >
-                            <ChevronUp className="h-4 w-4" />
-                          </Button>
-                          <span className="text-center text-sm font-medium text-muted-foreground">
-                            {index + 1}
-                          </span>
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="icon"
-                            className="h-6 w-6"
-                            onClick={() => moveInstructionDown(index)}
-                            disabled={index === instructionFields.length - 1}
-                          >
-                            <ChevronDown className="h-4 w-4" />
-                          </Button>
-                        </div>
-                        <Textarea
-                          placeholder={`Step ${index + 1}: Describe what to do...`}
-                          rows={2}
-                          className="flex-1"
-                          {...register(`instructions.${index}.instruction`)}
-                        />
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="icon"
-                          onClick={() => removeInstruction(index)}
-                        >
-                          <Trash2 className="h-4 w-4 text-destructive" />
-                        </Button>
+                        ))}
                       </div>
-                    ))}
+                    )}
                   </div>
-                )}
+                </ScrollArea>
               </TabsContent>
 
               {/* Nutrition Tab */}
-              <TabsContent value="nutrition" className="space-y-4 mt-4 pr-4">
-                <p className="text-sm text-muted-foreground">
-                  Nutrition per serving. These values are auto-calculated from ingredients
-                  but can be overridden manually.
-                </p>
+              <TabsContent value="nutrition" className="mt-0 h-full">
+                <ScrollArea className="h-[calc(60vh-4rem)] pr-4">
+                  <div className="space-y-4 py-4">
+                    <p className="text-sm text-muted-foreground">
+                      Nutrition per serving. These values are auto-calculated from ingredients
+                      but can be overridden manually.
+                    </p>
 
-                <div className="grid gap-4 sm:grid-cols-2">
-                  <div className="space-y-2">
-                    <Label htmlFor="nutrition_per_serving.calories">Calories</Label>
-                    <Input
-                      id="nutrition_per_serving.calories"
-                      type="number"
-                      min="0"
-                      placeholder="0"
-                      {...register('nutrition_per_serving.calories')}
-                    />
-                  </div>
+                    <div className="grid gap-4 sm:grid-cols-2">
+                      <div className="space-y-2">
+                        <Label htmlFor="nutrition_per_serving.calories">Calories</Label>
+                        <Input
+                          id="nutrition_per_serving.calories"
+                          type="number"
+                          min="0"
+                          placeholder="0"
+                          {...register('nutrition_per_serving.calories')}
+                        />
+                      </div>
 
-                  <div className="space-y-2">
-                    <Label htmlFor="nutrition_per_serving.protein_g">Protein (g)</Label>
-                    <Input
-                      id="nutrition_per_serving.protein_g"
-                      type="number"
-                      step="0.1"
-                      min="0"
-                      placeholder="0"
-                      {...register('nutrition_per_serving.protein_g')}
-                    />
-                  </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="nutrition_per_serving.protein_g">Protein (g)</Label>
+                        <Input
+                          id="nutrition_per_serving.protein_g"
+                          type="number"
+                          step="0.1"
+                          min="0"
+                          placeholder="0"
+                          {...register('nutrition_per_serving.protein_g')}
+                        />
+                      </div>
 
-                  <div className="space-y-2">
-                    <Label htmlFor="nutrition_per_serving.carbs_g">Carbs (g)</Label>
-                    <Input
-                      id="nutrition_per_serving.carbs_g"
-                      type="number"
-                      step="0.1"
-                      min="0"
-                      placeholder="0"
-                      {...register('nutrition_per_serving.carbs_g')}
-                    />
-                  </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="nutrition_per_serving.carbs_g">Carbs (g)</Label>
+                        <Input
+                          id="nutrition_per_serving.carbs_g"
+                          type="number"
+                          step="0.1"
+                          min="0"
+                          placeholder="0"
+                          {...register('nutrition_per_serving.carbs_g')}
+                        />
+                      </div>
 
-                  <div className="space-y-2">
-                    <Label htmlFor="nutrition_per_serving.fat_g">Fat (g)</Label>
-                    <Input
-                      id="nutrition_per_serving.fat_g"
-                      type="number"
-                      step="0.1"
-                      min="0"
-                      placeholder="0"
-                      {...register('nutrition_per_serving.fat_g')}
-                    />
+                      <div className="space-y-2">
+                        <Label htmlFor="nutrition_per_serving.fat_g">Fat (g)</Label>
+                        <Input
+                          id="nutrition_per_serving.fat_g"
+                          type="number"
+                          step="0.1"
+                          min="0"
+                          placeholder="0"
+                          {...register('nutrition_per_serving.fat_g')}
+                        />
+                      </div>
+                    </div>
                   </div>
-                </div>
+                </ScrollArea>
               </TabsContent>
-            </ScrollArea>
+            </div>
           </Tabs>
 
           {/* Form Actions */}

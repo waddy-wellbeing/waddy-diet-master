@@ -50,6 +50,7 @@ import {
   Leaf,
   Wheat,
   Milk,
+  ArrowUpDown,
 } from 'lucide-react'
 import { deleteRecipe, type RecipeListItem } from '@/lib/actions/recipes'
 import { RecipeFormDialog } from './recipe-form-dialog'
@@ -84,6 +85,13 @@ export function RecipesTable({
   const totalPages = Math.ceil(total / pageSize)
   const currentMealType = searchParams.get('mealType') ?? ''
   const currentCuisine = searchParams.get('cuisine') ?? ''
+  const currentSort = searchParams.get('sort') ?? ''
+  const currentOrder = searchParams.get('order') ?? 'asc'
+
+  function handleSort(column: string) {
+    const newOrder = currentSort === column && currentOrder === 'asc' ? 'desc' : 'asc'
+    updateSearchParams({ sort: column, order: newOrder })
+  }
 
   function updateSearchParams(updates: Record<string, string | null>) {
     const params = new URLSearchParams(searchParams.toString())
@@ -228,16 +236,51 @@ export function RecipesTable({
           <TableHeader>
             <TableRow>
               <TableHead className="w-[80px]">Image</TableHead>
-              <TableHead className="w-[250px]">Name</TableHead>
+              <TableHead className="w-[250px]">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="-ml-3 h-8 hover:bg-transparent"
+                  onClick={() => handleSort('name')}
+                >
+                  Name
+                  <ArrowUpDown className="ml-2 h-4 w-4" />
+                </Button>
+              </TableHead>
               <TableHead>Meal Type</TableHead>
-              <TableHead>Cuisine</TableHead>
               <TableHead className="text-center">
-                <Clock className="h-4 w-4 inline" />
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-8 hover:bg-transparent"
+                  onClick={() => handleSort('prep_time')}
+                >
+                  <Clock className="h-4 w-4" />
+                  <ArrowUpDown className="ml-1 h-3 w-3" />
+                </Button>
               </TableHead>
               <TableHead className="text-center">
-                <Users className="h-4 w-4 inline" />
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-8 hover:bg-transparent"
+                  onClick={() => handleSort('servings')}
+                >
+                  <Users className="h-4 w-4" />
+                  <ArrowUpDown className="ml-1 h-3 w-3" />
+                </Button>
               </TableHead>
-              <TableHead className="text-right">Calories</TableHead>
+              <TableHead className="text-right">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-8 hover:bg-transparent"
+                  onClick={() => handleSort('calories')}
+                >
+                  Calories
+                  <ArrowUpDown className="ml-1 h-3 w-3" />
+                </Button>
+              </TableHead>
               <TableHead className="text-center">Dietary</TableHead>
               <TableHead className="w-[50px]"></TableHead>
             </TableRow>
@@ -245,7 +288,7 @@ export function RecipesTable({
           <TableBody>
             {recipes.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={9} className="h-32 text-center">
+                <TableCell colSpan={8} className="h-32 text-center">
                   <div className="flex flex-col items-center gap-2">
                     <p className="text-muted-foreground">No recipes found</p>
                     <Button
@@ -302,13 +345,6 @@ export function RecipesTable({
                         </Badge>
                       )}
                     </div>
-                  </TableCell>
-                  <TableCell>
-                    {recipe.cuisine ? (
-                      <span className="text-sm">{recipe.cuisine}</span>
-                    ) : (
-                      <span className="text-muted-foreground">—</span>
-                    )}
                   </TableCell>
                   <TableCell className="text-center text-sm tabular-nums">
                     {getTotalTime(recipe.prep_time_minutes, recipe.cook_time_minutes)}
