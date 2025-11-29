@@ -51,7 +51,15 @@ import {
   Wheat,
   Milk,
   ArrowUpDown,
+  StickyNote,
+  AlertTriangle,
 } from 'lucide-react'
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from '@/components/ui/tooltip'
 import { deleteRecipe, type RecipeListItem } from '@/lib/actions/recipes'
 import { RecipeFormDialog } from './recipe-form-dialog'
 import { MEAL_TYPES } from '@/lib/validators/recipes'
@@ -87,6 +95,7 @@ export function RecipesTable({
   const currentCuisine = searchParams.get('cuisine') ?? ''
   const currentSort = searchParams.get('sort') ?? ''
   const currentOrder = searchParams.get('order') ?? 'asc'
+  const currentHasIssues = searchParams.get('hasIssues') === 'true'
 
   function handleSort(column: string) {
     const newOrder = currentSort === column && currentOrder === 'asc' ? 'desc' : 'asc'
@@ -227,6 +236,19 @@ export function RecipesTable({
               ))}
             </SelectContent>
           </Select>
+
+          <Button
+            variant={currentHasIssues ? 'destructive' : 'outline'}
+            size="sm"
+            onClick={() => updateSearchParams({ 
+              hasIssues: currentHasIssues ? null : 'true',
+              page: null 
+            })}
+            className="gap-2"
+          >
+            <AlertTriangle className="h-4 w-4" />
+            {currentHasIssues ? 'Showing Issues' : 'Has Issues'}
+          </Button>
         </div>
       </div>
 
@@ -282,13 +304,14 @@ export function RecipesTable({
                 </Button>
               </TableHead>
               <TableHead className="text-center">Dietary</TableHead>
+              <TableHead className="w-[40px] text-center">Notes</TableHead>
               <TableHead className="w-[50px]"></TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {recipes.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={8} className="h-32 text-center">
+                <TableCell colSpan={9} className="h-32 text-center">
                   <div className="flex flex-col items-center gap-2">
                     <p className="text-muted-foreground">No recipes found</p>
                     <Button
@@ -324,7 +347,23 @@ export function RecipesTable({
                   </TableCell>
                   <TableCell>
                     <div className="flex flex-col">
-                      <span className="font-medium line-clamp-1">{recipe.name}</span>
+                      <div className="flex items-center gap-2">
+                        <span className="font-medium line-clamp-1">{recipe.name}</span>
+                        {(recipe.ingredient_count === 0 || recipe.unmatched_count > 0) && (
+                          <TooltipProvider>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <AlertTriangle className="h-4 w-4 text-destructive shrink-0" />
+                              </TooltipTrigger>
+                              <TooltipContent>
+                                {recipe.ingredient_count === 0 
+                                  ? 'No ingredients' 
+                                  : `${recipe.unmatched_count} unmatched ingredient${recipe.unmatched_count > 1 ? 's' : ''}`}
+                              </TooltipContent>
+                            </Tooltip>
+                          </TooltipProvider>
+                        )}
+                      </div>
                       {recipe.description && (
                         <span className="text-xs text-muted-foreground line-clamp-1">
                           {recipe.description}
@@ -378,6 +417,20 @@ export function RecipesTable({
                         </span>
                       )}
                     </div>
+                  </TableCell>
+                  <TableCell className="text-center">
+                    {recipe.admin_notes && (
+                      <TooltipProvider>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <StickyNote className="h-4 w-4 text-amber-500 mx-auto cursor-help" />
+                          </TooltipTrigger>
+                          <TooltipContent side="left" className="max-w-xs">
+                            <p className="text-sm whitespace-pre-wrap">{recipe.admin_notes}</p>
+                          </TooltipContent>
+                        </Tooltip>
+                      </TooltipProvider>
+                    )}
                   </TableCell>
                   <TableCell>
                     <DropdownMenu>

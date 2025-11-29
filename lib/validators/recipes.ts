@@ -35,10 +35,11 @@ export const DIFFICULTIES = [
 // =============================================================================
 
 /**
- * Recipe ingredient schema (stored in JSONB array)
+ * Recipe ingredient schema (for junction table)
  */
 export const recipeIngredientSchema = z.object({
   ingredient_id: z.string().uuid().nullable(),
+  spice_id: z.string().uuid().nullable(),
   raw_name: z.string().min(1, 'Name is required'),
   quantity: z.number().min(0).nullable(),
   unit: z.string().nullable(),

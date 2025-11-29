@@ -21,6 +21,7 @@ interface GetRecipesParams {
   search?: string
   mealType?: string
   cuisine?: string
+  hasIssues?: boolean // Filter for recipes with no ingredients or unmatched ingredients
 }
 
 export interface RecipeListItem {
@@ -45,6 +46,9 @@ export interface RecipeListItem {
   is_gluten_free: boolean
   is_dairy_free: boolean
   is_public: boolean
+  admin_notes: string | null
+  ingredient_count: number
+  unmatched_count: number
   created_at: string
 }
 
@@ -94,12 +98,14 @@ export async function getRecipes({
   search = '',
   mealType = '',
   cuisine = '',
+  hasIssues = false,
 }: GetRecipesParams = {}): Promise<GetRecipesResult> {
   const supabase = await createClient()
   
   const offset = (page - 1) * pageSize
 
-  // Build query
+  // First, get the recipes with their ingredient counts using a raw query approach
+  // We query the base recipes table and compute counts via recipe_ingredients
   let query = supabase
     .from('recipes')
     .select(`
@@ -119,7 +125,9 @@ export async function getRecipes({
       is_gluten_free,
       is_dairy_free,
       is_public,
-      created_at
+      admin_notes,
+      created_at,
+      recipe_ingredients(id, is_matched)
     `, { count: 'exact' })
     .order('name', { ascending: true })
     .range(offset, offset + pageSize - 1)
@@ -145,9 +153,29 @@ export async function getRecipes({
     return { recipes: [], total: 0, error: error.message }
   }
 
+  // Transform data to include computed counts
+  const recipes: RecipeListItem[] = (data ?? []).map((recipe: any) => {
+    const ingredientCount = recipe.recipe_ingredients?.length ?? 0
+    const unmatchedCount = recipe.recipe_ingredients?.filter((ri: any) => !ri.is_matched).length ?? 0
+    
+    // Remove the nested recipe_ingredients from the result
+    const { recipe_ingredients, ...recipeData } = recipe
+    
+    return {
+      ...recipeData,
+      ingredient_count: ingredientCount,
+      unmatched_count: unmatchedCount,
+    }
+  })
+
+  // If filtering by issues, do it client-side (since we can't filter on computed values)
+  const filteredRecipes = hasIssues 
+    ? recipes.filter(r => r.ingredient_count === 0 || r.unmatched_count > 0)
+    : recipes
+
   return {
-    recipes: data ?? [],
-    total: count ?? 0,
+    recipes: filteredRecipes,
+    total: hasIssues ? filteredRecipes.length : (count ?? 0),
     error: null,
   }
 }
@@ -176,7 +204,7 @@ export async function getRecipe(id: string): Promise<{
   // Fetch ingredients from junction table
   const { data: ingredientRows, error: ingredientsError } = await supabase
     .from('recipe_ingredients')
-    .select('ingredient_id, raw_name, quantity, unit, is_spice, is_optional, sort_order')
+    .select('ingredient_id, spice_id, raw_name, quantity, unit, is_spice, is_optional, sort_order')
     .eq('recipe_id', id)
     .order('sort_order', { ascending: true })
 
@@ -187,6 +215,7 @@ export async function getRecipe(id: string): Promise<{
   // Transform junction table rows to RecipeIngredient format for the form
   const ingredients: RecipeIngredient[] = (ingredientRows ?? []).map(row => ({
     ingredient_id: row.ingredient_id,
+    spice_id: row.spice_id,
     raw_name: row.raw_name,
     quantity: row.quantity,
     unit: row.unit,
@@ -271,15 +300,15 @@ export async function createRecipe(
     if (ingredients && ingredients.length > 0) {
       const ingredientRows = ingredients.map((ing, index) => ({
         recipe_id: recipe.id,
-        ingredient_id: ing.ingredient_id || null,
-        spice_id: null, // We don't track spice_id from form yet - could be added later
+        ingredient_id: ing.is_spice ? null : (ing.ingredient_id || null),
+        spice_id: ing.is_spice ? (ing.spice_id || null) : null,
         raw_name: ing.raw_name,
         quantity: ing.is_spice ? null : ing.quantity, // Spices have no quantity
         unit: ing.is_spice ? null : ing.unit,
         is_spice: ing.is_spice,
         is_optional: ing.is_optional,
         sort_order: index,
-        is_matched: !!ing.ingredient_id, // Matched if we have an ingredient_id
+        is_matched: ing.is_spice ? !!ing.spice_id : !!ing.ingredient_id,
       }))
 
       const { error: ingredientsError } = await supabase
@@ -358,15 +387,15 @@ export async function updateRecipe(
     if (ingredients && ingredients.length > 0) {
       const ingredientRows = ingredients.map((ing, index) => ({
         recipe_id: id,
-        ingredient_id: ing.ingredient_id || null,
-        spice_id: null, // We don't track spice_id from form yet
+        ingredient_id: ing.is_spice ? null : (ing.ingredient_id || null),
+        spice_id: ing.is_spice ? (ing.spice_id || null) : null,
         raw_name: ing.raw_name,
         quantity: ing.is_spice ? null : ing.quantity,
         unit: ing.is_spice ? null : ing.unit,
         is_spice: ing.is_spice,
         is_optional: ing.is_optional,
         sort_order: index,
-        is_matched: !!ing.ingredient_id,
+        is_matched: ing.is_spice ? !!ing.spice_id : !!ing.ingredient_id,
       }))
 
       const { error: ingredientsError } = await supabase

@@ -34,7 +34,14 @@ import {
   GripVertical,
   ChevronUp,
   ChevronDown,
+  AlertCircle,
+  Link2,
 } from 'lucide-react'
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from '@/components/ui/popover'
 import {
   recipeSchema,
   type RecipeFormData,
@@ -46,8 +53,158 @@ import {
   createRecipe,
   updateRecipe,
   getRecipe,
+  searchIngredients,
+  searchSpices,
 } from '@/lib/actions/recipes'
 import { IngredientPicker, type IngredientResult } from './ingredient-picker'
+
+// =============================================================================
+// IngredientMatchPopover - Search and match an unmatched ingredient
+// =============================================================================
+
+interface IngredientMatchPopoverProps {
+  rawName: string
+  onMatch: (ingredient: IngredientResult) => void
+}
+
+function IngredientMatchPopover({ rawName, onMatch }: IngredientMatchPopoverProps) {
+  const [open, setOpen] = useState(false)
+  const [query, setQuery] = useState(rawName)
+  const [ingredients, setIngredients] = useState<IngredientResult[]>([])
+  const [spices, setSpices] = useState<{ id: string; name: string; name_ar: string | null }[]>([])
+  const [isSearching, setIsSearching] = useState(false)
+
+  // Search when popover opens or query changes
+  useEffect(() => {
+    if (!open) return
+
+    const searchTimer = setTimeout(async () => {
+      if (!query.trim()) {
+        setIngredients([])
+        setSpices([])
+        return
+      }
+
+      setIsSearching(true)
+      const [ingredientsResult, spicesResult] = await Promise.all([
+        searchIngredients(query, 5),
+        searchSpices(query, 5),
+      ])
+      setIngredients(ingredientsResult.ingredients ?? [])
+      setSpices(spicesResult.spices ?? [])
+      setIsSearching(false)
+    }, 300)
+
+    return () => clearTimeout(searchTimer)
+  }, [open, query])
+
+  function handleSelectIngredient(ingredient: IngredientResult) {
+    onMatch(ingredient)
+    setOpen(false)
+  }
+
+  function handleSelectSpice(spice: { id: string; name: string; name_ar: string | null }) {
+    onMatch({
+      id: spice.id,
+      name: spice.name,
+      name_ar: spice.name_ar,
+      is_spice: true,
+    })
+    setOpen(false)
+  }
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          className="h-8 px-2 text-xs border-destructive text-destructive hover:bg-destructive/10"
+        >
+          <Link2 className="h-3 w-3 mr-1" />
+          Match
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent className="w-80 p-0" align="end">
+        <div className="p-3 border-b">
+          <Input
+            placeholder="Search ingredients or spices..."
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            className="h-8"
+            autoFocus
+          />
+        </div>
+        <ScrollArea className="max-h-60">
+          {isSearching ? (
+            <div className="p-4 text-center text-sm text-muted-foreground">
+              Searching...
+            </div>
+          ) : ingredients.length === 0 && spices.length === 0 ? (
+            <div className="p-4 text-center text-sm text-muted-foreground">
+              No matches found
+            </div>
+          ) : (
+            <div>
+              {ingredients.length > 0 && (
+                <div>
+                  <div className="px-3 py-1.5 text-xs font-medium text-muted-foreground bg-muted">
+                    Ingredients
+                  </div>
+                  {ingredients.map((ingredient) => (
+                    <button
+                      key={ingredient.id}
+                      type="button"
+                      className="w-full px-3 py-2 text-left text-sm hover:bg-muted flex items-center justify-between"
+                      onClick={() => handleSelectIngredient(ingredient)}
+                    >
+                      <span className="truncate">{ingredient.name}</span>
+                      {ingredient.name_ar && (
+                        <span className="text-xs text-muted-foreground truncate ml-2" dir="rtl">
+                          {ingredient.name_ar}
+                        </span>
+                      )}
+                    </button>
+                  ))}
+                </div>
+              )}
+              {spices.length > 0 && (
+                <div>
+                  <div className="px-3 py-1.5 text-xs font-medium text-muted-foreground bg-muted">
+                    Spices
+                  </div>
+                  {spices.map((spice) => (
+                    <button
+                      key={spice.id}
+                      type="button"
+                      className="w-full px-3 py-2 text-left text-sm hover:bg-muted flex items-center justify-between"
+                      onClick={() => handleSelectSpice(spice)}
+                    >
+                      <div className="flex items-center gap-2">
+                        <Badge variant="outline" className="text-xs h-5">Spice</Badge>
+                        <span className="truncate">{spice.name}</span>
+                      </div>
+                      {spice.name_ar && (
+                        <span className="text-xs text-muted-foreground truncate ml-2" dir="rtl">
+                          {spice.name_ar}
+                        </span>
+                      )}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+        </ScrollArea>
+      </PopoverContent>
+    </Popover>
+  )
+}
+
+// =============================================================================
+// RecipeFormDialog
+// =============================================================================
 
 interface RecipeFormDialogProps {
   open: boolean
@@ -553,10 +710,11 @@ export function RecipeFormDialog({
                       <IngredientPicker
                         onSelect={(ingredient) => {
                           appendIngredient({
-                            ingredient_id: ingredient.id,
+                            ingredient_id: ingredient.is_spice ? null : ingredient.id,
+                            spice_id: ingredient.is_spice ? ingredient.id : null,
                             raw_name: ingredient.name,
-                            quantity: ingredient.is_spice ? 0 : (ingredient.serving_size ?? 100),
-                            unit: ingredient.is_spice ? 'حسب الرغبة' : (ingredient.serving_unit ?? 'g'),
+                            quantity: ingredient.is_spice ? null : (ingredient.serving_size ?? 100),
+                            unit: ingredient.is_spice ? null : (ingredient.serving_unit ?? 'g'),
                             is_spice: ingredient.is_spice ?? false,
                             is_optional: false,
                           })
@@ -576,15 +734,26 @@ export function RecipeFormDialog({
                         <div className="space-y-2">
                           {ingredientFields.map((field, index) => {
                             const isSpice = watch(`ingredients.${index}.is_spice`)
+                            const ingredientId = watch(`ingredients.${index}.ingredient_id`)
+                            const spiceId = watch(`ingredients.${index}.spice_id`)
+                            // Unmatched if: not a spice and no ingredient_id, OR is a spice but no spice_id
+                            const isUnmatched = isSpice ? !spiceId : !ingredientId
                             return (
                               <div
                                 key={field.id}
-                                className="flex items-center gap-2 p-3 rounded-lg border bg-muted/50"
+                                className={`flex items-center gap-2 p-3 rounded-lg border ${
+                                  isUnmatched 
+                                    ? 'border-destructive bg-destructive/10' 
+                                    : 'bg-muted/50'
+                                }`}
                               >
                                 <GripVertical className="h-4 w-4 text-muted-foreground cursor-grab" />
                                 <div className="flex-1 min-w-0">
                                   <div className="flex items-center gap-2">
-                                    <span className="font-medium truncate">
+                                    {isUnmatched && (
+                                      <AlertCircle className="h-4 w-4 text-destructive shrink-0" />
+                                    )}
+                                    <span className={`font-medium truncate ${isUnmatched ? 'text-destructive' : ''}`}>
                                       {watch(`ingredients.${index}.raw_name`)}
                                     </span>
                                     {isSpice && (
@@ -596,6 +765,24 @@ export function RecipeFormDialog({
                                   </div>
                                 </div>
                                 <div className="flex items-center gap-2">
+                                  {isUnmatched && (
+                                    <IngredientMatchPopover
+                                      rawName={watch(`ingredients.${index}.raw_name`)}
+                                      onMatch={(matchedIngredient) => {
+                                        if (matchedIngredient.is_spice) {
+                                          setValue(`ingredients.${index}.spice_id`, matchedIngredient.id)
+                                          setValue(`ingredients.${index}.ingredient_id`, null)
+                                          setValue(`ingredients.${index}.is_spice`, true)
+                                          setValue(`ingredients.${index}.quantity`, null)
+                                          setValue(`ingredients.${index}.unit`, null)
+                                        } else {
+                                          setValue(`ingredients.${index}.ingredient_id`, matchedIngredient.id)
+                                          setValue(`ingredients.${index}.spice_id`, null)
+                                          setValue(`ingredients.${index}.is_spice`, false)
+                                        }
+                                      }}
+                                    />
+                                  )}
                                   {isSpice ? (
                                     <span className="text-sm text-muted-foreground">حسب الرغبة</span>
                                   ) : (

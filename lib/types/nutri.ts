@@ -98,10 +98,11 @@ export type RecipeStatus = 'draft' | 'complete' | 'needs_review' | 'error'
  * Single ingredient in a recipe form (used for validation and form handling)
  * 
  * For regular ingredients: ingredient_id is set, quantity/unit are required
- * For spices: ingredient_id is null, is_spice is true, quantity/unit can be null (meaning "as desired")
+ * For spices: spice_id is set, is_spice is true, quantity/unit can be null (meaning "as desired")
  */
 export interface RecipeIngredient {
   ingredient_id: string | null
+  spice_id: string | null
   raw_name: string
   quantity: number | null
   unit: string | null

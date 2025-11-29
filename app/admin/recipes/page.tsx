@@ -8,6 +8,7 @@ interface PageProps {
     page?: string
     mealType?: string
     cuisine?: string
+    hasIssues?: string
   }>
 }
 
@@ -19,6 +20,7 @@ async function RecipesTableWrapper({
     page?: string
     mealType?: string
     cuisine?: string
+    hasIssues?: string
   }
 }) {
   const page = parseInt(searchParams.page ?? '1', 10)
@@ -31,6 +33,7 @@ async function RecipesTableWrapper({
       pageSize,
       mealType: searchParams.mealType,
       cuisine: searchParams.cuisine,
+      hasIssues: searchParams.hasIssues === 'true',
     }),
     getCuisines(),
   ])
