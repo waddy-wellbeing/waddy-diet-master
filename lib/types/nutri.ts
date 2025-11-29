@@ -91,8 +91,11 @@ export interface Spice {
 // RECIPES
 // =============================================================================
 
+/** Recipe status enum (matches recipe_status in database) */
+export type RecipeStatus = 'draft' | 'complete' | 'needs_review' | 'error'
+
 /** 
- * Single ingredient in a recipe (stored in recipes.ingredients JSONB)
+ * Single ingredient in a recipe form (used for validation and form handling)
  * 
  * For regular ingredients: ingredient_id is set, quantity/unit are required
  * For spices: ingredient_id is null, is_spice is true, quantity/unit can be null (meaning "as desired")
@@ -104,6 +107,26 @@ export interface RecipeIngredient {
   unit: string | null
   is_spice: boolean
   is_optional: boolean
+}
+
+/** 
+ * Recipe ingredient junction table row (stored in recipe_ingredients table)
+ * Links recipes to ingredients/spices with quantity and ordering
+ */
+export interface RecipeIngredientRecord {
+  id: string
+  recipe_id: string
+  ingredient_id: string | null
+  spice_id: string | null
+  raw_name: string
+  quantity: number | null
+  unit: string | null
+  is_spice: boolean
+  is_optional: boolean
+  sort_order: number
+  is_matched: boolean
+  created_at: string
+  updated_at: string
 }
 
 /** Single instruction step */
@@ -245,7 +268,6 @@ export interface RecipeRecord {
   cook_time_minutes?: number
   servings: number
   difficulty?: 'easy' | 'medium' | 'hard'
-  ingredients: RecipeIngredient[]
   instructions: RecipeInstruction[]
   nutrition_per_serving: RecipeNutrition
   is_vegetarian?: boolean
@@ -253,10 +275,18 @@ export interface RecipeRecord {
   is_gluten_free?: boolean
   is_dairy_free?: boolean
   admin_notes?: string | null
+  status: RecipeStatus
+  validation_errors?: unknown[]
+  last_validated_at?: string
   created_by?: string
   is_public: boolean
   created_at: string
   updated_at: string
+}
+
+/** Recipe record with ingredients loaded from junction table */
+export interface RecipeWithIngredients extends RecipeRecord {
+  ingredients: RecipeIngredient[]
 }
 
 /** Full daily_plans row */

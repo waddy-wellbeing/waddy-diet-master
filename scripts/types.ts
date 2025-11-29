@@ -153,4 +153,21 @@ export interface RecipeInsert {
   is_dairy_free: boolean
   admin_notes: string | null
   is_public: boolean
+  status?: 'draft' | 'complete' | 'needs_review' | 'error'
 }
+
+// Type for recipe_ingredients junction table
+export interface RecipeIngredientInsert {
+  recipe_id: string
+  ingredient_id: string | null
+  spice_id: string | null
+  raw_name: string
+  quantity: number | null
+  unit: string | null
+  is_spice: boolean
+  is_optional: boolean
+  sort_order: number
+  is_matched: boolean
+  notes: string | null
+}
+

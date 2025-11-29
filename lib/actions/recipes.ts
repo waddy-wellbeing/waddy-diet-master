@@ -3,6 +3,7 @@
 import { revalidatePath } from 'next/cache'
 import { createClient } from '@/lib/supabase/server'
 import { recipeSchema, type RecipeFormData } from '@/lib/validators/recipes'
+import type { RecipeIngredient, RecipeWithIngredients } from '@/lib/types/nutri'
 
 // =============================================================================
 // Types
@@ -152,23 +153,54 @@ export async function getRecipes({
 }
 
 // =============================================================================
-// Get Single Recipe (full details)
+// Get Single Recipe (full details with ingredients from junction table)
 // =============================================================================
 
-export async function getRecipe(id: string) {
+export async function getRecipe(id: string): Promise<{
+  recipe: RecipeWithIngredients | null
+  error: string | null
+}> {
   const supabase = await createClient()
 
-  const { data, error } = await supabase
+  // Fetch the recipe
+  const { data: recipe, error: recipeError } = await supabase
     .from('recipes')
     .select('*')
     .eq('id', id)
     .single()
 
-  if (error) {
-    return { recipe: null, error: error.message }
+  if (recipeError) {
+    return { recipe: null, error: recipeError.message }
   }
 
-  return { recipe: data, error: null }
+  // Fetch ingredients from junction table
+  const { data: ingredientRows, error: ingredientsError } = await supabase
+    .from('recipe_ingredients')
+    .select('ingredient_id, raw_name, quantity, unit, is_spice, is_optional, sort_order')
+    .eq('recipe_id', id)
+    .order('sort_order', { ascending: true })
+
+  if (ingredientsError) {
+    return { recipe: null, error: ingredientsError.message }
+  }
+
+  // Transform junction table rows to RecipeIngredient format for the form
+  const ingredients: RecipeIngredient[] = (ingredientRows ?? []).map(row => ({
+    ingredient_id: row.ingredient_id,
+    raw_name: row.raw_name,
+    quantity: row.quantity,
+    unit: row.unit,
+    is_spice: row.is_spice,
+    is_optional: row.is_optional,
+  }))
+
+  return {
+    recipe: {
+      ...recipe,
+      ingredients,
+    },
+    error: null,
+  }
 }
 
 // =============================================================================
@@ -194,7 +226,7 @@ export async function getCuisines(): Promise<string[]> {
 }
 
 // =============================================================================
-// Create Recipe
+// Create Recipe (saves to recipes table + recipe_ingredients junction table)
 // =============================================================================
 
 export async function createRecipe(
@@ -207,34 +239,64 @@ export async function createRecipe(
     // Validate input
     const validated = recipeSchema.parse(formData)
     
+    // Separate ingredients from recipe data
+    const { ingredients, ...recipeData } = validated
+    
     // Clean up empty image_url
-    const cleanedData = {
-      ...validated,
-      image_url: validated.image_url || null,
+    const cleanedRecipeData = {
+      ...recipeData,
+      image_url: recipeData.image_url || null,
     }
     
     const supabase = await createClient()
     
-    const { data, error } = await supabase
+    // 1. Insert the recipe (without ingredients - they go to junction table)
+    const { data: recipe, error: recipeError } = await supabase
       .from('recipes')
       .insert({
-        ...cleanedData,
+        ...cleanedRecipeData,
         created_by: user.id,
       })
       .select('id')
       .single()
 
-    if (error) {
-      if (error.code === '23505') {
+    if (recipeError) {
+      if (recipeError.code === '23505') {
         return { success: false, error: 'A recipe with this name already exists' }
       }
-      return { success: false, error: error.message }
+      return { success: false, error: recipeError.message }
+    }
+
+    // 2. Insert ingredients into junction table
+    if (ingredients && ingredients.length > 0) {
+      const ingredientRows = ingredients.map((ing, index) => ({
+        recipe_id: recipe.id,
+        ingredient_id: ing.ingredient_id || null,
+        spice_id: null, // We don't track spice_id from form yet - could be added later
+        raw_name: ing.raw_name,
+        quantity: ing.is_spice ? null : ing.quantity, // Spices have no quantity
+        unit: ing.is_spice ? null : ing.unit,
+        is_spice: ing.is_spice,
+        is_optional: ing.is_optional,
+        sort_order: index,
+        is_matched: !!ing.ingredient_id, // Matched if we have an ingredient_id
+      }))
+
+      const { error: ingredientsError } = await supabase
+        .from('recipe_ingredients')
+        .insert(ingredientRows)
+
+      if (ingredientsError) {
+        // Rollback: delete the recipe if ingredients failed
+        await supabase.from('recipes').delete().eq('id', recipe.id)
+        return { success: false, error: `Failed to save ingredients: ${ingredientsError.message}` }
+      }
     }
 
     revalidatePath('/admin/recipes')
     revalidatePath('/admin')
     
-    return { success: true, data: { id: data.id } }
+    return { success: true, data: { id: recipe.id } }
   } catch (error) {
     if (error instanceof Error) {
       return { success: false, error: error.message }
@@ -244,7 +306,7 @@ export async function createRecipe(
 }
 
 // =============================================================================
-// Update Recipe
+// Update Recipe (updates recipes table + replaces recipe_ingredients)
 // =============================================================================
 
 export async function updateRecipe(
@@ -258,24 +320,62 @@ export async function updateRecipe(
     // Validate input
     const validated = recipeSchema.parse(formData)
     
+    // Separate ingredients from recipe data
+    const { ingredients, ...recipeData } = validated
+    
     // Clean up empty image_url
-    const cleanedData = {
-      ...validated,
-      image_url: validated.image_url || null,
+    const cleanedRecipeData = {
+      ...recipeData,
+      image_url: recipeData.image_url || null,
     }
     
     const supabase = await createClient()
     
-    const { error } = await supabase
+    // 1. Update the recipe (without ingredients)
+    const { error: recipeError } = await supabase
       .from('recipes')
-      .update(cleanedData)
+      .update(cleanedRecipeData)
       .eq('id', id)
 
-    if (error) {
-      if (error.code === '23505') {
+    if (recipeError) {
+      if (recipeError.code === '23505') {
         return { success: false, error: 'A recipe with this name already exists' }
       }
-      return { success: false, error: error.message }
+      return { success: false, error: recipeError.message }
+    }
+
+    // 2. Delete existing ingredients from junction table
+    const { error: deleteError } = await supabase
+      .from('recipe_ingredients')
+      .delete()
+      .eq('recipe_id', id)
+
+    if (deleteError) {
+      return { success: false, error: `Failed to update ingredients: ${deleteError.message}` }
+    }
+
+    // 3. Insert new ingredients into junction table
+    if (ingredients && ingredients.length > 0) {
+      const ingredientRows = ingredients.map((ing, index) => ({
+        recipe_id: id,
+        ingredient_id: ing.ingredient_id || null,
+        spice_id: null, // We don't track spice_id from form yet
+        raw_name: ing.raw_name,
+        quantity: ing.is_spice ? null : ing.quantity,
+        unit: ing.is_spice ? null : ing.unit,
+        is_spice: ing.is_spice,
+        is_optional: ing.is_optional,
+        sort_order: index,
+        is_matched: !!ing.ingredient_id,
+      }))
+
+      const { error: ingredientsError } = await supabase
+        .from('recipe_ingredients')
+        .insert(ingredientRows)
+
+      if (ingredientsError) {
+        return { success: false, error: `Failed to save ingredients: ${ingredientsError.message}` }
+      }
     }
 
     revalidatePath('/admin/recipes')

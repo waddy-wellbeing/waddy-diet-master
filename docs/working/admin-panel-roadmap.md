@@ -1,6 +1,6 @@
 # Admin Panel Roadmap
 
-> **Last updated:** 2025-01-10
+> **Last updated:** 2025-11-29
 > 
 > This document tracks the implementation progress of the BiteRight admin panel.
 
@@ -196,6 +196,82 @@ interface Recipe {
   is_public: boolean
 }
 ```
+
+---
+
+## Phase 4.5: Recipe Ingredients Refactor 🚨 URGENT
+
+### Problem
+JSONB ingredients in recipes table has no referential integrity:
+- Cannot enforce FK relationships
+- Duplicate ingredients possible in same recipe
+- Orphaned references to non-existent ingredients
+- Hard to query "which recipes use ingredient X?"
+- No database-level validation
+
+### Solution
+New `recipe_ingredients` junction table with proper FKs + recipe validation status.
+
+### Tasks
+
+| Task | Status | Notes |
+|------|--------|-------|
+| Create migration file | ✅ Complete | `004_recipe_ingredients_table.sql` |
+| Add recipe status enum | ✅ Complete | draft, complete, needs_review, error |
+| Add validation_errors JSONB | ✅ Complete | Array of error objects |
+| Create recipe_ingredients table | ✅ Complete | Proper FKs to ingredients/spices |
+| Create migration function | ✅ Complete | `migrate_recipe_ingredients()` |
+| Create unmatched view | ✅ Complete | `unmatched_ingredients_view` |
+| Create match function | ✅ Complete | `match_recipe_ingredient()` |
+| Run migration in Supabase | 🔲 Todo | Execute SQL in dashboard |
+| Run data migration | 🔲 Todo | `SELECT * FROM migrate_recipe_ingredients()` |
+| Update recipe actions | 🔲 Todo | Use new table instead of JSONB |
+| Create ingredient matcher UI | 🔲 Todo | Admin page to fix unmatched |
+| Add missing ingredients | 🔲 Todo | From unmatched-recipes.csv |
+
+### New Database Schema
+
+```sql
+-- Recipe status for validation
+CREATE TYPE recipe_status AS ENUM ('draft', 'complete', 'needs_review', 'error');
+
+-- Junction table with referential integrity
+CREATE TABLE recipe_ingredients (
+  id UUID PRIMARY KEY,
+  recipe_id UUID REFERENCES recipes(id) ON DELETE CASCADE,
+  ingredient_id UUID REFERENCES ingredients(id) ON DELETE SET NULL,
+  spice_id UUID REFERENCES spices(id) ON DELETE SET NULL,
+  raw_name TEXT NOT NULL,
+  quantity DECIMAL(10, 2),
+  unit VARCHAR(50),
+  is_spice BOOLEAN NOT NULL DEFAULT FALSE,
+  is_optional BOOLEAN NOT NULL DEFAULT FALSE,
+  sort_order INTEGER NOT NULL DEFAULT 0,
+  is_matched BOOLEAN NOT NULL DEFAULT FALSE,
+  -- Unique constraint prevents duplicates
+  UNIQUE(recipe_id, ingredient_id) WHERE ingredient_id IS NOT NULL
+);
+```
+
+### Missing Ingredients from CSV
+These ingredients need to be added to the database:
+- كعك الارز (Rice Cakes)
+- بابريكا (Paprika) - should be spice
+- بكينج بودر/باودر (Baking Powder)
+- مكعبات ثلج (Ice Cubes) - may not need nutrition
+- توت (Berries)
+- كبدة بقري/دجاج (Beef/Chicken Liver)
+- بهارات شاورما (Shawarma Spices)
+- بهارات تندوري (Tandoori Spices)
+- بهارات فراخ (Chicken Spices)
+- توابل سمك (Fish Spices)
+- سبع بهارات (Seven Spices)
+- أوريجانو (Oregano)
+- مرقة دجاج/لحم (Chicken/Beef Broth)
+- كريمة طهي (Cooking Cream)
+- عجينة جلاش (Filo/Phyllo Dough)
+- عيش تورتيلا (Tortilla Bread)
+- صلصة طماطم (Tomato Sauce)
 
 ---
 

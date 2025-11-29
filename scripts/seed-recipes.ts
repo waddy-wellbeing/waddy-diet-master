@@ -1,12 +1,14 @@
 /**
- * Recipes Seeder
+ * Recipes Seeder (Updated for Junction Table)
  * 
  * Parses recipies_dataset.csv, resolves FKs, calculates nutrition,
- * and upserts into recipes table
+ * and upserts into recipes table AND recipe_ingredients junction table
+ * 
+ * Updated: 2024-11-29 for Phase 4.5 migration
  */
 
 import type { SupabaseClient } from '@supabase/supabase-js'
-import type { RecipeCsvRow, RecipeInsert, SeedResult, DryRunResult, FKValidationResult, IngredientInsert } from './types'
+import type { RecipeCsvRow, RecipeInsert, SeedResult, DryRunResult, FKValidationResult, IngredientInsert, RecipeIngredientInsert } from './types'
 import { parseCSV, parseNumber, cleanText, log, CSV_FILES, createLookupKey, createLookupVariants, IMAGES_PATH } from './utils'
 import { buildIngredientLookup, buildIngredientLookupFromCSV } from './seed-ingredients'
 import { buildSpiceLookup, buildSpiceLookupFromCSV } from './seed-spices'
@@ -77,18 +79,36 @@ function groupRecipeRows(rows: RecipeCsvRow[]): Map<string, GroupedRecipe> {
 // Build Recipe with FK Resolution & Nutrition Calculation
 // =============================================================================
 
+// Extended lookup data with IDs
+interface IngredientLookupData {
+  id: string
+  macros: IngredientInsert['macros']
+}
+
+interface SpiceLookupData {
+  id: string
+  name: string
+}
+
 interface RecipeBuildContext {
-  ingredientLookup: Map<string, { id?: string; macros: IngredientInsert['macros'] }>
-  spiceLookup: Set<string>
-  imageLookup?: Map<string, string> // Added imageLookup to context
+  ingredientLookup: Map<string, IngredientLookupData>
+  spiceLookup: Map<string, SpiceLookupData>
+  imageLookup?: Map<string, string>
+}
+
+interface RecipeBuildResult {
+  recipe: RecipeInsert
+  junctionRecords: Omit<RecipeIngredientInsert, 'recipe_id'>[]
+  unmatchedIngredients: string[]
+  hasUnmatched: boolean
 }
 
 function buildRecipe(
   grouped: GroupedRecipe,
-  context: RecipeBuildContext,
-  includeIds: boolean = true
-): { recipe: RecipeInsert; unmatchedIngredients: string[] } {
+  context: RecipeBuildContext
+): RecipeBuildResult {
   const unmatchedIngredients: string[] = []
+  const junctionRecords: Omit<RecipeIngredientInsert, 'recipe_id'>[] = []
 
   let imagePath: string | null = null
   if (context.imageLookup) {
@@ -107,58 +127,69 @@ function buildRecipe(
   let totalCarbs = 0
   let totalFat = 0
 
-  // Build ingredients array
-  const ingredients: RecipeInsert['ingredients'] = []
-
+  // Process each ingredient and build junction records
+  let sortOrder = 0
   for (const ing of grouped.ingredients) {
+    sortOrder++
     const lookupKeys = createLookupVariants(ing.raw_name)
+    
     let isSpice = false
-    let ingredientData: { id?: string; macros: IngredientInsert['macros'] } | undefined
+    let ingredientData: IngredientLookupData | undefined
+    let spiceData: SpiceLookupData | undefined
 
+    // Try to match to spice or ingredient
     for (const key of lookupKeys) {
-      if (!isSpice && context.spiceLookup.has(key)) {
+      // Check spices first
+      if (!spiceData && context.spiceLookup.has(key)) {
+        spiceData = context.spiceLookup.get(key)
         isSpice = true
       }
-      if (!ingredientData) {
-        const candidate = context.ingredientLookup.get(key)
-        if (candidate) {
-          ingredientData = candidate
-        }
+      // Check ingredients
+      if (!ingredientData && context.ingredientLookup.has(key)) {
+        ingredientData = context.ingredientLookup.get(key)
       }
-      if (isSpice && ingredientData) {
-        break
-      }
+      // Stop if we found spice (spice takes precedence)
+      if (spiceData) break
     }
 
-    let ingredient_id: string | null = null
-    
-    if (!isSpice && ingredientData) {
-      // Found matching ingredient - get ID and add to nutrition
-      if (includeIds && 'id' in ingredientData && ingredientData.id) {
-        ingredient_id = ingredientData.id
-      }
-      
-      // Calculate nutrition contribution
-      // Assuming serving_size is 100g in the ingredient database
-      const servingMultiplier = (ing.quantity || 100) / 100
-      totalCalories += (ingredientData.macros.calories || 0) * servingMultiplier
-      totalProtein += (ingredientData.macros.protein_g || 0) * servingMultiplier
-      totalCarbs += (ingredientData.macros.carbs_g || 0) * servingMultiplier
-      totalFat += (ingredientData.macros.fat_g || 0) * servingMultiplier
-    } else if (!isSpice) {
-      // Not a spice and not found in ingredients - track as unmatched
-      unmatchedIngredients.push(ing.raw_name)
-    }
-    // Spices don't contribute to nutrition
-
-    ingredients.push({
-      ingredient_id,
+    // Build junction record
+    const junctionRecord: Omit<RecipeIngredientInsert, 'recipe_id'> = {
+      ingredient_id: null,
+      spice_id: null,
       raw_name: ing.raw_name,
       quantity: ing.quantity,
       unit: ing.unit,
       is_spice: isSpice,
       is_optional: false,
-    })
+      sort_order: sortOrder,
+      is_matched: false,
+      notes: null,
+    }
+
+    if (isSpice && spiceData) {
+      // Matched to spice
+      junctionRecord.spice_id = spiceData.id
+      junctionRecord.is_matched = true
+      // Spices don't contribute to nutrition
+    } else if (!isSpice && ingredientData) {
+      // Matched to ingredient
+      junctionRecord.ingredient_id = ingredientData.id
+      junctionRecord.is_matched = true
+      
+      // Calculate nutrition contribution
+      const servingMultiplier = (ing.quantity || 100) / 100
+      totalCalories += (ingredientData.macros.calories || 0) * servingMultiplier
+      totalProtein += (ingredientData.macros.protein_g || 0) * servingMultiplier
+      totalCarbs += (ingredientData.macros.carbs_g || 0) * servingMultiplier
+      totalFat += (ingredientData.macros.fat_g || 0) * servingMultiplier
+    } else {
+      // Unmatched ingredient
+      unmatchedIngredients.push(ing.raw_name)
+      junctionRecord.is_matched = false
+      junctionRecord.notes = `Unmatched ${isSpice ? 'spice' : 'ingredient'} from seed import - needs admin review`
+    }
+
+    junctionRecords.push(junctionRecord)
   }
 
   // Parse instructions into steps
@@ -193,22 +224,24 @@ function buildRecipe(
   const isVegetarian = !hasChicken && !hasMeat && !hasFish
   const isVegan = isVegetarian && !hasEgg && !hasDairy
 
-  const adminNotes = unmatchedIngredients.length > 0
-    ? `Missing ingredients: ${unmatchedIngredients.join(', ')}`
+  const hasUnmatched = unmatchedIngredients.length > 0
+  const adminNotes = hasUnmatched
+    ? `Unmatched ingredients: ${unmatchedIngredients.join(', ')}`
     : null
 
+  // Build recipe (without ingredients JSONB - we use junction table now)
   const recipe: RecipeInsert = {
     name: grouped.name,
     description: null,
-    image_url: imagePath, // Updated to use imagePath
+    image_url: imagePath,
     meal_type: [grouped.meal_type],
-    cuisine: 'egyptian', // Default for this dataset
+    cuisine: 'egyptian',
     tags: [],
     prep_time_minutes: null,
     cook_time_minutes: null,
-    servings: 1, // Single serving recipes
+    servings: 1,
     difficulty: null,
-    ingredients,
+    ingredients: [], // Empty - using junction table instead
     instructions,
     nutrition_per_serving: {
       calories: Math.round(totalCalories),
@@ -218,13 +251,14 @@ function buildRecipe(
     },
     is_vegetarian: isVegetarian,
     is_vegan: isVegan,
-    is_gluten_free: false, // Would need more analysis
+    is_gluten_free: false,
     is_dairy_free: !hasDairy,
     admin_notes: adminNotes,
     is_public: true,
+    status: hasUnmatched ? 'error' : 'complete', // Mark as error if unmatched
   }
 
-  return { recipe, unmatchedIngredients }
+  return { recipe, junctionRecords, unmatchedIngredients, hasUnmatched }
 }
 
 // =============================================================================
@@ -268,6 +302,55 @@ function buildImageLookupFromDisk(): Map<string, string> {
   }
 
   walk(IMAGES_PATH)
+  return lookup
+}
+
+// =============================================================================
+// Build Spice Lookup with IDs (for junction table)
+// =============================================================================
+
+async function buildSpiceLookupWithIds(supabase: SupabaseClient): Promise<Map<string, SpiceLookupData>> {
+  const { data, error } = await supabase
+    .from('spices')
+    .select('id, name, name_ar, aliases')
+
+  if (error) {
+    throw new Error(`Failed to fetch spices: ${error.message}`)
+  }
+
+  const lookup = new Map<string, SpiceLookupData>()
+  
+  for (const spice of data || []) {
+    const spiceData = { id: spice.id, name: spice.name }
+    
+    // Add lookup by English name
+    if (spice.name) {
+      for (const key of createLookupVariants(spice.name)) {
+        if (!lookup.has(key)) {
+          lookup.set(key, spiceData)
+        }
+      }
+    }
+    // Add lookup by Arabic name
+    if (spice.name_ar) {
+      for (const key of createLookupVariants(spice.name_ar)) {
+        if (!lookup.has(key)) {
+          lookup.set(key, spiceData)
+        }
+      }
+    }
+    // Add lookup by aliases
+    if (spice.aliases && Array.isArray(spice.aliases)) {
+      for (const alias of spice.aliases) {
+        for (const key of createLookupVariants(alias)) {
+          if (!lookup.has(key)) {
+            lookup.set(key, spiceData)
+          }
+        }
+      }
+    }
+  }
+
   return lookup
 }
 
@@ -367,16 +450,14 @@ export async function dryRunRecipes(supabase: SupabaseClient): Promise<DryRunRes
   
   if (!fkResult.valid) {
     const sample = fkResult.unmatched.slice(0, 5).join(', ')
-    warnings.push(`${fkResult.unmatched.length} ingredients could not be matched to ingredient records or spices. Examples: ${sample}`)
+    warnings.push(`${fkResult.unmatched.length} ingredients could not be matched. Examples: ${sample}`)
+    warnings.push(`Unmatched ingredients will be inserted with null FK and marked for admin review.`)
   }
 
   const recipesWithUnmatched = new Set(fkResult.unmatchedDetails.map(detail => detail.recipe))
   const fullyMatchedCount = groupedRecipes.size - recipesWithUnmatched.size
   log.info(`Recipes with all ingredients matched: ${fullyMatchedCount}`)
-
-  if (recipesWithUnmatched.size > 0) {
-    warnings.push(`${recipesWithUnmatched.size} recipes contain ingredients without ingredient matches. They will seed with null ingredient_id unless you run with --skip-unmatched.`)
-  }
+  log.info(`Recipes with unmatched ingredients (will have status='error'): ${recipesWithUnmatched.size}`)
 
   // Validate image availability
   const imageLookup = buildImageLookupFromDisk()
@@ -428,11 +509,11 @@ export async function dryRunRecipes(supabase: SupabaseClient): Promise<DryRunRes
 }
 
 // =============================================================================
-// Seed Execution
+// Seed Execution (Updated for Junction Table)
 // =============================================================================
 
 export async function seedRecipes(supabase: SupabaseClient, skipUnmatched: boolean = false): Promise<SeedResult> {
-  log.subheader('Recipes - Seeding')
+  log.subheader('Recipes - Seeding (with Junction Table)')
   
   const rows = parseCSV<RecipeCsvRow>(CSV_FILES.recipes)
   const groupedRecipes = groupRecipeRows(rows)
@@ -445,73 +526,154 @@ export async function seedRecipes(supabase: SupabaseClient, skipUnmatched: boole
   const ingredientLookup = await buildIngredientLookup(supabase)
   log.info(`  Ingredient lookup: ${ingredientLookup.size} entries`)
   
-  log.info('Building spice lookup from database...')
-  const spiceLookup = await buildSpiceLookup(supabase)
+  log.info('Building spice lookup from database (with IDs)...')
+  const spiceLookup = await buildSpiceLookupWithIds(supabase)
   log.info(`  Spice lookup: ${spiceLookup.size} entries`)
   
   log.info('Building image lookup from dataset...')
   const imageLookup = buildImageLookupFromDisk()
   log.info(`  Image lookup: ${imageLookup.size} entries`)
   
-  // Build all recipes
-  const recipes: RecipeInsert[] = []
+  // Build all recipes with junction data
+  const recipeBuilds: Array<{ build: RecipeBuildResult; grouped: GroupedRecipe }> = []
   let totalUnmatched = 0
   let skippedForUnmatched = 0
+  let recipesWithErrors = 0
   
   for (const [, grouped] of groupedRecipes) {
-    const { recipe, unmatchedIngredients } = buildRecipe(grouped, { ingredientLookup, spiceLookup, imageLookup })
+    const build = buildRecipe(grouped, { ingredientLookup, spiceLookup, imageLookup })
     
     // Skip recipes with unmatched ingredients if flag is set
-    if (skipUnmatched && unmatchedIngredients.length > 0) {
+    if (skipUnmatched && build.hasUnmatched) {
       skippedForUnmatched++
       continue
     }
     
-    recipes.push(recipe)
-    totalUnmatched += unmatchedIngredients.length
+    if (build.hasUnmatched) {
+      recipesWithErrors++
+    }
+    
+    recipeBuilds.push({ build, grouped })
+    totalUnmatched += build.unmatchedIngredients.length
   }
   
   if (skipUnmatched && skippedForUnmatched > 0) {
     log.info(`Skipped ${skippedForUnmatched} recipes with unmatched ingredients`)
   }
   
-  if (!skipUnmatched && totalUnmatched > 0) {
-    log.warning(`${totalUnmatched} ingredient references will have null ingredient_id`)
+  if (!skipUnmatched && recipesWithErrors > 0) {
+    log.warning(`${recipesWithErrors} recipes have unmatched ingredients (status='error')`)
+    log.warning(`${totalUnmatched} total unmatched ingredient references`)
   }
   
-  log.info(`Upserting ${recipes.length} recipes...`)
+  log.info(`Upserting ${recipeBuilds.length} recipes...`)
   
-  // Upsert in batches
+  // Step 1: Upsert recipes
   const batchSize = 50
   let inserted = 0
   let skippedDueToErrors = 0
+  const recipeIdMap = new Map<string, string>() // name -> id
   
-  for (let i = 0; i < recipes.length; i += batchSize) {
-    const batch = recipes.slice(i, i + batchSize)
+  for (let i = 0; i < recipeBuilds.length; i += batchSize) {
+    const batch = recipeBuilds.slice(i, i + batchSize)
+    const recipeBatch = batch.map(b => b.build.recipe)
     
     const { data, error } = await supabase
       .from('recipes')
-      .upsert(batch, { 
+      .upsert(recipeBatch, { 
         onConflict: 'name',
         ignoreDuplicates: false 
       })
-      .select('id')
+      .select('id, name')
   
     if (error) {
       errors.push(`Batch ${Math.floor(i / batchSize) + 1} error: ${error.message}`)
       skippedDueToErrors += batch.length
     } else {
       inserted += data?.length || batch.length
+      // Store IDs for junction table insertion
+      for (const recipe of data || []) {
+        recipeIdMap.set(recipe.name, recipe.id)
+      }
     }
   
-    process.stdout.write(`\r  Progress: ${Math.min(i + batchSize, recipes.length)}/${recipes.length}`)
+    process.stdout.write(`\r  Recipes progress: ${Math.min(i + batchSize, recipeBuilds.length)}/${recipeBuilds.length}`)
   }
   
   console.log()
+  log.success(`Recipes upserted: ${inserted} inserted/updated, ${skippedDueToErrors} skipped`)
 
-  log.success(`Recipes seeded: ${inserted} inserted/updated, ${skippedDueToErrors} skipped`)
+  // Step 2: Insert junction table records
+  log.info('Inserting recipe_ingredients junction records...')
+  
+  // First, delete existing junction records for these recipes (to avoid duplicates on re-run)
+  const recipeIds = Array.from(recipeIdMap.values())
+  if (recipeIds.length > 0) {
+    const { error: deleteError } = await supabase
+      .from('recipe_ingredients')
+      .delete()
+      .in('recipe_id', recipeIds)
+    
+    if (deleteError) {
+      log.warning(`Could not clear existing junction records: ${deleteError.message}`)
+    }
+  }
+  
+  // Build all junction records with recipe IDs
+  const allJunctionRecords: RecipeIngredientInsert[] = []
+  
+  for (const { build, grouped } of recipeBuilds) {
+    const recipeId = recipeIdMap.get(grouped.name)
+    if (!recipeId) continue
+    
+    for (const junctionRecord of build.junctionRecords) {
+      allJunctionRecords.push({
+        ...junctionRecord,
+        recipe_id: recipeId,
+      })
+    }
+  }
+  
+  log.info(`Inserting ${allJunctionRecords.length} junction records...`)
+  
+  // Insert junction records in batches
+  let junctionInserted = 0
+  const junctionBatchSize = 200
+  
+  for (let i = 0; i < allJunctionRecords.length; i += junctionBatchSize) {
+    const batch = allJunctionRecords.slice(i, i + junctionBatchSize)
+    
+    const { data, error } = await supabase
+      .from('recipe_ingredients')
+      .insert(batch)
+      .select('id')
+    
+    if (error) {
+      errors.push(`Junction batch ${Math.floor(i / junctionBatchSize) + 1} error: ${error.message}`)
+    } else {
+      junctionInserted += data?.length || batch.length
+    }
+    
+    process.stdout.write(`\r  Junction progress: ${Math.min(i + junctionBatchSize, allJunctionRecords.length)}/${allJunctionRecords.length}`)
+  }
+  
+  console.log()
+  log.success(`Junction records inserted: ${junctionInserted}`)
+  
+  // Summary
+  log.subheader('Seed Summary')
+  log.info(`Recipes: ${inserted} inserted/updated`)
+  log.info(`Recipe ingredients (junction): ${junctionInserted} inserted`)
+  log.info(`Recipes with errors (unmatched): ${recipesWithErrors}`)
+  log.info(`Total unmatched ingredients: ${totalUnmatched}`)
 
-  return { table: 'recipes', inserted, updated: 0, skipped: skippedDueToErrors + skippedForUnmatched, errors }
+  return { 
+    table: 'recipes', 
+    inserted, 
+    updated: 0, 
+    skipped: skippedDueToErrors + skippedForUnmatched, 
+    errors 
+  }
 }
 // =============================================================================
 // Export Unmatched Recipes
@@ -603,7 +765,7 @@ export async function exportRecipesTable(supabase: SupabaseClient): Promise<stri
 
   const { data, error } = await supabase
     .from('recipes')
-    .select('id,name,image_url,meal_type,cuisine,tags,servings,is_public,ingredients,instructions,nutrition_per_serving,admin_notes,created_at,updated_at')
+    .select('id,name,image_url,meal_type,cuisine,tags,servings,is_public,status,instructions,nutrition_per_serving,admin_notes,created_at,updated_at')
     .order('name', { ascending: true })
 
   if (error) {
@@ -611,6 +773,17 @@ export async function exportRecipesTable(supabase: SupabaseClient): Promise<stri
   }
 
   const records = data ?? []
+  
+  // Get ingredient counts from junction table
+  const { data: ingredientCounts } = await supabase
+    .from('recipe_ingredients')
+    .select('recipe_id')
+  
+  const countMap = new Map<string, number>()
+  for (const rec of ingredientCounts || []) {
+    countMap.set(rec.recipe_id, (countMap.get(rec.recipe_id) || 0) + 1)
+  }
+
   const header = [
     'id',
     'name',
@@ -620,6 +793,7 @@ export async function exportRecipesTable(supabase: SupabaseClient): Promise<stri
     'tags',
     'servings',
     'is_public',
+    'status',
     'ingredient_count',
     'instruction_count',
     'nutrition_per_serving',
@@ -631,7 +805,6 @@ export async function exportRecipesTable(supabase: SupabaseClient): Promise<stri
   const csvLines = [
     header.join(','),
     ...records.map(record => {
-      const ingredients = Array.isArray(record?.ingredients) ? record.ingredients : []
       const instructions = Array.isArray(record?.instructions) ? record.instructions : []
 
       return [
@@ -643,7 +816,8 @@ export async function exportRecipesTable(supabase: SupabaseClient): Promise<stri
         Array.isArray(record?.tags) ? record.tags.join(';') : record?.tags ?? '',
         record?.servings ?? '',
         typeof record?.is_public === 'boolean' ? record.is_public : '',
-        ingredients.length,
+        record?.status ?? 'draft',
+        countMap.get(record?.id) || 0,
         instructions.length,
         record?.nutrition_per_serving ?? {},
         record?.admin_notes ?? '',
