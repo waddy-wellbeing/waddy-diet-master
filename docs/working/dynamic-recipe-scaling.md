@@ -132,22 +132,32 @@ INSERT INTO system_settings (key, value, description) VALUES
 
 ## Components to Build
 
-### Phase 1: Foundation
+### Phase 1: Foundation (Admin Panel Completion)
 - [ ] `system_settings` table + seed default values
 - [ ] Admin UI for managing system settings
 - [ ] Recipe nutrition auto-calculation from ingredients
+- [ ] Ingredients "Has Issues" filter (missing food_group, unverified, etc.)
+- [ ] Ensure all ingredients have food_group assigned
 
-### Phase 2: Scaling Engine
+### Phase 2: Admin Test Console
+- [ ] **TDEE Calculator**: Input user params → see calculated TDEE & meal budgets
+- [ ] **Meal Plan Preview**: Select TDEE + meals/snacks → see suggested recipes with scaling
+- [ ] **Recipe Alternatives**: Pick a recipe → see same-meal-type alternatives
+- [ ] **Ingredient Swaps**: Pick an ingredient → see same-food-group alternatives
+
+### Phase 3: Scaling Engine
 - [ ] `scaleRecipeToCalories(recipe, targetCalories)` function
 - [ ] `getScalableRecipesForMeal(mealType, targetCalories, deviation)` query
 - [ ] Cache scaled nutrition per serving
 
-### Phase 3: User Experience
+### Phase 4: User Experience (Post-Onboarding)
 - [ ] Onboarding flow (TDEE calculator, meal preferences)
 - [ ] Meal browsing with swipe UI
 - [ ] Scaled ingredient display
+- [ ] **Recipe alternatives by meal_type** (when user swipes to change)
+- [ ] **Ingredient substitution by food_group** (same group alternatives)
 
-### Phase 4: Planning & Shopping
+### Phase 5: Planning & Shopping
 - [ ] Weekly plan view (same daily, customizable)
 - [ ] Grocery list aggregation
 - [ ] Export/share shopping list

@@ -61,15 +61,24 @@ className={cn("base-styles", conditional && "conditional-styles", className)}
 
 | Directory | Purpose |
 |-----------|---------|
+| `app/admin/` | Admin panel routes (recipes, ingredients, settings, test-console) |
+| `app/(app)/` | Authenticated user routes (dashboard, onboarding, recipes, plans) |
+| `app/(marketing)/` | Public marketing pages |
+| `app/api/` | API routes (uploads, etc.) |
 | `components/ui/` | shadcn/ui base components |
+| `components/admin/` | Admin panel components |
 | `components/layout/` | Layout components (headers, navs) |
 | `components/onboarding/` | Onboarding flow components |
 | `components/recipes/` | Recipe-related components |
 | `lib/types/` | TypeScript types (especially `nutri.ts` for DB types) |
 | `lib/supabase/` | Supabase client utilities (server.ts, client.ts) |
+| `lib/actions/` | Server actions for data mutations |
 | `lib/validators/` | Zod schemas for validation |
 | `lib/utils/` | Utility functions |
+| `scripts/` | Utility scripts (audits, migrations) |
+| `supabase/migrations/` | SQL migration files |
 | `supabase/functions/` | Supabase Edge Functions |
+| `docs/working/` | Planning documents and working notes |
 
 ## Development Commands
 ```bash

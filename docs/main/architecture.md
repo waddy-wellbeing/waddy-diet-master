@@ -30,23 +30,40 @@ bite-right/
 │   │   ├── onboarding/           # Onboarding flow
 │   │   ├── recipes/              # Recipe browsing
 │   │   └── plans/                # Meal plans
+│   ├── admin/                    # Admin panel (protected)
+│   │   ├── recipes/              # Recipe CRUD + nutrition
+│   │   ├── ingredients/          # Ingredient management + food groups
+│   │   ├── spices/               # Spice management
+│   │   ├── users/                # User management
+│   │   ├── plans/                # Plan overview
+│   │   ├── settings/             # System settings (calorie distribution)
+│   │   └── test-console/         # Admin testing tools
+│   │       ├── tdee-calculator/  # Simulate TDEE calculation
+│   │       ├── meal-planner/     # Preview meal suggestions
+│   │       └── alternatives/     # Test recipe/ingredient swaps
+│   ├── api/                      # API routes
+│   │   └── upload/               # Image upload endpoints
 │   ├── layout.tsx                # Root layout
 │   └── page.tsx                  # Home page
 ├── components/
 │   ├── ui/                       # shadcn/ui components
 │   ├── layout/                   # Layout components
+│   ├── admin/                    # Admin panel components
 │   ├── recipes/                  # Recipe components
 │   └── onboarding/               # Onboarding components
 ├── lib/
 │   ├── supabase.ts               # Supabase client
+│   ├── actions/                  # Server actions
 │   ├── validators/               # Zod schemas
 │   └── utils/                    # Utility functions
 ├── supabase/
 │   ├── schema.sql                # Database schema
+│   ├── migrations/               # SQL migration files
 │   └── functions/                # Edge functions
+├── scripts/                      # Utility scripts (audits, etc.)
 └── docs/
     ├── main/                     # Core documentation
-    └── working/                  # Working notes
+    └── working/                  # Working notes & planning
 ```
 
 ---
