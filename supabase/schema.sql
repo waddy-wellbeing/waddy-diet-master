@@ -206,6 +206,27 @@ CREATE POLICY profiles_update_own ON profiles
 CREATE POLICY profiles_delete_own ON profiles
   FOR DELETE USING (auth.uid() = user_id);
 
+-- Admin can manage all profiles
+CREATE POLICY profiles_admin_select ON profiles
+  FOR SELECT USING (
+    EXISTS (SELECT 1 FROM profiles p WHERE p.user_id = auth.uid() AND p.role = 'admin')
+  );
+
+CREATE POLICY profiles_admin_insert ON profiles
+  FOR INSERT WITH CHECK (
+    EXISTS (SELECT 1 FROM profiles p WHERE p.user_id = auth.uid() AND p.role = 'admin')
+  );
+
+CREATE POLICY profiles_admin_update ON profiles
+  FOR UPDATE USING (
+    EXISTS (SELECT 1 FROM profiles p WHERE p.user_id = auth.uid() AND p.role = 'admin')
+  );
+
+CREATE POLICY profiles_admin_delete ON profiles
+  FOR DELETE USING (
+    EXISTS (SELECT 1 FROM profiles p WHERE p.user_id = auth.uid() AND p.role = 'admin')
+  );
+
 CREATE POLICY ingredients_select ON ingredients
   FOR SELECT USING (is_public = TRUE OR auth.uid() = created_by);
 

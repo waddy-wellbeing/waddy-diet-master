@@ -13,6 +13,7 @@ import {
   LogOut,
   ChevronLeft,
   Menu,
+  FlaskConical,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
@@ -59,6 +60,11 @@ const navItems = [
     title: 'Users',
     href: '/admin/users',
     icon: Users,
+  },
+  {
+    title: 'Test Console',
+    href: '/admin/test-console',
+    icon: FlaskConical,
   },
   {
     title: 'Settings',
