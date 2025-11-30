@@ -13,6 +13,7 @@ CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 -- =============================================================================
 
 CREATE TYPE user_role AS ENUM ('admin', 'moderator', 'client');
+CREATE TYPE plan_status AS ENUM ('pending_assignment', 'active', 'paused', 'expired');
 
 -- =============================================================================
 -- PROFILES
@@ -23,6 +24,7 @@ CREATE TABLE profiles (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
   role user_role NOT NULL DEFAULT 'client',
+  plan_status plan_status NOT NULL DEFAULT 'pending_assignment',
   basic_info JSONB NOT NULL DEFAULT '{}',
   targets JSONB NOT NULL DEFAULT '{}',
   preferences JSONB NOT NULL DEFAULT '{}',

@@ -21,11 +21,22 @@ export interface ProfileBasicInfo {
 
 /** Calculated nutritional targets */
 export interface ProfileTargets {
-  calories?: number
+  daily_calories?: number
   protein_g?: number
   carbs_g?: number
   fat_g?: number
   fiber_g?: number
+  // Calculated BMR and TDEE (stored for reference)
+  bmr?: number
+  tdee?: number
+}
+
+/** Single meal slot in the user's meal structure */
+export interface MealSlot {
+  name: string           // e.g., "breakfast", "mid_morning", "lunch", "afternoon", "dinner"
+  label?: string         // Display label, e.g., "وجبة الإفطار"
+  percentage: number     // e.g., 0.25 for 25%
+  target_calories?: number // Calculated: daily_calories * percentage
 }
 
 /** User dietary preferences and restrictions */
@@ -36,6 +47,9 @@ export interface ProfilePreferences {
   cuisine_preferences?: string[]
   cooking_skill?: 'beginner' | 'intermediate' | 'advanced'
   max_prep_time_minutes?: number
+  // Meal structure - assigned by coach
+  meals_per_day?: number           // User's requested meal count (from onboarding)
+  meal_structure?: MealSlot[]      // Assigned by coach with percentages
 }
 
 /** User goal information */
@@ -44,6 +58,9 @@ export interface ProfileGoals {
   target_weight_kg?: number
   pace?: 'slow' | 'moderate' | 'aggressive'
 }
+
+/** User plan status */
+export type PlanStatus = 'pending_assignment' | 'active' | 'paused' | 'expired'
 
 // =============================================================================
 // INGREDIENTS
@@ -220,6 +237,16 @@ export interface DailyLog {
 export const MEAL_TYPES = ['breakfast', 'lunch', 'dinner', 'snacks'] as const
 export type MealType = typeof MEAL_TYPES[number]
 
+/** Standard meal slot names for coach assignment */
+export const MEAL_SLOT_OPTIONS = [
+  { value: 'breakfast', label: 'Breakfast', label_ar: 'الإفطار' },
+  { value: 'mid_morning', label: 'Mid-Morning', label_ar: 'وجبة منتصف الصباح' },
+  { value: 'lunch', label: 'Lunch', label_ar: 'الغداء' },
+  { value: 'afternoon', label: 'Afternoon Snack', label_ar: 'وجبة بعد الظهر' },
+  { value: 'dinner', label: 'Dinner', label_ar: 'العشاء' },
+  { value: 'evening', label: 'Evening Snack', label_ar: 'وجبة المساء' },
+] as const
+
 // =============================================================================
 // DATABASE ROW TYPES
 // =============================================================================
@@ -228,10 +255,12 @@ export type MealType = typeof MEAL_TYPES[number]
 export interface ProfileRecord {
   id: string
   user_id: string
+  role: 'admin' | 'moderator' | 'client'
   basic_info: ProfileBasicInfo
   targets: ProfileTargets
   preferences: ProfilePreferences
   goals: ProfileGoals
+  plan_status: PlanStatus
   onboarding_completed: boolean
   onboarding_step: number
   created_at: string

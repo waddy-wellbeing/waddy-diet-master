@@ -85,7 +85,7 @@
 
 **Inputs**:
 - Daily calorie target
-- Number of meals/snacks
+- Meal structure (from user profile)
 - Optional: dietary restrictions
 
 **Outputs**:
@@ -118,6 +118,33 @@
 - Alternatives in same `food_group`
 - Nutritional comparison
 - Quantity adjustment for calorie match
+
+### 5. User Plan Assignment 🆕
+**Priority**: High  
+**Description**: Coach assigns meal structure to users after onboarding
+
+**Path**: `/admin/users/[id]/assign-plan`
+
+**Flow**:
+1. User completes onboarding → `plan_status = 'pending_assignment'`
+2. Coach sees pending users list
+3. Coach views user's TDEE + requested meal count
+4. Coach assigns meal structure with percentages
+5. User's `plan_status` → `'active'`
+6. User can now see their personalized meals
+
+**Meal Structure Example** (stored in `profiles.preferences.meal_structure`):
+```json
+{
+  "meals": [
+    { "name": "breakfast", "label": "الإفطار", "percentage": 0.20 },
+    { "name": "mid_morning", "label": "وجبة منتصف الصباح", "percentage": 0.15 },
+    { "name": "lunch", "label": "الغداء", "percentage": 0.25 },
+    { "name": "afternoon", "label": "وجبة بعد الظهر", "percentage": 0.15 },
+    { "name": "dinner", "label": "العشاء", "percentage": 0.25 }
+  ]
+}
+```
 
 ---
 
