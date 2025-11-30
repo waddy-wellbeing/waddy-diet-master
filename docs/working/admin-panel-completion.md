@@ -15,6 +15,7 @@
 | Ingredient CRUD | ✅ Done | `/admin/ingredients` |
 | Spice CRUD | ✅ Done | `/admin/spices` |
 | User listing | ✅ Done | `/admin/users` |
+| System Settings | ✅ Done | `/admin/settings` |
 
 ## Remaining Tasks
 

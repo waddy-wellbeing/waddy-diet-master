@@ -168,6 +168,19 @@ CREATE INDEX daily_logs_log_date_idx ON daily_logs(log_date);
 CREATE INDEX daily_logs_user_date_idx ON daily_logs(user_id, log_date);
 
 -- =============================================================================
+-- SYSTEM SETTINGS
+-- =============================================================================
+-- Stores system-wide configuration for meal distribution, scaling, etc.
+
+CREATE TABLE system_settings (
+  key VARCHAR(100) PRIMARY KEY,
+  value JSONB NOT NULL,
+  description TEXT,
+  updated_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_by UUID REFERENCES auth.users(id)
+);
+
+-- =============================================================================
 -- ROW LEVEL SECURITY (RLS)
 -- =============================================================================
 
@@ -177,6 +190,7 @@ ALTER TABLE spices ENABLE ROW LEVEL SECURITY;
 ALTER TABLE recipes ENABLE ROW LEVEL SECURITY;
 ALTER TABLE daily_plans ENABLE ROW LEVEL SECURITY;
 ALTER TABLE daily_logs ENABLE ROW LEVEL SECURITY;
+ALTER TABLE system_settings ENABLE ROW LEVEL SECURITY;
 
 CREATE POLICY profiles_select_own ON profiles
   FOR SELECT USING (auth.uid() = user_id);
@@ -241,6 +255,27 @@ CREATE POLICY daily_logs_update_own ON daily_logs
 CREATE POLICY daily_logs_delete_own ON daily_logs
   FOR DELETE USING (auth.uid() = user_id);
 
+-- System settings: Only admins can manage
+CREATE POLICY system_settings_admin_select ON system_settings
+  FOR SELECT USING (
+    EXISTS (SELECT 1 FROM profiles WHERE user_id = auth.uid() AND role = 'admin')
+  );
+
+CREATE POLICY system_settings_admin_insert ON system_settings
+  FOR INSERT WITH CHECK (
+    EXISTS (SELECT 1 FROM profiles WHERE user_id = auth.uid() AND role = 'admin')
+  );
+
+CREATE POLICY system_settings_admin_update ON system_settings
+  FOR UPDATE USING (
+    EXISTS (SELECT 1 FROM profiles WHERE user_id = auth.uid() AND role = 'admin')
+  );
+
+CREATE POLICY system_settings_admin_delete ON system_settings
+  FOR DELETE USING (
+    EXISTS (SELECT 1 FROM profiles WHERE user_id = auth.uid() AND role = 'admin')
+  );
+
 -- =============================================================================
 -- TRIGGERS
 -- =============================================================================
@@ -275,6 +310,10 @@ CREATE TRIGGER daily_plans_updated_at
 
 CREATE TRIGGER daily_logs_updated_at
   BEFORE UPDATE ON daily_logs
+  FOR EACH ROW EXECUTE FUNCTION update_updated_at();
+
+CREATE TRIGGER system_settings_updated_at
+  BEFORE UPDATE ON system_settings
   FOR EACH ROW EXECUTE FUNCTION update_updated_at();
 
 -- =============================================================================

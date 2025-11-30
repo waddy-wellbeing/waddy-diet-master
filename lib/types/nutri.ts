@@ -318,3 +318,43 @@ export interface DailyLogRecord {
   created_at: string
   updated_at: string
 }
+
+// =============================================================================
+// SYSTEM SETTINGS
+// =============================================================================
+
+/** Meal distribution percentages (must sum to 1.0) */
+export interface MealDistribution {
+  breakfast: number
+  lunch: number
+  dinner: number
+  snacks: number
+}
+
+/** Scaling limits for recipe portion adjustments */
+export interface ScalingLimits {
+  min_scale_factor: number
+  max_scale_factor: number
+}
+
+/** System setting record from database */
+export interface SystemSettingRecord {
+  key: string
+  value: unknown
+  description: string | null
+  updated_at: string
+  updated_by: string | null
+}
+
+/** Known system setting keys with their value types */
+export interface SystemSettingsMap {
+  meal_distribution: MealDistribution
+  deviation_tolerance: number
+  default_meals_per_day: number
+  default_snacks_per_day: number
+  min_calories_per_day: number
+  max_calories_per_day: number
+  scaling_limits: ScalingLimits
+}
+
+export type SystemSettingKey = keyof SystemSettingsMap
