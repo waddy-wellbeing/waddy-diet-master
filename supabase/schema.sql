@@ -194,37 +194,31 @@ ALTER TABLE daily_plans ENABLE ROW LEVEL SECURITY;
 ALTER TABLE daily_logs ENABLE ROW LEVEL SECURITY;
 ALTER TABLE system_settings ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY profiles_select_own ON profiles
-  FOR SELECT USING (auth.uid() = user_id);
-
-CREATE POLICY profiles_insert_own ON profiles
-  FOR INSERT WITH CHECK (auth.uid() = user_id);
-
-CREATE POLICY profiles_update_own ON profiles
-  FOR UPDATE USING (auth.uid() = user_id);
-
-CREATE POLICY profiles_delete_own ON profiles
-  FOR DELETE USING (auth.uid() = user_id);
-
--- Admin can manage all profiles
-CREATE POLICY profiles_admin_select ON profiles
+-- Profiles: User can access own profile, Admin/Moderator can access all
+CREATE POLICY profiles_select ON profiles
   FOR SELECT USING (
-    EXISTS (SELECT 1 FROM profiles p WHERE p.user_id = auth.uid() AND p.role = 'admin')
+    auth.uid() = user_id 
+    OR 
+    is_admin_or_moderator()
   );
 
-CREATE POLICY profiles_admin_insert ON profiles
+CREATE POLICY profiles_insert ON profiles
   FOR INSERT WITH CHECK (
-    EXISTS (SELECT 1 FROM profiles p WHERE p.user_id = auth.uid() AND p.role = 'admin')
+    auth.uid() = user_id 
+    OR 
+    is_admin_or_moderator()
   );
 
-CREATE POLICY profiles_admin_update ON profiles
+CREATE POLICY profiles_update ON profiles
   FOR UPDATE USING (
-    EXISTS (SELECT 1 FROM profiles p WHERE p.user_id = auth.uid() AND p.role = 'admin')
+    auth.uid() = user_id 
+    OR 
+    is_admin_or_moderator()
   );
 
-CREATE POLICY profiles_admin_delete ON profiles
+CREATE POLICY profiles_delete ON profiles
   FOR DELETE USING (
-    EXISTS (SELECT 1 FROM profiles p WHERE p.user_id = auth.uid() AND p.role = 'admin')
+    is_admin_or_moderator()
   );
 
 CREATE POLICY ingredients_select ON ingredients
