@@ -1,0 +1,380 @@
+'use client'
+
+import { useState, useEffect } from 'react'
+import Link from 'next/link'
+import Image from 'next/image'
+import { 
+  ArrowLeft, 
+  CalendarDays, 
+  UtensilsCrossed, 
+  RefreshCw, 
+  ChevronRight,
+  Clock,
+  Scale,
+  AlertCircle,
+  CheckCircle2,
+  Filter,
+} from 'lucide-react'
+import { Button } from '@/components/ui/button'
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import { generateTestMealPlan, type RecipeForMealPlan } from '@/lib/actions/test-console'
+import type { MealSlot } from '@/lib/types/nutri'
+
+// Default meal structures
+const MEAL_TEMPLATES: Record<string, MealSlot[]> = {
+  '3_meals': [
+    { name: 'breakfast', percentage: 0.30, target_calories: 0 },
+    { name: 'lunch', percentage: 0.40, target_calories: 0 },
+    { name: 'dinner', percentage: 0.30, target_calories: 0 },
+  ],
+  '3_meals_2_snacks': [
+    { name: 'breakfast', percentage: 0.25, target_calories: 0 },
+    { name: 'mid_morning', percentage: 0.10, target_calories: 0 },
+    { name: 'lunch', percentage: 0.30, target_calories: 0 },
+    { name: 'afternoon', percentage: 0.10, target_calories: 0 },
+    { name: 'dinner', percentage: 0.25, target_calories: 0 },
+  ],
+  '4_meals': [
+    { name: 'breakfast', percentage: 0.25, target_calories: 0 },
+    { name: 'lunch', percentage: 0.30, target_calories: 0 },
+    { name: 'afternoon', percentage: 0.15, target_calories: 0 },
+    { name: 'dinner', percentage: 0.30, target_calories: 0 },
+  ],
+  '5_meals': [
+    { name: 'breakfast', percentage: 0.20, target_calories: 0 },
+    { name: 'mid_morning', percentage: 0.10, target_calories: 0 },
+    { name: 'lunch', percentage: 0.25, target_calories: 0 },
+    { name: 'afternoon', percentage: 0.15, target_calories: 0 },
+    { name: 'dinner', percentage: 0.30, target_calories: 0 },
+  ],
+  '6_meals': [
+    { name: 'breakfast', percentage: 0.18, target_calories: 0 },
+    { name: 'mid_morning', percentage: 0.10, target_calories: 0 },
+    { name: 'lunch', percentage: 0.22, target_calories: 0 },
+    { name: 'afternoon', percentage: 0.12, target_calories: 0 },
+    { name: 'dinner', percentage: 0.25, target_calories: 0 },
+    { name: 'evening', percentage: 0.13, target_calories: 0 },
+  ],
+}
+
+const MEAL_SLOT_LABELS: Record<string, string> = {
+  breakfast: 'Breakfast',
+  mid_morning: 'Mid-Morning',
+  lunch: 'Lunch',
+  afternoon: 'Afternoon',
+  dinner: 'Dinner',
+  evening: 'Evening',
+  snack: 'Snack',
+}
+
+interface MealPlanResult {
+  slot: MealSlot
+  recipe: RecipeForMealPlan | null
+  alternativeCount: number
+}
+
+export default function MealPlannerPage() {
+  const [dailyCalories, setDailyCalories] = useState(2000)
+  const [selectedTemplate, setSelectedTemplate] = useState('3_meals_2_snacks')
+  const [dietaryFilters, setDietaryFilters] = useState({
+    vegetarian: false,
+    vegan: false,
+    gluten_free: false,
+    dairy_free: false,
+  })
+  const [isGenerating, setIsGenerating] = useState(false)
+  const [mealPlan, setMealPlan] = useState<MealPlanResult[] | null>(null)
+  const [totalCalories, setTotalCalories] = useState(0)
+  const [error, setError] = useState<string | null>(null)
+
+  const handleGenerate = async () => {
+    setIsGenerating(true)
+    setError(null)
+    
+    const mealStructure = MEAL_TEMPLATES[selectedTemplate]
+    
+    const { data, totalCalories: total, error: err } = await generateTestMealPlan({
+      dailyCalories,
+      mealStructure,
+      dietaryFilters: Object.entries(dietaryFilters).some(([, v]) => v) 
+        ? dietaryFilters 
+        : undefined,
+    })
+
+    if (err) {
+      setError(err)
+      setMealPlan(null)
+    } else {
+      setMealPlan(data)
+      setTotalCalories(total)
+    }
+    
+    setIsGenerating(false)
+  }
+
+  const calorieVariance = mealPlan ? totalCalories - dailyCalories : 0
+  const variancePercent = mealPlan ? Math.round((calorieVariance / dailyCalories) * 100) : 0
+
+  return (
+    <div className="space-y-6">
+      {/* Header */}
+      <div className="flex items-center gap-4">
+        <Link href="/admin/test-console">
+          <Button variant="ghost" size="icon">
+            <ArrowLeft className="h-5 w-5" />
+          </Button>
+        </Link>
+        <div>
+          <h1 className="text-2xl font-bold">Meal Plan Preview</h1>
+          <p className="text-muted-foreground">
+            Test meal plan generation with different calorie targets and structures
+          </p>
+        </div>
+      </div>
+
+      <div className="grid gap-6 lg:grid-cols-3">
+        {/* Config Panel */}
+        <div className="space-y-4">
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <CalendarDays className="h-5 w-5" />
+                Plan Configuration
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="calories">Daily Calorie Target</Label>
+                <Input
+                  id="calories"
+                  type="number"
+                  min={1200}
+                  max={5000}
+                  step={50}
+                  value={dailyCalories}
+                  onChange={(e) => setDailyCalories(parseInt(e.target.value) || 2000)}
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label>Meal Structure</Label>
+                <select
+                  className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  value={selectedTemplate}
+                  onChange={(e) => setSelectedTemplate(e.target.value)}
+                >
+                  <option value="3_meals">3 Meals</option>
+                  <option value="3_meals_2_snacks">3 Meals + 2 Snacks</option>
+                  <option value="4_meals">4 Meals</option>
+                  <option value="5_meals">5 Meals</option>
+                  <option value="6_meals">6 Meals</option>
+                </select>
+              </div>
+
+              {/* Meal breakdown preview */}
+              <div className="rounded-lg bg-muted/50 p-3 space-y-2">
+                <div className="text-sm font-medium">Calorie Distribution</div>
+                {MEAL_TEMPLATES[selectedTemplate].map(slot => (
+                  <div key={slot.name} className="flex justify-between text-sm">
+                    <span className="text-muted-foreground">{MEAL_SLOT_LABELS[slot.name]}</span>
+                    <span className="font-mono">
+                      {Math.round(dailyCalories * slot.percentage)} kcal ({Math.round(slot.percentage * 100)}%)
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Filter className="h-5 w-5" />
+                Dietary Filters
+              </CardTitle>
+              <CardDescription>
+                Filter recipes by dietary restrictions
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              {[
+                { key: 'vegetarian', label: 'Vegetarian' },
+                { key: 'vegan', label: 'Vegan' },
+                { key: 'gluten_free', label: 'Gluten-Free' },
+                { key: 'dairy_free', label: 'Dairy-Free' },
+              ].map(({ key, label }) => (
+                <label key={key} className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    checked={dietaryFilters[key as keyof typeof dietaryFilters]}
+                    onChange={(e) => setDietaryFilters(prev => ({ ...prev, [key]: e.target.checked }))}
+                    className="h-4 w-4 rounded border-gray-300"
+                  />
+                  <span className="text-sm">{label}</span>
+                </label>
+              ))}
+            </CardContent>
+          </Card>
+
+          <Button 
+            onClick={handleGenerate} 
+            className="w-full" 
+            size="lg"
+            disabled={isGenerating}
+          >
+            {isGenerating ? (
+              <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+            ) : (
+              <UtensilsCrossed className="h-4 w-4 mr-2" />
+            )}
+            Generate Meal Plan
+          </Button>
+        </div>
+
+        {/* Results Panel */}
+        <div className="lg:col-span-2 space-y-4">
+          {error && (
+            <Card className="border-destructive">
+              <CardContent className="pt-6">
+                <div className="flex items-center gap-2 text-destructive">
+                  <AlertCircle className="h-5 w-5" />
+                  <span>{error}</span>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
+          {mealPlan && (
+            <>
+              {/* Summary */}
+              <Card>
+                <CardContent className="pt-6">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <div className="text-sm text-muted-foreground">Total Plan Calories</div>
+                      <div className="text-3xl font-bold">{totalCalories} kcal</div>
+                    </div>
+                    <div className={`flex items-center gap-2 px-3 py-1 rounded-full ${
+                      Math.abs(variancePercent) <= 5 
+                        ? 'bg-green-100 text-green-700 dark:bg-green-950 dark:text-green-400'
+                        : Math.abs(variancePercent) <= 10
+                        ? 'bg-yellow-100 text-yellow-700 dark:bg-yellow-950 dark:text-yellow-400'
+                        : 'bg-red-100 text-red-700 dark:bg-red-950 dark:text-red-400'
+                    }`}>
+                      {Math.abs(variancePercent) <= 5 ? (
+                        <CheckCircle2 className="h-4 w-4" />
+                      ) : (
+                        <AlertCircle className="h-4 w-4" />
+                      )}
+                      <span className="text-sm font-medium">
+                        {calorieVariance >= 0 ? '+' : ''}{calorieVariance} kcal ({variancePercent >= 0 ? '+' : ''}{variancePercent}%)
+                      </span>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* Meal Cards */}
+              <div className="space-y-3">
+                {mealPlan.map(({ slot, recipe, alternativeCount }) => (
+                  <Card key={slot.name}>
+                    <CardContent className="pt-6">
+                      <div className="flex gap-4">
+                        {/* Meal slot info */}
+                        <div className="w-24 flex-shrink-0">
+                          <div className="font-medium">{MEAL_SLOT_LABELS[slot.name]}</div>
+                          <div className="text-sm text-muted-foreground">
+                            {slot.target_calories} kcal
+                          </div>
+                          <div className="text-xs text-muted-foreground">
+                            target
+                          </div>
+                        </div>
+
+                        {/* Recipe */}
+                        {recipe ? (
+                          <div className="flex-1 flex gap-4">
+                            {/* Image */}
+                            <div className="w-20 h-20 rounded-lg bg-muted flex-shrink-0 overflow-hidden">
+                              {recipe.image_url ? (
+                                <Image
+                                  src={recipe.image_url}
+                                  alt={recipe.name}
+                                  width={80}
+                                  height={80}
+                                  className="w-full h-full object-cover"
+                                />
+                              ) : (
+                                <div className="w-full h-full flex items-center justify-center">
+                                  <UtensilsCrossed className="h-8 w-8 text-muted-foreground" />
+                                </div>
+                              )}
+                            </div>
+
+                            {/* Details */}
+                            <div className="flex-1 min-w-0">
+                              <div className="font-medium truncate">{recipe.name}</div>
+                              <div className="flex items-center gap-4 text-sm text-muted-foreground mt-1">
+                                {recipe.cuisine && (
+                                  <span>{recipe.cuisine}</span>
+                                )}
+                                {(recipe.prep_time_minutes || recipe.cook_time_minutes) && (
+                                  <span className="flex items-center gap-1">
+                                    <Clock className="h-3 w-3" />
+                                    {(recipe.prep_time_minutes || 0) + (recipe.cook_time_minutes || 0)} min
+                                  </span>
+                                )}
+                              </div>
+                              <div className="flex items-center gap-4 text-sm mt-2">
+                                <span className="flex items-center gap-1 text-primary font-medium">
+                                  <Scale className="h-3 w-3" />
+                                  {recipe.scale_factor}x scale
+                                </span>
+                                <span className="font-medium">
+                                  {recipe.scaled_calories} kcal
+                                </span>
+                                {recipe.nutrition_per_serving?.protein_g && (
+                                  <span className="text-muted-foreground">
+                                    {Math.round(recipe.nutrition_per_serving.protein_g * (recipe.scale_factor || 1))}g protein
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+
+                            {/* Alternatives count */}
+                            <div className="flex items-center gap-1 text-sm text-muted-foreground">
+                              <span>+{alternativeCount} alternatives</span>
+                              <ChevronRight className="h-4 w-4" />
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="flex-1 flex items-center justify-center text-muted-foreground">
+                            <AlertCircle className="h-5 w-5 mr-2" />
+                            No suitable recipe found
+                          </div>
+                        )}
+                      </div>
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+            </>
+          )}
+
+          {!mealPlan && !error && (
+            <Card className="min-h-[400px] flex items-center justify-center">
+              <CardContent className="text-center">
+                <CalendarDays className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+                <p className="text-muted-foreground">
+                  Configure calorie target and meal structure, then generate a plan
+                </p>
+              </CardContent>
+            </Card>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
