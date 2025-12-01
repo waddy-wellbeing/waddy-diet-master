@@ -209,15 +209,23 @@ export async function getRecipesForMeal(options: {
 
 /**
  * Get alternative recipes for a given recipe (same meal type)
+ * Supports pagination with offset
  */
 export async function getRecipeAlternatives(options: {
   recipeId: string
   targetCalories?: number
   limit?: number
-}): Promise<{ data: RecipeForMealPlan[] | null; originalRecipe: RecipeForMealPlan | null; error: string | null }> {
+  offset?: number
+}): Promise<{ 
+  data: RecipeForMealPlan[] | null
+  originalRecipe: RecipeForMealPlan | null
+  total: number
+  hasMore: boolean
+  error: string | null 
+}> {
   const supabase = await createClient()
   
-  const { recipeId, targetCalories, limit = 10 } = options
+  const { recipeId, targetCalories, limit = 12, offset = 0 } = options
 
   // Get the original recipe with ingredients
   // Use FK hint to disambiguate which ingredients relation to use
@@ -235,7 +243,7 @@ export async function getRecipeAlternatives(options: {
     .single()
 
   if (originalError || !original) {
-    return { data: null, originalRecipe: null, error: originalError?.message || 'Recipe not found' }
+    return { data: null, originalRecipe: null, total: 0, hasMore: false, error: originalError?.message || 'Recipe not found' }
   }
 
   // Transform original recipe
@@ -243,7 +251,7 @@ export async function getRecipeAlternatives(options: {
 
   const mealTypes = original.meal_type || []
   if (mealTypes.length === 0) {
-    return { data: [], originalRecipe: transformedOriginal, error: null }
+    return { data: [], originalRecipe: transformedOriginal, total: 0, hasMore: false, error: null }
   }
 
   // Use original recipe calories if target not specified
@@ -264,10 +272,10 @@ export async function getRecipeAlternatives(options: {
     .neq('id', recipeId)
     .overlaps('meal_type', mealTypes)
     .not('nutrition_per_serving', 'is', null)
-    .limit(50)
+    .limit(500)  // Fetch all possible alternatives for filtering
 
   if (error) {
-    return { data: null, originalRecipe: transformedOriginal, error: error.message }
+    return { data: null, originalRecipe: transformedOriginal, total: 0, hasMore: false, error: error.message }
   }
 
   // Get scaling limits
@@ -299,20 +307,30 @@ export async function getRecipeAlternatives(options: {
     return aDistFromOne - bDistFromOne
   })
 
+  // Apply pagination
+  const total = suitableAlternatives.length
+  const paginatedData = suitableAlternatives.slice(offset, offset + limit)
+  const hasMore = offset + limit < total
+
   return { 
-    data: suitableAlternatives.slice(0, limit), 
+    data: paginatedData, 
     originalRecipe: transformedOriginal,
+    total,
+    hasMore,
     error: null 
   }
 }
 
 /**
  * Get ingredient swap options (same food group)
+ * Supports pagination with offset
  */
 export async function getIngredientSwaps(options: {
   ingredientId: string
   targetAmount?: number
   targetUnit?: string
+  limit?: number
+  offset?: number
 }): Promise<{ 
   data: Array<{
     id: string
@@ -336,11 +354,13 @@ export async function getIngredientSwaps(options: {
     serving_unit: string
     macros: { calories?: number; protein_g?: number; carbs_g?: number; fat_g?: number }
   } | null
+  total: number
+  hasMore: boolean
   error: string | null 
 }> {
   const supabase = await createClient()
   
-  const { ingredientId, targetAmount, targetUnit } = options
+  const { ingredientId, targetAmount, targetUnit, limit = 12, offset = 0 } = options
 
   // Get original ingredient
   const { data: original, error: originalError } = await supabase
@@ -350,11 +370,11 @@ export async function getIngredientSwaps(options: {
     .single()
 
   if (originalError || !original) {
-    return { data: null, originalIngredient: null, error: originalError?.message || 'Ingredient not found' }
+    return { data: null, originalIngredient: null, total: 0, hasMore: false, error: originalError?.message || 'Ingredient not found' }
   }
 
   if (!original.food_group) {
-    return { data: [], originalIngredient: original, error: null }
+    return { data: [], originalIngredient: original, total: 0, hasMore: false, error: null }
   }
 
   // Get alternatives in same food group
@@ -363,10 +383,10 @@ export async function getIngredientSwaps(options: {
     .select('id, name, name_ar, food_group, subgroup, serving_size, serving_unit, macros')
     .eq('food_group', original.food_group)
     .neq('id', ingredientId)
-    .limit(30)
+    .limit(200)  // Fetch all for sorting, then paginate
 
   if (error) {
-    return { data: null, originalIngredient: original, error: error.message }
+    return { data: null, originalIngredient: original, total: 0, hasMore: false, error: error.message }
   }
 
   // Calculate calorie equivalence if target amount provided
@@ -402,7 +422,12 @@ export async function getIngredientSwaps(options: {
     return a.name.localeCompare(b.name)
   })
 
-  return { data: swapOptions, originalIngredient: original, error: null }
+  // Apply pagination
+  const total = swapOptions.length
+  const paginatedData = swapOptions.slice(offset, offset + limit)
+  const hasMore = offset + limit < total
+
+  return { data: paginatedData, originalIngredient: original, total, hasMore, error: null }
 }
 
 /**

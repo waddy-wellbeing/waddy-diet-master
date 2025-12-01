@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useRef, useCallback } from 'react'
 import Link from 'next/link'
 import Image from 'next/image'
 import { 
@@ -18,6 +18,7 @@ import {
   Apple,
   Sparkles,
   X,
+  Loader2,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -30,6 +31,8 @@ import {
   type RecipeForMealPlan 
 } from '@/lib/actions/test-console'
 import type { MealSlot } from '@/lib/types/nutri'
+
+const PAGE_SIZE = 12 // Items per page for infinite scroll
 
 // Meal structure templates
 const MEAL_TEMPLATES: Record<string, MealSlot[]> = {
@@ -96,12 +99,17 @@ export default function FullTesterPage() {
   const [mealPlan, setMealPlan] = useState<MealPlanResult[] | null>(null)
   const [totalCalories, setTotalCalories] = useState(0)
 
-  // Alternatives state
+  // Alternatives state with pagination
   const [selectedMealIndex, setSelectedMealIndex] = useState<number | null>(null)
   const [alternatives, setAlternatives] = useState<RecipeForMealPlan[] | null>(null)
+  const [alternativesTotal, setAlternativesTotal] = useState(0)
+  const [alternativesHasMore, setAlternativesHasMore] = useState(false)
   const [isLoadingAlternatives, setIsLoadingAlternatives] = useState(false)
+  const [isLoadingMoreAlternatives, setIsLoadingMoreAlternatives] = useState(false)
+  const [currentRecipeId, setCurrentRecipeId] = useState<string | null>(null)
+  const [currentTargetCalories, setCurrentTargetCalories] = useState<number>(0)
 
-  // Ingredient swaps state
+  // Ingredient swaps state with pagination
   const [selectedIngredient, setSelectedIngredient] = useState<{
     id: string
     name: string
@@ -109,17 +117,28 @@ export default function FullTesterPage() {
     unit: string
   } | null>(null)
   const [ingredientSwaps, setIngredientSwaps] = useState<SwapOption[] | null>(null)
+  const [swapsTotal, setSwapsTotal] = useState(0)
+  const [swapsHasMore, setSwapsHasMore] = useState(false)
   const [isLoadingSwaps, setIsLoadingSwaps] = useState(false)
+  const [isLoadingMoreSwaps, setIsLoadingMoreSwaps] = useState(false)
 
   // UI state
   const [expandedMeal, setExpandedMeal] = useState<number | null>(null)
+  
+  // Refs for scroll detection
+  const alternativesRef = useRef<HTMLDivElement>(null)
+  const swapsRef = useRef<HTMLDivElement>(null)
 
   const handleGenerate = async () => {
     setIsGenerating(true)
     setMealPlan(null)
     setAlternatives(null)
+    setAlternativesTotal(0)
+    setAlternativesHasMore(false)
     setSelectedMealIndex(null)
     setIngredientSwaps(null)
+    setSwapsTotal(0)
+    setSwapsHasMore(false)
     setSelectedIngredient(null)
     
     const mealStructure = MEAL_TEMPLATES[selectedTemplate]
@@ -141,24 +160,65 @@ export default function FullTesterPage() {
     if (selectedMealIndex === index) {
       setSelectedMealIndex(null)
       setAlternatives(null)
+      setAlternativesTotal(0)
+      setAlternativesHasMore(false)
       return
     }
 
     setSelectedMealIndex(index)
     setIsLoadingAlternatives(true)
     setAlternatives(null)
+    setAlternativesTotal(0)
+    setAlternativesHasMore(false)
     setIngredientSwaps(null)
+    setSwapsTotal(0)
+    setSwapsHasMore(false)
     setSelectedIngredient(null)
+    setCurrentRecipeId(recipe.id)
+    setCurrentTargetCalories(targetCalories)
 
-    const { data } = await getRecipeAlternatives({
+    const { data, total, hasMore } = await getRecipeAlternatives({
       recipeId: recipe.id,
       targetCalories,
-      limit: 8,
+      limit: PAGE_SIZE,
+      offset: 0,
     })
 
     setAlternatives(data)
+    setAlternativesTotal(total)
+    setAlternativesHasMore(hasMore)
     setIsLoadingAlternatives(false)
   }
+
+  const handleLoadMoreAlternatives = async () => {
+    if (!currentRecipeId || isLoadingMoreAlternatives || !alternativesHasMore) return
+    
+    setIsLoadingMoreAlternatives(true)
+    const currentOffset = alternatives?.length || 0
+    
+    const { data, hasMore } = await getRecipeAlternatives({
+      recipeId: currentRecipeId,
+      targetCalories: currentTargetCalories,
+      limit: PAGE_SIZE,
+      offset: currentOffset,
+    })
+
+    if (data) {
+      setAlternatives(prev => [...(prev || []), ...data])
+    }
+    setAlternativesHasMore(hasMore)
+    setIsLoadingMoreAlternatives(false)
+  }
+
+  // Scroll handler for alternatives - load more when near bottom
+  const handleAlternativesScroll = useCallback((e: React.UIEvent<HTMLDivElement>) => {
+    const target = e.currentTarget
+    const scrollBottom = target.scrollHeight - target.scrollTop - target.clientHeight
+    // Load more when within 100px of bottom
+    if (scrollBottom < 100 && alternativesHasMore && !isLoadingMoreAlternatives) {
+      handleLoadMoreAlternatives()
+    }
+  }, [alternativesHasMore, isLoadingMoreAlternatives])
 
   const handleSwapRecipe = (newRecipe: RecipeForMealPlan) => {
     if (selectedMealIndex === null || !mealPlan) return
@@ -175,6 +235,8 @@ export default function FullTesterPage() {
     setTotalCalories(newTotal)
     
     setAlternatives(null)
+    setAlternativesTotal(0)
+    setAlternativesHasMore(false)
     setSelectedMealIndex(null)
   }
 
@@ -182,20 +244,58 @@ export default function FullTesterPage() {
     if (selectedIngredient?.id === ingredientId) {
       setSelectedIngredient(null)
       setIngredientSwaps(null)
+      setSwapsTotal(0)
+      setSwapsHasMore(false)
       return
     }
 
     setSelectedIngredient({ id: ingredientId, name, amount, unit })
     setIsLoadingSwaps(true)
+    setIngredientSwaps(null)
+    setSwapsTotal(0)
+    setSwapsHasMore(false)
 
-    const { data } = await getIngredientSwaps({
+    const { data, total, hasMore } = await getIngredientSwaps({
       ingredientId,
       targetAmount: amount,
+      limit: PAGE_SIZE,
+      offset: 0,
     })
 
     setIngredientSwaps(data)
+    setSwapsTotal(total)
+    setSwapsHasMore(hasMore)
     setIsLoadingSwaps(false)
   }
+
+  const handleLoadMoreSwaps = async () => {
+    if (!selectedIngredient || isLoadingMoreSwaps || !swapsHasMore) return
+    
+    setIsLoadingMoreSwaps(true)
+    const currentOffset = ingredientSwaps?.length || 0
+    
+    const { data, hasMore } = await getIngredientSwaps({
+      ingredientId: selectedIngredient.id,
+      targetAmount: selectedIngredient.amount,
+      limit: PAGE_SIZE,
+      offset: currentOffset,
+    })
+
+    if (data) {
+      setIngredientSwaps(prev => [...(prev || []), ...data])
+    }
+    setSwapsHasMore(hasMore)
+    setIsLoadingMoreSwaps(false)
+  }
+
+  // Scroll handler for swaps - load more when near bottom
+  const handleSwapsScroll = useCallback((e: React.UIEvent<HTMLDivElement>) => {
+    const target = e.currentTarget
+    const scrollBottom = target.scrollHeight - target.scrollTop - target.clientHeight
+    if (scrollBottom < 100 && swapsHasMore && !isLoadingMoreSwaps) {
+      handleLoadMoreSwaps()
+    }
+  }, [swapsHasMore, isLoadingMoreSwaps])
 
   const calorieVariance = mealPlan ? totalCalories - dailyCalories : 0
   const variancePercent = mealPlan ? Math.round((calorieVariance / dailyCalories) * 100) : 0
@@ -466,7 +566,7 @@ export default function FullTesterPage() {
                             <div className="mt-3 p-3 bg-muted/50 rounded-lg">
                               <div className="flex items-center justify-between mb-2">
                                 <div className="text-xs font-medium">
-                                  Swaps for {selectedIngredient.name}
+                                  Swaps for {selectedIngredient.name} ({ingredientSwaps?.length || 0} of {swapsTotal})
                                 </div>
                                 <Button
                                   variant="ghost"
@@ -475,6 +575,8 @@ export default function FullTesterPage() {
                                   onClick={() => {
                                     setSelectedIngredient(null)
                                     setIngredientSwaps(null)
+                                    setSwapsTotal(0)
+                                    setSwapsHasMore(false)
                                   }}
                                 >
                                   <X className="h-3 w-3" />
@@ -485,8 +587,12 @@ export default function FullTesterPage() {
                                   <RefreshCw className="h-4 w-4 animate-spin text-muted-foreground" />
                                 </div>
                               ) : ingredientSwaps && ingredientSwaps.length > 0 ? (
-                                <div className="grid grid-cols-2 gap-2">
-                                  {ingredientSwaps.slice(0, 4).map((swap) => (
+                                <div 
+                                  className="grid grid-cols-2 sm:grid-cols-3 gap-2 max-h-[200px] overflow-y-auto"
+                                  onScroll={handleSwapsScroll}
+                                  ref={swapsRef}
+                                >
+                                  {ingredientSwaps.map((swap) => (
                                     <div 
                                       key={swap.id}
                                       className="p-2 bg-background rounded border text-xs"
@@ -506,6 +612,26 @@ export default function FullTesterPage() {
                                       </div>
                                     </div>
                                   ))}
+                                  {/* Loading more indicator */}
+                                  {isLoadingMoreSwaps && (
+                                    <div className="col-span-full flex items-center justify-center py-2">
+                                      <Loader2 className="h-4 w-4 animate-spin" />
+                                      <span className="ml-2 text-xs text-muted-foreground">Loading...</span>
+                                    </div>
+                                  )}
+                                  {/* Load more button */}
+                                  {swapsHasMore && !isLoadingMoreSwaps && (
+                                    <div className="col-span-full text-center py-1">
+                                      <Button 
+                                        variant="ghost" 
+                                        size="sm"
+                                        onClick={handleLoadMoreSwaps}
+                                        className="text-xs h-6"
+                                      >
+                                        +{swapsTotal - (ingredientSwaps?.length || 0)} more
+                                      </Button>
+                                    </div>
+                                  )}
                                 </div>
                               ) : (
                                 <div className="text-xs text-muted-foreground text-center py-2">
@@ -525,7 +651,7 @@ export default function FullTesterPage() {
                               🔄 Alternative Recipes (click to swap)
                             </div>
                             <span className="text-xs text-muted-foreground">
-                              {alternatives?.length || 0} options
+                              {alternatives?.length || 0} of {alternativesTotal} options
                             </span>
                           </div>
                           {isLoadingAlternatives ? (
@@ -533,7 +659,11 @@ export default function FullTesterPage() {
                               <RefreshCw className="h-5 w-5 animate-spin text-primary" />
                             </div>
                           ) : alternatives && alternatives.length > 0 ? (
-                            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3 max-h-[400px] overflow-y-auto pb-2">
+                            <div 
+                              className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3 max-h-[400px] overflow-y-auto pb-2"
+                              onScroll={handleAlternativesScroll}
+                              ref={alternativesRef}
+                            >
                               {alternatives.map((alt) => (
                                 <button
                                   key={alt.id}
@@ -561,6 +691,26 @@ export default function FullTesterPage() {
                                   </div>
                                 </button>
                               ))}
+                              {/* Loading more indicator */}
+                              {isLoadingMoreAlternatives && (
+                                <div className="col-span-full flex items-center justify-center py-4">
+                                  <Loader2 className="h-5 w-5 animate-spin text-primary" />
+                                  <span className="ml-2 text-sm text-muted-foreground">Loading more...</span>
+                                </div>
+                              )}
+                              {/* Load more trigger area */}
+                              {alternativesHasMore && !isLoadingMoreAlternatives && (
+                                <div className="col-span-full text-center py-2">
+                                  <Button 
+                                    variant="ghost" 
+                                    size="sm"
+                                    onClick={handleLoadMoreAlternatives}
+                                    className="text-xs"
+                                  >
+                                    Load more ({alternativesTotal - (alternatives?.length || 0)} remaining)
+                                  </Button>
+                                </div>
+                              )}
                             </div>
                           ) : (
                             <div className="text-sm text-muted-foreground text-center py-4">
