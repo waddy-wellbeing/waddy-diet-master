@@ -1,7 +1,12 @@
-# BiteRight - Copilot Instructions
+# Waddy Diet Master - Copilot Instructions
 
 ## Project Overview
-BiteRight is a personalized nutrition app built with Next.js 16 (App Router), TypeScript, Tailwind CSS 4, and Supabase. The app helps users plan meals, track nutrition, and achieve health goals.
+Waddy Diet Master is a personalized nutrition app built with Next.js 16 (App Router), TypeScript, Tailwind CSS 4, and Supabase. The app helps users plan meals, track nutrition, and achieve health goals.
+
+## Brand Colors
+- **Primary**: Lime Green (oklch 0.75-0.78, 0.2, 125) - Energy, vitality
+- **Dark/Foreground**: Dark charcoal with green tint
+- Logo: Lightning bolt ⚡ representing energy and power
 
 ## Architecture
 

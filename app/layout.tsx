@@ -14,8 +14,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "BiteRight - Personalized Nutrition",
-  description: "Plan meals, track nutrition, and achieve your health goals",
+  title: "Waddy Diet Master - Your Nutrition Coach",
+  description: "Master your diet with personalized meal plans and nutrition tracking",
 };
 
 export default function RootLayout({
