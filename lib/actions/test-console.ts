@@ -47,15 +47,17 @@ export async function getRecipesForMeal(options: {
   
   const { mealType, targetCalories, deviationTolerance = 0.25, dietaryFilters, limit = 20 } = options
 
-  // Map meal slot names to recipe meal_type values
+  // Map meal slot names to recipe meal_type values in the database
+  // Database meal_types: breakfast, lunch, snacks & sweetes, smoothies, one pot, side dishes
+  // User-facing meal slots: breakfast, lunch, dinner, snacks
   const mealTypeMapping: Record<string, string[]> = {
-    breakfast: ['breakfast'],
-    mid_morning: ['snack', 'breakfast'],
-    lunch: ['lunch', 'dinner'],
-    afternoon: ['snack'],
-    dinner: ['dinner', 'lunch'],
-    evening: ['snack'],
-    snack: ['snack'],
+    breakfast: ['breakfast', 'smoothies'],
+    lunch: ['lunch', 'one pot'],
+    dinner: ['lunch', 'one pot'],                    // Dinner uses lunch recipes
+    snack: ['snacks & sweetes', 'smoothies'],
+    snack_1: ['snacks & sweetes', 'smoothies'],
+    snack_2: ['snacks & sweetes', 'smoothies'],
+    snack_3: ['snacks & sweetes', 'smoothies'],
   }
 
   const targetMealTypes = mealTypeMapping[mealType] || [mealType]
@@ -92,9 +94,6 @@ export async function getRecipesForMeal(options: {
   }
 
   // Filter by meal type and calculate scaling
-  const minCalories = targetCalories * (1 - deviationTolerance)
-  const maxCalories = targetCalories * (1 + deviationTolerance)
-
   // Get scaling limits from settings
   const { data: scalingLimits } = await getSystemSetting('scaling_limits')
   const minScale = scalingLimits?.min_scale_factor || 0.5
@@ -113,30 +112,27 @@ export async function getRecipesForMeal(options: {
     const baseCalories = recipe.nutrition_per_serving?.calories
     if (!baseCalories || baseCalories <= 0) continue
 
-    // Calculate scale factor needed
+    // Calculate scale factor needed to hit EXACT target calories
     const scaleFactor = targetCalories / baseCalories
 
-    // Check if scaling is within limits
+    // Check if scaling is within acceptable limits (not too big or too small portions)
     if (scaleFactor < minScale || scaleFactor > maxScale) continue
 
-    // Calculate scaled calories
-    const scaledCalories = Math.round(baseCalories * scaleFactor)
+    // Scaled calories will ALWAYS equal target (that's the point of scaling)
+    const scaledCalories = targetCalories
 
-    // Check if within deviation tolerance
-    if (scaledCalories >= minCalories && scaledCalories <= maxCalories) {
-      suitableRecipes.push({
-        ...recipe,
-        scale_factor: Math.round(scaleFactor * 100) / 100,
-        scaled_calories: scaledCalories,
-      })
-    }
+    suitableRecipes.push({
+      ...recipe,
+      scale_factor: Math.round(scaleFactor * 100) / 100,
+      scaled_calories: scaledCalories,
+    })
   }
 
-  // Sort by how close to target calories
+  // Sort by scale factor closest to 1.0 (most natural portion size)
   suitableRecipes.sort((a, b) => {
-    const aDiff = Math.abs((a.scaled_calories || 0) - targetCalories)
-    const bDiff = Math.abs((b.scaled_calories || 0) - targetCalories)
-    return aDiff - bDiff
+    const aDistFromOne = Math.abs((a.scale_factor || 1) - 1)
+    const bDistFromOne = Math.abs((b.scale_factor || 1) - 1)
+    return aDistFromOne - bDistFromOne
   })
 
   return { data: suitableRecipes.slice(0, limit), error: null }
@@ -190,12 +186,6 @@ export async function getRecipeAlternatives(options: {
   const { data: scalingLimits } = await getSystemSetting('scaling_limits')
   const minScale = scalingLimits?.min_scale_factor || 0.5
   const maxScale = scalingLimits?.max_scale_factor || 2.0
-  
-  const { data: tolerance } = await getSystemSetting('deviation_tolerance')
-  const deviationTolerance = tolerance || 0.25
-
-  const minCalories = target * (1 - deviationTolerance)
-  const maxCalories = target * (1 + deviationTolerance)
 
   const suitableAlternatives: RecipeForMealPlan[] = []
 
@@ -206,21 +196,19 @@ export async function getRecipeAlternatives(options: {
     const scaleFactor = target / baseCalories
     if (scaleFactor < minScale || scaleFactor > maxScale) continue
 
-    const scaledCalories = Math.round(baseCalories * scaleFactor)
-    if (scaledCalories >= minCalories && scaledCalories <= maxCalories) {
-      suitableAlternatives.push({
-        ...recipe,
-        scale_factor: Math.round(scaleFactor * 100) / 100,
-        scaled_calories: scaledCalories,
-      })
-    }
+    // Scaled calories will ALWAYS equal target
+    suitableAlternatives.push({
+      ...recipe,
+      scale_factor: Math.round(scaleFactor * 100) / 100,
+      scaled_calories: target,
+    })
   }
 
-  // Sort by closest to target
+  // Sort by scale factor closest to 1.0 (most natural portion size)
   suitableAlternatives.sort((a, b) => {
-    const aDiff = Math.abs((a.scaled_calories || 0) - target)
-    const bDiff = Math.abs((b.scaled_calories || 0) - target)
-    return aDiff - bDiff
+    const aDistFromOne = Math.abs((a.scale_factor || 1) - 1)
+    const bDistFromOne = Math.abs((b.scale_factor || 1) - 1)
+    return aDistFromOne - bDistFromOne
   })
 
   return { 

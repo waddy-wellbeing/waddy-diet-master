@@ -23,50 +23,51 @@ import { generateTestMealPlan, type RecipeForMealPlan } from '@/lib/actions/test
 import type { MealSlot } from '@/lib/types/nutri'
 
 // Default meal structures
+// User-facing meal types: breakfast, lunch, dinner, snacks
+// Snacks can appear multiple times in a day with different labels
 const MEAL_TEMPLATES: Record<string, MealSlot[]> = {
   '3_meals': [
     { name: 'breakfast', percentage: 0.30, target_calories: 0 },
     { name: 'lunch', percentage: 0.40, target_calories: 0 },
     { name: 'dinner', percentage: 0.30, target_calories: 0 },
   ],
+  '3_meals_1_snack': [
+    { name: 'breakfast', percentage: 0.25, target_calories: 0 },
+    { name: 'lunch', percentage: 0.35, target_calories: 0 },
+    { name: 'snack', percentage: 0.10, target_calories: 0 },
+    { name: 'dinner', percentage: 0.30, target_calories: 0 },
+  ],
   '3_meals_2_snacks': [
     { name: 'breakfast', percentage: 0.25, target_calories: 0 },
-    { name: 'mid_morning', percentage: 0.10, target_calories: 0 },
+    { name: 'snack_1', percentage: 0.10, target_calories: 0 },
     { name: 'lunch', percentage: 0.30, target_calories: 0 },
-    { name: 'afternoon', percentage: 0.10, target_calories: 0 },
+    { name: 'snack_2', percentage: 0.10, target_calories: 0 },
     { name: 'dinner', percentage: 0.25, target_calories: 0 },
   ],
   '4_meals': [
     { name: 'breakfast', percentage: 0.25, target_calories: 0 },
     { name: 'lunch', percentage: 0.30, target_calories: 0 },
-    { name: 'afternoon', percentage: 0.15, target_calories: 0 },
+    { name: 'snack', percentage: 0.15, target_calories: 0 },
     { name: 'dinner', percentage: 0.30, target_calories: 0 },
   ],
-  '5_meals': [
+  '3_meals_3_snacks': [
     { name: 'breakfast', percentage: 0.20, target_calories: 0 },
-    { name: 'mid_morning', percentage: 0.10, target_calories: 0 },
+    { name: 'snack_1', percentage: 0.10, target_calories: 0 },
     { name: 'lunch', percentage: 0.25, target_calories: 0 },
-    { name: 'afternoon', percentage: 0.15, target_calories: 0 },
-    { name: 'dinner', percentage: 0.30, target_calories: 0 },
-  ],
-  '6_meals': [
-    { name: 'breakfast', percentage: 0.18, target_calories: 0 },
-    { name: 'mid_morning', percentage: 0.10, target_calories: 0 },
-    { name: 'lunch', percentage: 0.22, target_calories: 0 },
-    { name: 'afternoon', percentage: 0.12, target_calories: 0 },
+    { name: 'snack_2', percentage: 0.10, target_calories: 0 },
     { name: 'dinner', percentage: 0.25, target_calories: 0 },
-    { name: 'evening', percentage: 0.13, target_calories: 0 },
+    { name: 'snack_3', percentage: 0.10, target_calories: 0 },
   ],
 }
 
 const MEAL_SLOT_LABELS: Record<string, string> = {
   breakfast: 'Breakfast',
-  mid_morning: 'Mid-Morning',
   lunch: 'Lunch',
-  afternoon: 'Afternoon',
   dinner: 'Dinner',
-  evening: 'Evening',
   snack: 'Snack',
+  snack_1: 'Snack 1',
+  snack_2: 'Snack 2',
+  snack_3: 'Snack 3',
 }
 
 interface MealPlanResult {
@@ -166,10 +167,10 @@ export default function MealPlannerPage() {
                   onChange={(e) => setSelectedTemplate(e.target.value)}
                 >
                   <option value="3_meals">3 Meals</option>
+                  <option value="3_meals_1_snack">3 Meals + 1 Snack</option>
                   <option value="3_meals_2_snacks">3 Meals + 2 Snacks</option>
-                  <option value="4_meals">4 Meals</option>
-                  <option value="5_meals">5 Meals</option>
-                  <option value="6_meals">6 Meals</option>
+                  <option value="4_meals">4 Meals (3 + 1 Snack)</option>
+                  <option value="3_meals_3_snacks">3 Meals + 3 Snacks</option>
                 </select>
               </div>
 
@@ -178,7 +179,7 @@ export default function MealPlannerPage() {
                 <div className="text-sm font-medium">Calorie Distribution</div>
                 {MEAL_TEMPLATES[selectedTemplate].map(slot => (
                   <div key={slot.name} className="flex justify-between text-sm">
-                    <span className="text-muted-foreground">{MEAL_SLOT_LABELS[slot.name]}</span>
+                    <span className="text-muted-foreground">{MEAL_SLOT_LABELS[slot.name] || slot.name}</span>
                     <span className="font-mono">
                       {Math.round(dailyCalories * slot.percentage)} kcal ({Math.round(slot.percentage * 100)}%)
                     </span>
@@ -284,7 +285,7 @@ export default function MealPlannerPage() {
                       <div className="flex gap-4">
                         {/* Meal slot info */}
                         <div className="w-24 flex-shrink-0">
-                          <div className="font-medium">{MEAL_SLOT_LABELS[slot.name]}</div>
+                          <div className="font-medium">{MEAL_SLOT_LABELS[slot.name] || slot.name}</div>
                           <div className="text-sm text-muted-foreground">
                             {slot.target_calories} kcal
                           </div>

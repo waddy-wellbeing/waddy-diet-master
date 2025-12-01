@@ -1,7 +1,7 @@
 import Link from 'next/link'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
-import { Calculator, UtensilsCrossed, RefreshCw, ArrowRightLeft, ArrowRight } from 'lucide-react'
+import { Calculator, UtensilsCrossed, RefreshCw, ArrowRightLeft, ArrowRight, Sparkles } from 'lucide-react'
 
 export const metadata = {
   title: 'Test Console | BiteRight Admin',
@@ -50,35 +50,63 @@ export default function TestConsolePage() {
         </p>
       </div>
 
-      {/* Tools Grid */}
-      <div className="grid gap-4 md:grid-cols-2">
-        {tools.map((tool) => (
-          <Card key={tool.title} className="relative overflow-hidden group hover:border-primary/50 transition-colors">
-            <CardHeader>
-              <div className="flex items-center gap-3">
-                <div className="p-2 rounded-lg bg-primary/10 group-hover:bg-primary/20 transition-colors">
-                  <tool.icon className="h-5 w-5 text-primary" />
-                </div>
-                <CardTitle className="text-lg">{tool.title}</CardTitle>
-              </div>
-              <CardDescription className="mt-2">
-                {tool.description}
+      {/* Full Tester - Featured */}
+      <Card className="border-primary/50 bg-primary/5">
+        <CardHeader>
+          <div className="flex items-center gap-3">
+            <div className="p-2 rounded-lg bg-primary">
+              <Sparkles className="h-5 w-5 text-primary-foreground" />
+            </div>
+            <div>
+              <CardTitle className="text-lg">Full Plan Tester</CardTitle>
+              <CardDescription className="mt-1">
+                All-in-one testing: Generate plans, swap recipes, and test ingredient alternatives in a single workflow
               </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <Button 
-                variant="outline" 
-                className="w-full group-hover:border-primary group-hover:text-primary transition-colors"
-                asChild
-              >
-                <Link href={tool.href}>
-                  Open Tool
-                  <ArrowRight className="h-4 w-4 ml-2" />
-                </Link>
-              </Button>
-            </CardContent>
-          </Card>
-        ))}
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent>
+          <Button asChild>
+            <Link href="/admin/test-console/full-tester">
+              Launch Full Tester
+              <ArrowRight className="h-4 w-4 ml-2" />
+            </Link>
+          </Button>
+        </CardContent>
+      </Card>
+
+      {/* Individual Tools Grid */}
+      <div>
+        <h2 className="text-sm font-medium text-muted-foreground mb-3">Individual Tools</h2>
+        <div className="grid gap-4 md:grid-cols-2">
+          {tools.map((tool) => (
+            <Card key={tool.title} className="relative overflow-hidden group hover:border-primary/50 transition-colors">
+              <CardHeader>
+                <div className="flex items-center gap-3">
+                  <div className="p-2 rounded-lg bg-primary/10 group-hover:bg-primary/20 transition-colors">
+                    <tool.icon className="h-5 w-5 text-primary" />
+                  </div>
+                  <CardTitle className="text-lg">{tool.title}</CardTitle>
+                </div>
+                <CardDescription className="mt-2">
+                  {tool.description}
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <Button 
+                  variant="outline" 
+                  className="w-full group-hover:border-primary group-hover:text-primary transition-colors"
+                  asChild
+                >
+                  <Link href={tool.href}>
+                    Open Tool
+                    <ArrowRight className="h-4 w-4 ml-2" />
+                  </Link>
+                </Button>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
       </div>
 
       {/* Info */}
