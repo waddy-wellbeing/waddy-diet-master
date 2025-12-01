@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import Link from 'next/link'
 import {
   Table,
   TableBody,
@@ -38,6 +39,7 @@ import {
   AlertCircle,
   ChevronLeft,
   ChevronRight,
+  Eye,
 } from 'lucide-react'
 import { UserWithProfile, updatePlanStatus } from '@/lib/actions/users'
 import { PlanAssignmentDialog } from './plan-assignment-dialog'
@@ -199,21 +201,25 @@ export function UsersTable({ initialUsers, initialCount }: UsersTableProps) {
                 return (
                   <TableRow key={user.id}>
                     <TableCell>
-                      <div className="flex items-center gap-3">
+                      <Link 
+                        href={`/admin/users/${user.id}`}
+                        className="flex items-center gap-3 hover:opacity-80 transition-opacity"
+                      >
                         <Avatar className="h-8 w-8">
                           <AvatarFallback className="text-xs">
-                            {user.profile?.basic_info?.name?.slice(0, 2).toUpperCase() || 'U'}
+                            {user.profile?.name?.slice(0, 2).toUpperCase() || 
+                             user.profile?.basic_info?.name?.slice(0, 2).toUpperCase() || 'U'}
                           </AvatarFallback>
                         </Avatar>
                         <div>
-                          <p className="font-medium">
-                            {user.profile?.basic_info?.name || 'Unnamed User'}
+                          <p className="font-medium hover:underline">
+                            {user.profile?.name || user.profile?.basic_info?.name || 'Unnamed User'}
                           </p>
                           <p className="text-xs text-muted-foreground">
                             {user.id.slice(0, 8)}...
                           </p>
                         </div>
-                      </div>
+                      </Link>
                     </TableCell>
                     <TableCell>
                       <Badge variant={config.variant} className="gap-1">
@@ -269,6 +275,12 @@ export function UsersTable({ initialUsers, initialCount }: UsersTableProps) {
                           </Button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end">
+                          <DropdownMenuItem asChild>
+                            <Link href={`/admin/users/${user.id}`}>
+                              <Eye className="h-4 w-4 mr-2" />
+                              View Details
+                            </Link>
+                          </DropdownMenuItem>
                           <DropdownMenuItem onClick={() => handleAssignClick(user)}>
                             <UserCog className="h-4 w-4 mr-2" />
                             Assign Meal Plan

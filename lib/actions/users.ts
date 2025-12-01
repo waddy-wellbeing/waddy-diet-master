@@ -2,7 +2,7 @@
 
 import { createClient } from '@/lib/supabase/server'
 import { revalidatePath } from 'next/cache'
-import type { MealSlot, PlanStatus } from '@/lib/types/nutri'
+import type { MealSlot, PlanStatus, ProfileBasicInfo, ProfileTargets, ProfilePreferences, ProfileGoals } from '@/lib/types/nutri'
 
 export interface UserWithProfile {
   id: string
@@ -10,6 +10,9 @@ export interface UserWithProfile {
   created_at: string
   profile: {
     id: string
+    name: string | null
+    email: string | null
+    avatar_url: string | null
     role: 'admin' | 'moderator' | 'client'
     plan_status: PlanStatus
     basic_info: {
@@ -25,6 +28,7 @@ export interface UserWithProfile {
       protein_g?: number
       carbs_g?: number
       fat_g?: number
+      fiber_g?: number
       bmr?: number
       tdee?: number
     }
@@ -33,6 +37,10 @@ export interface UserWithProfile {
       meal_structure?: MealSlot[]
       diet_type?: string
       allergies?: string[]
+      dislikes?: string[]
+      cuisine_preferences?: string[]
+      cooking_skill?: string
+      max_prep_time_minutes?: number
     }
     goals: {
       goal_type?: string
@@ -91,10 +99,13 @@ export async function getUsers(options?: {
   
   const users: UserWithProfile[] = profiles.map((profile) => ({
     id: profile.user_id,
-    email: `User ${profile.user_id.slice(0, 8)}...`, // Placeholder - would get from auth.users
+    email: profile.email || `User ${profile.user_id.slice(0, 8)}...`,
     created_at: profile.created_at,
     profile: {
       id: profile.id,
+      name: profile.name,
+      email: profile.email,
+      avatar_url: profile.avatar_url,
       role: profile.role,
       plan_status: profile.plan_status,
       basic_info: profile.basic_info || {},
@@ -142,10 +153,13 @@ export async function getUser(userId: string): Promise<{
   return {
     data: {
       id: profile.user_id,
-      email: `User ${profile.user_id.slice(0, 8)}...`,
+      email: profile.email || `User ${profile.user_id.slice(0, 8)}...`,
       created_at: profile.created_at,
       profile: {
         id: profile.id,
+        name: profile.name,
+        email: profile.email,
+        avatar_url: profile.avatar_url,
         role: profile.role,
         plan_status: profile.plan_status,
         basic_info: profile.basic_info || {},
@@ -297,5 +311,173 @@ export async function updateUserCalories(
   }
 
   revalidatePath('/admin/users')
+  return { success: true, error: null }
+}
+
+/**
+ * Update user's basic info
+ */
+export async function updateUserBasicInfo(
+  userId: string,
+  basicInfo: Partial<ProfileBasicInfo>,
+  name?: string
+): Promise<{ success: boolean; error: string | null }> {
+  const supabase = await createClient()
+
+  // Get current profile
+  const { data: profile, error: fetchError } = await supabase
+    .from('profiles')
+    .select('basic_info')
+    .eq('user_id', userId)
+    .single()
+
+  if (fetchError) {
+    return { success: false, error: fetchError.message }
+  }
+
+  const updateData: Record<string, unknown> = {
+    basic_info: { ...profile.basic_info, ...basicInfo },
+  }
+  
+  if (name !== undefined) {
+    updateData.name = name
+  }
+
+  const { error } = await supabase
+    .from('profiles')
+    .update(updateData)
+    .eq('user_id', userId)
+
+  if (error) {
+    return { success: false, error: error.message }
+  }
+
+  revalidatePath('/admin/users')
+  revalidatePath(`/admin/users/${userId}`)
+  return { success: true, error: null }
+}
+
+/**
+ * Update user's targets
+ */
+export async function updateUserTargets(
+  userId: string,
+  targets: Partial<ProfileTargets>
+): Promise<{ success: boolean; error: string | null }> {
+  const supabase = await createClient()
+
+  // Get current profile
+  const { data: profile, error: fetchError } = await supabase
+    .from('profiles')
+    .select('targets, preferences')
+    .eq('user_id', userId)
+    .single()
+
+  if (fetchError) {
+    return { success: false, error: fetchError.message }
+  }
+
+  const updatedTargets = { ...profile.targets, ...targets }
+
+  // Recalculate meal calories if daily_calories changed and structure exists
+  let updatedPreferences = profile.preferences
+  if (targets.daily_calories && profile.preferences?.meal_structure) {
+    const mealStructure = profile.preferences.meal_structure as MealSlot[]
+    const updatedStructure = mealStructure.map(meal => ({
+      ...meal,
+      target_calories: Math.round(targets.daily_calories! * meal.percentage),
+    }))
+    updatedPreferences = {
+      ...profile.preferences,
+      meal_structure: updatedStructure,
+    }
+  }
+
+  const { error } = await supabase
+    .from('profiles')
+    .update({
+      targets: updatedTargets,
+      preferences: updatedPreferences,
+    })
+    .eq('user_id', userId)
+
+  if (error) {
+    return { success: false, error: error.message }
+  }
+
+  revalidatePath('/admin/users')
+  revalidatePath(`/admin/users/${userId}`)
+  return { success: true, error: null }
+}
+
+/**
+ * Update user's preferences
+ */
+export async function updateUserPreferences(
+  userId: string,
+  preferences: Partial<ProfilePreferences>
+): Promise<{ success: boolean; error: string | null }> {
+  const supabase = await createClient()
+
+  // Get current profile
+  const { data: profile, error: fetchError } = await supabase
+    .from('profiles')
+    .select('preferences')
+    .eq('user_id', userId)
+    .single()
+
+  if (fetchError) {
+    return { success: false, error: fetchError.message }
+  }
+
+  const { error } = await supabase
+    .from('profiles')
+    .update({
+      preferences: { ...profile.preferences, ...preferences },
+    })
+    .eq('user_id', userId)
+
+  if (error) {
+    return { success: false, error: error.message }
+  }
+
+  revalidatePath('/admin/users')
+  revalidatePath(`/admin/users/${userId}`)
+  return { success: true, error: null }
+}
+
+/**
+ * Update user's goals
+ */
+export async function updateUserGoals(
+  userId: string,
+  goals: Partial<ProfileGoals>
+): Promise<{ success: boolean; error: string | null }> {
+  const supabase = await createClient()
+
+  // Get current profile
+  const { data: profile, error: fetchError } = await supabase
+    .from('profiles')
+    .select('goals')
+    .eq('user_id', userId)
+    .single()
+
+  if (fetchError) {
+    return { success: false, error: fetchError.message }
+  }
+
+  const { error } = await supabase
+    .from('profiles')
+    .update({
+      goals: { ...profile.goals, ...goals },
+    })
+    .eq('user_id', userId)
+
+  if (error) {
+    return { success: false, error: error.message }
+  }
+
+  revalidatePath('/admin/users')
+  revalidatePath(`/admin/users/${userId}`)
   return { success: true, error: null }
 }
