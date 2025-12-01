@@ -1,6 +1,6 @@
 # BiteRight Database Schema
 
-> **Last updated:** 2025-11-28
+> **Last updated:** 2025-12-01
 > 
 > ⚠️ **Keep this document in sync with `supabase/schema.sql`**
 > When you modify the database schema, update the ERD diagrams below.
@@ -38,7 +38,12 @@ erDiagram
     profiles {
         uuid id PK
         uuid user_id FK
-        jsonb basic_info "name, age, height, weight, sex, activity_level"
+        string name "Display name"
+        string email "User email"
+        string avatar_url "Profile image"
+        enum role "admin, moderator, client"
+        enum plan_status "pending_assignment, active, paused, expired"
+        jsonb basic_info "age, height, weight, sex, activity_level"
         jsonb targets "calories, protein_g, carbs_g, fat_g"
         jsonb preferences "diet_type, allergies, dislikes, cooking_skill"
         jsonb goals "goal_type, target_weight_kg, pace"

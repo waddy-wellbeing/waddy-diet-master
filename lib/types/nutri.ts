@@ -62,6 +62,28 @@ export interface ProfileGoals {
 /** User plan status */
 export type PlanStatus = 'pending_assignment' | 'active' | 'paused' | 'expired'
 
+/** User role */
+export type UserRole = 'admin' | 'moderator' | 'client'
+
+/** Complete profile record from database */
+export interface Profile {
+  id: string
+  user_id: string
+  name: string | null
+  email: string | null
+  avatar_url: string | null
+  role: UserRole
+  plan_status: PlanStatus
+  basic_info: ProfileBasicInfo
+  targets: ProfileTargets
+  preferences: ProfilePreferences
+  goals: ProfileGoals
+  onboarding_completed: boolean
+  onboarding_step: number
+  created_at: string
+  updated_at: string
+}
+
 // =============================================================================
 // INGREDIENTS
 // =============================================================================

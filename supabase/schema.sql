@@ -23,6 +23,9 @@ CREATE TYPE plan_status AS ENUM ('pending_assignment', 'active', 'paused', 'expi
 CREATE TABLE profiles (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  name VARCHAR(255),
+  email VARCHAR(255),
+  avatar_url TEXT,
   role user_role NOT NULL DEFAULT 'client',
   plan_status plan_status NOT NULL DEFAULT 'pending_assignment',
   basic_info JSONB NOT NULL DEFAULT '{}',
@@ -38,6 +41,7 @@ CREATE TABLE profiles (
 
 CREATE INDEX profiles_user_id_idx ON profiles(user_id);
 CREATE INDEX profiles_role_idx ON profiles(role);
+CREATE INDEX profiles_name_idx ON profiles(name);
 
 -- =============================================================================
 -- INGREDIENTS
