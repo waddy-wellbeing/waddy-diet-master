@@ -434,25 +434,31 @@ export default function FullTesterPage() {
                             Ingredients (click to see swaps)
                           </div>
                           <div className="flex flex-wrap gap-2">
-                            {/* Mock ingredients - in real app these would come from recipe.ingredients */}
-                            {[
-                              { id: 'ing1', name: 'Chicken Breast', amount: 150, unit: 'g' },
-                              { id: 'ing2', name: 'Brown Rice', amount: 100, unit: 'g' },
-                              { id: 'ing3', name: 'Olive Oil', amount: 15, unit: 'ml' },
-                            ].map((ing) => (
-                              <button
-                                key={ing.id}
-                                onClick={() => handleViewIngredientSwaps(ing.id, ing.name, ing.amount, ing.unit)}
-                                className={`px-2 py-1 rounded-full text-xs transition-colors ${
-                                  selectedIngredient?.id === ing.id
-                                    ? 'bg-primary text-primary-foreground'
-                                    : 'bg-muted hover:bg-muted/80'
-                                }`}
-                              >
-                                <Apple className="h-3 w-3 inline mr-1" />
-                                {ing.name} ({ing.amount}{ing.unit})
-                              </button>
-                            ))}
+                            {recipe.recipe_ingredients && recipe.recipe_ingredients.length > 0 ? (
+                              recipe.recipe_ingredients
+                                .filter((ing) => ing.ingredient_id) // Only show ingredients with valid IDs
+                                .map((ing) => (
+                                <button
+                                  key={ing.id}
+                                  onClick={() => handleViewIngredientSwaps(
+                                    ing.ingredient_id!,
+                                    ing.ingredient?.name || ing.raw_name || 'Unknown',
+                                    ing.quantity || 1,
+                                    ing.unit || 'g'
+                                  )}
+                                  className={`px-2 py-1 rounded-full text-xs transition-colors ${
+                                    selectedIngredient?.id === ing.ingredient_id
+                                      ? 'bg-primary text-primary-foreground'
+                                      : 'bg-muted hover:bg-muted/80'
+                                  }`}
+                                >
+                                  <Apple className="h-3 w-3 inline mr-1" />
+                                  {ing.ingredient?.name || ing.raw_name || 'Unknown'} ({ing.quantity || '?'}{ing.unit || ''})
+                                </button>
+                              ))
+                            ) : (
+                              <span className="text-xs text-muted-foreground">No ingredients data available</span>
+                            )}
                           </div>
 
                           {/* Ingredient swaps */}
@@ -512,40 +518,55 @@ export default function FullTesterPage() {
                       )}
 
                       {/* Alternatives panel */}
-                      {selectedMealIndex === index && alternatives && (
-                        <div className="mt-4 pt-4 border-t">
-                          <div className="text-xs font-medium text-muted-foreground mb-2">
-                            Alternative Recipes (click to swap)
+                      {selectedMealIndex === index && (alternatives || isLoadingAlternatives) && (
+                        <div className="mt-4 pt-4 border-t border-primary/20 bg-primary/5 -mx-6 px-6 pb-2 rounded-b-lg">
+                          <div className="flex items-center justify-between mb-3">
+                            <div className="text-sm font-medium text-primary">
+                              🔄 Alternative Recipes (click to swap)
+                            </div>
+                            <span className="text-xs text-muted-foreground">
+                              {alternatives?.length || 0} options
+                            </span>
                           </div>
-                          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-                            {alternatives.map((alt) => (
-                              <button
-                                key={alt.id}
-                                onClick={() => handleSwapRecipe(alt)}
-                                className="p-2 rounded-lg border bg-card hover:bg-muted/50 transition-colors text-left"
-                              >
-                                <div className="w-full aspect-square rounded bg-muted mb-2 overflow-hidden">
-                                  {alt.image_url ? (
-                                    <Image
-                                      src={alt.image_url}
-                                      alt={alt.name}
-                                      width={100}
-                                      height={100}
-                                      className="w-full h-full object-cover"
-                                    />
-                                  ) : (
-                                    <div className="w-full h-full flex items-center justify-center">
-                                      <UtensilsCrossed className="h-6 w-6 text-muted-foreground" />
-                                    </div>
-                                  )}
-                                </div>
-                                <div className="text-xs font-medium truncate">{alt.name}</div>
-                                <div className="text-xs text-muted-foreground">
-                                  {alt.scale_factor}x • {alt.scaled_calories} kcal
-                                </div>
-                              </button>
-                            ))}
-                          </div>
+                          {isLoadingAlternatives ? (
+                            <div className="flex items-center justify-center py-8">
+                              <RefreshCw className="h-5 w-5 animate-spin text-primary" />
+                            </div>
+                          ) : alternatives && alternatives.length > 0 ? (
+                            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3 max-h-[400px] overflow-y-auto pb-2">
+                              {alternatives.map((alt) => (
+                                <button
+                                  key={alt.id}
+                                  onClick={() => handleSwapRecipe(alt)}
+                                  className="p-2 rounded-lg border-2 border-transparent bg-card hover:border-primary hover:bg-primary/5 transition-all text-left shadow-sm"
+                                >
+                                  <div className="w-full aspect-square rounded bg-muted mb-2 overflow-hidden">
+                                    {alt.image_url ? (
+                                      <Image
+                                        src={alt.image_url}
+                                        alt={alt.name}
+                                        width={100}
+                                        height={100}
+                                        className="w-full h-full object-cover"
+                                      />
+                                    ) : (
+                                      <div className="w-full h-full flex items-center justify-center">
+                                        <UtensilsCrossed className="h-6 w-6 text-muted-foreground" />
+                                      </div>
+                                    )}
+                                  </div>
+                                  <div className="text-xs font-medium truncate">{alt.name}</div>
+                                  <div className="text-xs text-muted-foreground">
+                                    {alt.scale_factor}x • {alt.scaled_calories} kcal
+                                  </div>
+                                </button>
+                              ))}
+                            </div>
+                          ) : (
+                            <div className="text-sm text-muted-foreground text-center py-4">
+                              No alternative recipes found
+                            </div>
+                          )}
                         </div>
                       )}
                     </CardContent>

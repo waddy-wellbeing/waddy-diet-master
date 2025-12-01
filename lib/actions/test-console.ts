@@ -4,6 +4,22 @@ import { createClient } from '@/lib/supabase/server'
 import { getSystemSetting } from './settings'
 import type { MealSlot } from '@/lib/types/nutri'
 
+export interface RecipeIngredientForPlan {
+  id: string
+  ingredient_id: string | null
+  raw_name: string
+  quantity: number | null
+  unit: string | null
+  is_spice: boolean
+  is_optional: boolean
+  // Linked ingredient info (Supabase returns as object or null for single relation)
+  ingredient?: {
+    id: string
+    name: string
+    food_group: string | null
+  } | null
+}
+
 export interface RecipeForMealPlan {
   id: string
   name: string
@@ -23,9 +39,46 @@ export interface RecipeForMealPlan {
   is_vegan: boolean
   is_gluten_free: boolean
   is_dairy_free: boolean
+  // Ingredients
+  recipe_ingredients?: RecipeIngredientForPlan[]
   // Calculated fields
   scale_factor?: number
   scaled_calories?: number
+}
+
+/**
+ * Transform Supabase recipe response to proper RecipeForMealPlan type
+ */
+function transformRecipe(recipe: any, scaleFactor?: number, scaledCalories?: number): RecipeForMealPlan {
+  const transformedIngredients = (recipe.recipe_ingredients || []).map((ri: any) => ({
+    id: ri.id,
+    ingredient_id: ri.ingredient_id,
+    raw_name: ri.raw_name,
+    quantity: ri.quantity,
+    unit: ri.unit,
+    is_spice: ri.is_spice,
+    is_optional: ri.is_optional,
+    ingredient: ri.ingredient || null,
+  }))
+
+  return {
+    id: recipe.id,
+    name: recipe.name,
+    image_url: recipe.image_url,
+    meal_type: recipe.meal_type,
+    cuisine: recipe.cuisine,
+    prep_time_minutes: recipe.prep_time_minutes,
+    cook_time_minutes: recipe.cook_time_minutes,
+    servings: recipe.servings,
+    nutrition_per_serving: recipe.nutrition_per_serving,
+    is_vegetarian: recipe.is_vegetarian,
+    is_vegan: recipe.is_vegan,
+    is_gluten_free: recipe.is_gluten_free,
+    is_dairy_free: recipe.is_dairy_free,
+    recipe_ingredients: transformedIngredients,
+    scale_factor: scaleFactor,
+    scaled_calories: scaledCalories,
+  }
 }
 
 /**
@@ -50,10 +103,11 @@ export async function getRecipesForMeal(options: {
   // Map meal slot names to recipe meal_type values in the database
   // Database meal_types: breakfast, lunch, snacks & sweetes, smoothies, one pot, side dishes
   // User-facing meal slots: breakfast, lunch, dinner, snacks
+  // ORDER MATTERS: First meal type in array gets priority in sorting
   const mealTypeMapping: Record<string, string[]> = {
-    breakfast: ['breakfast', 'smoothies'],
+    breakfast: ['breakfast', 'smoothies'],           // Breakfast first, then smoothies
     lunch: ['lunch', 'one pot'],
-    dinner: ['lunch', 'one pot'],                    // Dinner uses lunch recipes
+    dinner: ['lunch', 'one pot', 'breakfast'],       // Dinner can use lunch, one pot, and breakfast recipes
     snack: ['snacks & sweetes', 'smoothies'],
     snack_1: ['snacks & sweetes', 'smoothies'],
     snack_2: ['snacks & sweetes', 'smoothies'],
@@ -61,11 +115,20 @@ export async function getRecipesForMeal(options: {
   }
 
   const targetMealTypes = mealTypeMapping[mealType] || [mealType]
+  const primaryMealType = targetMealTypes[0] // Used for sorting priority
 
-  // Build query
+  // Build query - include recipe_ingredients with linked ingredient info
+  // Use !inner for the FK hint to specify which relationship to use (ingredient_id, not suggested_ingredient_id)
   let query = supabase
     .from('recipes')
-    .select('id, name, image_url, meal_type, cuisine, prep_time_minutes, cook_time_minutes, servings, nutrition_per_serving, is_vegetarian, is_vegan, is_gluten_free, is_dairy_free')
+    .select(`
+      id, name, image_url, meal_type, cuisine, prep_time_minutes, cook_time_minutes, servings, 
+      nutrition_per_serving, is_vegetarian, is_vegan, is_gluten_free, is_dairy_free,
+      recipe_ingredients (
+        id, ingredient_id, raw_name, quantity, unit, is_spice, is_optional,
+        ingredient:ingredients!recipe_ingredients_ingredient_id_fkey (id, name, food_group)
+      )
+    `)
     .not('nutrition_per_serving', 'is', null)
 
   // Apply dietary filters
@@ -121,15 +184,21 @@ export async function getRecipesForMeal(options: {
     // Scaled calories will ALWAYS equal target (that's the point of scaling)
     const scaledCalories = targetCalories
 
-    suitableRecipes.push({
-      ...recipe,
-      scale_factor: Math.round(scaleFactor * 100) / 100,
-      scaled_calories: scaledCalories,
-    })
+    suitableRecipes.push(transformRecipe(
+      recipe,
+      Math.round(scaleFactor * 100) / 100,
+      scaledCalories
+    ))
   }
 
-  // Sort by scale factor closest to 1.0 (most natural portion size)
+  // Sort by: 1) Primary meal type first, 2) Scale factor closest to 1.0
   suitableRecipes.sort((a, b) => {
+    // First priority: primary meal type recipes come first
+    const aPrimary = a.meal_type?.includes(primaryMealType) ? 1 : 0
+    const bPrimary = b.meal_type?.includes(primaryMealType) ? 1 : 0
+    if (bPrimary !== aPrimary) return bPrimary - aPrimary
+    
+    // Second priority: scale factor closest to 1.0 (most natural portion size)
     const aDistFromOne = Math.abs((a.scale_factor || 1) - 1)
     const bDistFromOne = Math.abs((b.scale_factor || 1) - 1)
     return aDistFromOne - bDistFromOne
@@ -150,10 +219,18 @@ export async function getRecipeAlternatives(options: {
   
   const { recipeId, targetCalories, limit = 10 } = options
 
-  // Get the original recipe
+  // Get the original recipe with ingredients
+  // Use FK hint to disambiguate which ingredients relation to use
   const { data: original, error: originalError } = await supabase
     .from('recipes')
-    .select('id, name, image_url, meal_type, cuisine, prep_time_minutes, cook_time_minutes, servings, nutrition_per_serving, is_vegetarian, is_vegan, is_gluten_free, is_dairy_free')
+    .select(`
+      id, name, image_url, meal_type, cuisine, prep_time_minutes, cook_time_minutes, servings, 
+      nutrition_per_serving, is_vegetarian, is_vegan, is_gluten_free, is_dairy_free,
+      recipe_ingredients (
+        id, ingredient_id, raw_name, quantity, unit, is_spice, is_optional,
+        ingredient:ingredients!recipe_ingredients_ingredient_id_fkey (id, name, food_group)
+      )
+    `)
     .eq('id', recipeId)
     .single()
 
@@ -161,25 +238,36 @@ export async function getRecipeAlternatives(options: {
     return { data: null, originalRecipe: null, error: originalError?.message || 'Recipe not found' }
   }
 
+  // Transform original recipe
+  const transformedOriginal = transformRecipe(original, 1.0, original.nutrition_per_serving?.calories || 0)
+
   const mealTypes = original.meal_type || []
   if (mealTypes.length === 0) {
-    return { data: [], originalRecipe: original, error: null }
+    return { data: [], originalRecipe: transformedOriginal, error: null }
   }
 
   // Use original recipe calories if target not specified
   const target = targetCalories || original.nutrition_per_serving?.calories || 500
 
-  // Get alternatives with same meal type
+  // Get alternatives with same meal type (including ingredients)
+  // Use FK hint to disambiguate which ingredients relation to use
   const { data: alternatives, error } = await supabase
     .from('recipes')
-    .select('id, name, image_url, meal_type, cuisine, prep_time_minutes, cook_time_minutes, servings, nutrition_per_serving, is_vegetarian, is_vegan, is_gluten_free, is_dairy_free')
+    .select(`
+      id, name, image_url, meal_type, cuisine, prep_time_minutes, cook_time_minutes, servings, 
+      nutrition_per_serving, is_vegetarian, is_vegan, is_gluten_free, is_dairy_free,
+      recipe_ingredients (
+        id, ingredient_id, raw_name, quantity, unit, is_spice, is_optional,
+        ingredient:ingredients!recipe_ingredients_ingredient_id_fkey (id, name, food_group)
+      )
+    `)
     .neq('id', recipeId)
     .overlaps('meal_type', mealTypes)
     .not('nutrition_per_serving', 'is', null)
     .limit(50)
 
   if (error) {
-    return { data: null, originalRecipe: original, error: error.message }
+    return { data: null, originalRecipe: transformedOriginal, error: error.message }
   }
 
   // Get scaling limits
@@ -197,11 +285,11 @@ export async function getRecipeAlternatives(options: {
     if (scaleFactor < minScale || scaleFactor > maxScale) continue
 
     // Scaled calories will ALWAYS equal target
-    suitableAlternatives.push({
-      ...recipe,
-      scale_factor: Math.round(scaleFactor * 100) / 100,
-      scaled_calories: target,
-    })
+    suitableAlternatives.push(transformRecipe(
+      recipe,
+      Math.round(scaleFactor * 100) / 100,
+      target
+    ))
   }
 
   // Sort by scale factor closest to 1.0 (most natural portion size)
@@ -213,7 +301,7 @@ export async function getRecipeAlternatives(options: {
 
   return { 
     data: suitableAlternatives.slice(0, limit), 
-    originalRecipe: original,
+    originalRecipe: transformedOriginal,
     error: null 
   }
 }
