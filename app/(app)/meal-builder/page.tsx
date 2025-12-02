@@ -65,23 +65,33 @@ export default async function MealBuilderPage({ searchParams }: PageProps) {
   // Get user's targets
   const dailyCalories = profile.targets?.daily_calories || 2000
   const dailyProtein = profile.targets?.protein_g || 150
+  const dailyCarbs = profile.targets?.carbs_g || 250
+  const dailyFat = profile.targets?.fat_g || 65
   
   const mealTargets = {
     breakfast: { 
       calories: Math.round(dailyCalories * 0.25), 
-      protein: Math.round(dailyProtein * 0.25) 
+      protein: Math.round(dailyProtein * 0.25),
+      carbs: Math.round(dailyCarbs * 0.25),
+      fat: Math.round(dailyFat * 0.25),
     },
     lunch: { 
       calories: Math.round(dailyCalories * 0.35), 
-      protein: Math.round(dailyProtein * 0.35) 
+      protein: Math.round(dailyProtein * 0.35),
+      carbs: Math.round(dailyCarbs * 0.35),
+      fat: Math.round(dailyFat * 0.35),
     },
     dinner: { 
       calories: Math.round(dailyCalories * 0.30), 
-      protein: Math.round(dailyProtein * 0.30) 
+      protein: Math.round(dailyProtein * 0.30),
+      carbs: Math.round(dailyCarbs * 0.30),
+      fat: Math.round(dailyFat * 0.30),
     },
     snacks: { 
       calories: Math.round(dailyCalories * 0.10), 
-      protein: Math.round(dailyProtein * 0.10) 
+      protein: Math.round(dailyProtein * 0.10),
+      carbs: Math.round(dailyCarbs * 0.10),
+      fat: Math.round(dailyFat * 0.10),
     },
   }
 

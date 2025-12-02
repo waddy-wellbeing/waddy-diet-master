@@ -27,14 +27,13 @@ import {
 } from '@/lib/utils/guest-storage'
 import { toast } from 'sonner'
 
-const TOTAL_STEPS = 8
+const TOTAL_STEPS = 7
 
 const stepConfig = [
   { id: 'welcome', title: 'Welcome' },
   { id: 'basic-info', title: 'About You', subtitle: "Let's personalize your experience" },
   { id: 'activity', title: 'Activity Level', subtitle: 'How active are you?' },
   { id: 'goals', title: 'Your Goals', subtitle: 'What do you want to achieve?' },
-  { id: 'preferences', title: 'Dietary Preferences', subtitle: 'What type of diet?' },
   { id: 'lifestyle', title: 'Lifestyle', subtitle: 'Your cooking preferences' },
   { id: 'meals', title: 'Meal Structure', subtitle: 'How do you like to eat?' },
   { id: 'preview', title: 'Your Plan', subtitle: 'Review your personalized plan' },
@@ -156,13 +155,11 @@ export function GuestOnboardingFlow() {
       case 3: // Goals
         if (goals.goalType === 'maintain') return true
         return !!(goals.goalType && goals.pace)
-      case 4: // Dietary Preferences
-        return !!dietaryPreferences.dietType
-      case 5: // Lifestyle
+      case 4: // Lifestyle
         return !!lifestyle.cookingSkill
-      case 6: // Meal Structure
+      case 5: // Meal Structure
         return !!mealsPerDay
-      case 7: // Preview
+      case 6: // Preview
         return true
       default:
         return false
@@ -209,12 +206,10 @@ export function GuestOnboardingFlow() {
           />
         )
       case 4:
-        return <DietaryPreferencesStep data={dietaryPreferences} onChange={setDietaryPreferences} />
-      case 5:
         return <LifestyleStep data={lifestyle} onChange={setLifestyle} />
-      case 6:
+      case 5:
         return <MealStructureStep value={mealsPerDay} onChange={setMealsPerDay} />
-      case 7:
+      case 6:
         return (
           <PlanPreviewStep
             basicInfo={basicInfo}

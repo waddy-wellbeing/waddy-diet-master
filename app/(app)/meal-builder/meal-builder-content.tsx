@@ -10,6 +10,8 @@ import {
   ChefHat,
   Flame,
   Beef,
+  Wheat,
+  Droplet,
   X,
   Loader2,
   List,
@@ -24,7 +26,7 @@ import type { ScaledRecipeWithIngredients } from './page'
 type MealType = 'breakfast' | 'lunch' | 'dinner' | 'snacks'
 
 interface MealBuilderContentProps {
-  mealTargets: Record<MealType, { calories: number; protein: number }>
+  mealTargets: Record<MealType, { calories: number; protein: number; carbs: number; fat: number }>
   recipesByMealType: Record<MealType, ScaledRecipeWithIngredients[]>
   userId: string
   initialMeal?: MealType | null
@@ -177,14 +179,22 @@ export function MealBuilderContent({
                 {/* Content */}
                 <div className="absolute inset-x-0 bottom-0 p-3 text-left text-white">
                   <h3 className="font-bold text-lg">{mealLabels[meal]}</h3>
-                  <div className="flex items-center gap-3 text-xs text-white/80 mt-1">
+                  <div className="flex items-center gap-2 text-xs text-white/80 mt-1 flex-wrap">
                     <span className="flex items-center gap-1">
                       <Flame className="w-3 h-3" />
-                      {target.calories} cal
+                      {target.calories}
                     </span>
                     <span className="flex items-center gap-1">
                       <Beef className="w-3 h-3" />
                       {target.protein}g
+                    </span>
+                    <span className="flex items-center gap-1">
+                      <Wheat className="w-3 h-3" />
+                      {target.carbs}g
+                    </span>
+                    <span className="flex items-center gap-1">
+                      <Droplet className="w-3 h-3" />
+                      {target.fat}g
                     </span>
                   </div>
                   <p className="text-[10px] text-white/60 mt-1">
@@ -226,6 +236,8 @@ export function MealBuilderContent({
   const mainIngredients = currentRecipe.recipe_ingredients.filter(i => !i.is_spice)
   const spices = currentRecipe.recipe_ingredients.filter(i => i.is_spice)
   const scaledProtein = Math.round((currentRecipe.nutrition_per_serving?.protein_g || 0) * currentRecipe.scale_factor)
+  const scaledCarbs = Math.round((currentRecipe.nutrition_per_serving?.carbs_g || 0) * currentRecipe.scale_factor)
+  const scaledFat = Math.round((currentRecipe.nutrition_per_serving?.fat_g || 0) * currentRecipe.scale_factor)
 
   // Swipe handlers for recipe navigation
   const handleDragEnd = (event: MouseEvent | TouchEvent | PointerEvent, info: { offset: { x: number }; velocity: { x: number } }) => {
@@ -312,14 +324,22 @@ export function MealBuilderContent({
             {mealLabels[selectedMeal]}
           </Badge>
           <h1 className="text-2xl font-bold font-arabic">{currentRecipe.name}</h1>
-          <div className="flex items-center gap-4 mt-2 text-sm">
+          <div className="flex items-center gap-3 mt-2 text-sm flex-wrap">
             <span className="flex items-center gap-1.5 font-semibold text-primary">
               <Flame className="w-4 h-4" />
               {currentRecipe.scaled_calories} cal
             </span>
             <span className="flex items-center gap-1.5">
               <Beef className="w-4 h-4" />
-              {scaledProtein}g protein
+              {scaledProtein}g
+            </span>
+            <span className="flex items-center gap-1.5">
+              <Wheat className="w-4 h-4" />
+              {scaledCarbs}g
+            </span>
+            <span className="flex items-center gap-1.5">
+              <Droplet className="w-4 h-4" />
+              {scaledFat}g
             </span>
           </div>
         </div>
