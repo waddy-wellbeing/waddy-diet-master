@@ -457,7 +457,7 @@ export function MealCard({ meal, isToday = true, onLogMeal, onUnlogMeal, onSwapM
                 <div className="flex items-center justify-between">
                   {meal.recipe?.id ? (
                     <Link 
-                      href={`/recipes/${meal.recipe.id}?scale=${meal.recipe.scale_factor || 1}&meal=${meal.name}`}
+                      href={`/meal-builder?meal=${meal.name}`}
                       className="font-semibold text-sm line-clamp-1 flex-1 font-arabic hover:text-primary transition-colors"
                       onClick={(e) => e.stopPropagation()}
                     >
