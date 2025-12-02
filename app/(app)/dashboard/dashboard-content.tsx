@@ -2,17 +2,25 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import Link from 'next/link'
-import { format, startOfWeek, endOfWeek, eachDayOfInterval } from 'date-fns'
+import { format, startOfWeek, endOfWeek } from 'date-fns'
 import { Settings, Bell } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import {
   WeekSelector,
-  DaySummary,
   MealCard,
   QuickStats,
 } from '@/components/dashboard/dashboard-components'
 import { createClient } from '@/lib/supabase/client'
 import type { Profile, DailyLog, DailyPlan, DailyTotals, RecipeRecord } from '@/lib/types/nutri'
+
+type MealName = 'breakfast' | 'lunch' | 'dinner' | 'snacks'
+
+// Scaled recipe includes scale_factor and scaled_calories
+interface ScaledRecipe extends RecipeRecord {
+  scale_factor: number
+  scaled_calories: number
+  original_calories: number
+}
 
 interface DashboardContentProps {
   profile: Profile
@@ -20,7 +28,9 @@ interface DashboardContentProps {
   initialDailyPlan: { plan: DailyPlan; daily_totals: DailyTotals } | null
   initialWeekLogs: Record<string, { consumed: number }>
   initialStreak: number
-  initialMealRecipes: Record<string, RecipeRecord | null>
+  recipesByMealType: Record<string, ScaledRecipe[]>
+  initialSelectedIndices: Record<string, number>
+  mealTargets: Record<string, number>
 }
 
 export function DashboardContent({ 
@@ -29,28 +39,31 @@ export function DashboardContent({
   initialDailyPlan,
   initialWeekLogs,
   initialStreak,
-  initialMealRecipes,
+  recipesByMealType,
+  initialSelectedIndices,
+  mealTargets,
 }: DashboardContentProps) {
   const [selectedDate, setSelectedDate] = useState(new Date())
   const [dailyLog, setDailyLog] = useState(initialDailyLog)
   const [dailyPlan, setDailyPlan] = useState(initialDailyPlan)
   const [weekData, setWeekData] = useState(initialWeekLogs)
   const [streak, setStreak] = useState(initialStreak)
-  const [mealRecipes, setMealRecipes] = useState(initialMealRecipes)
+  
+  // Track current recipe index for each meal type (for swiping)
+  const [selectedIndices, setSelectedIndices] = useState<Record<MealName, number>>({
+    breakfast: initialSelectedIndices.breakfast || 0,
+    lunch: initialSelectedIndices.lunch || 0,
+    dinner: initialSelectedIndices.dinner || 0,
+    snacks: initialSelectedIndices.snacks || 0,
+  })
   
   // Get targets from profile
   const targets = profile.targets
   const dailyCalories = targets.daily_calories || 2000
-  const proteinTarget = targets.protein_g || 150
-  const carbsTarget = targets.carbs_g || 200
-  const fatTarget = targets.fat_g || 65
 
   // Get logged totals (defaults to 0 if no log exists)
   const loggedTotals = dailyLog?.logged_totals || {}
   const todayConsumed = loggedTotals.calories || 0
-  const currentProtein = loggedTotals.protein_g || 0
-  const currentCarbs = loggedTotals.carbs_g || 0
-  const currentFat = loggedTotals.fat_g || 0
 
   // Fetch data when selected date changes
   const fetchDayData = useCallback(async (date: Date) => {
@@ -75,43 +88,28 @@ export function DashboardContent({
 
     setDailyLog(logData)
     setDailyPlan(planData)
-
-    // If there's a plan, fetch the recipes
+    
+    // If there's a plan, update selected indices to match the plan
     if (planData?.plan) {
       const plan = planData.plan as DailyPlan
-      const recipeIds = [
-        plan.breakfast?.recipe_id,
-        plan.lunch?.recipe_id,
-        plan.dinner?.recipe_id,
-      ].filter(Boolean) as string[]
+      const newIndices = { ...selectedIndices }
       
-      if (recipeIds.length > 0) {
-        const { data: recipes } = await supabase
-          .from('recipes')
-          .select('*')
-          .in('id', recipeIds)
-        
-        const recipeMap: Record<string, RecipeRecord | null> = {
-          breakfast: null,
-          lunch: null,
-          dinner: null,
-          snacks: null,
-        }
-        
-        if (recipes) {
-          for (const recipe of recipes) {
-            if (plan.breakfast?.recipe_id === recipe.id) recipeMap.breakfast = recipe
-            if (plan.lunch?.recipe_id === recipe.id) recipeMap.lunch = recipe
-            if (plan.dinner?.recipe_id === recipe.id) recipeMap.dinner = recipe
-          }
-        }
-        
-        setMealRecipes(recipeMap)
+      if (plan.breakfast?.recipe_id) {
+        const idx = recipesByMealType.breakfast.findIndex(r => r.id === plan.breakfast?.recipe_id)
+        if (idx >= 0) newIndices.breakfast = idx
       }
-    } else {
-      setMealRecipes({ breakfast: null, lunch: null, dinner: null, snacks: null })
+      if (plan.lunch?.recipe_id) {
+        const idx = recipesByMealType.lunch.findIndex(r => r.id === plan.lunch?.recipe_id)
+        if (idx >= 0) newIndices.lunch = idx
+      }
+      if (plan.dinner?.recipe_id) {
+        const idx = recipesByMealType.dinner.findIndex(r => r.id === plan.dinner?.recipe_id)
+        if (idx >= 0) newIndices.dinner = idx
+      }
+      
+      setSelectedIndices(newIndices)
     }
-  }, [profile.user_id])
+  }, [profile.user_id, recipesByMealType, selectedIndices])
 
   // Fetch week data when week changes
   const fetchWeekData = useCallback(async (date: Date) => {
@@ -143,7 +141,19 @@ export function DashboardContent({
     }
   }, [selectedDate, fetchDayData, fetchWeekData])
 
-  // Build meal data from plan
+  // Get current recipe for each meal type based on selected index
+  const getCurrentRecipe = (mealType: MealName): ScaledRecipe | null => {
+    const recipes = recipesByMealType[mealType] || []
+    const index = selectedIndices[mealType] || 0
+    return recipes[index] || null
+  }
+  
+  // Get recipe count for each meal type
+  const getRecipeCount = (mealType: MealName): number => {
+    return (recipesByMealType[mealType] || []).length
+  }
+
+  // Build meal data using mealTargets for proper calorie allocation
   const plan = dailyPlan?.plan as DailyPlan | undefined
   const log = dailyLog?.log as DailyLog | undefined
   
@@ -151,41 +161,49 @@ export function DashboardContent({
     {
       name: 'breakfast' as const,
       label: 'Breakfast',
-      targetCalories: Math.round(dailyCalories * 0.25),
+      targetCalories: mealTargets.breakfast,
       consumedCalories: log?.breakfast?.items?.length ? 
         log.breakfast.items.reduce((sum, item) => sum + (item.servings || 1) * 100, 0) : 0,
       isLogged: !!log?.breakfast?.items?.length,
-      recipe: mealRecipes.breakfast,
+      recipe: getCurrentRecipe('breakfast'),
+      recipeCount: getRecipeCount('breakfast'),
+      currentIndex: selectedIndices.breakfast,
       planSlot: plan?.breakfast,
     },
     {
       name: 'lunch' as const,
       label: 'Lunch',
-      targetCalories: Math.round(dailyCalories * 0.35),
+      targetCalories: mealTargets.lunch,
       consumedCalories: log?.lunch?.items?.length ?
         log.lunch.items.reduce((sum, item) => sum + (item.servings || 1) * 100, 0) : 0,
       isLogged: !!log?.lunch?.items?.length,
-      recipe: mealRecipes.lunch,
+      recipe: getCurrentRecipe('lunch'),
+      recipeCount: getRecipeCount('lunch'),
+      currentIndex: selectedIndices.lunch,
       planSlot: plan?.lunch,
     },
     {
       name: 'dinner' as const,
       label: 'Dinner',
-      targetCalories: Math.round(dailyCalories * 0.30),
+      targetCalories: mealTargets.dinner,
       consumedCalories: log?.dinner?.items?.length ?
         log.dinner.items.reduce((sum, item) => sum + (item.servings || 1) * 100, 0) : 0,
       isLogged: !!log?.dinner?.items?.length,
-      recipe: mealRecipes.dinner,
+      recipe: getCurrentRecipe('dinner'),
+      recipeCount: getRecipeCount('dinner'),
+      currentIndex: selectedIndices.dinner,
       planSlot: plan?.dinner,
     },
     {
       name: 'snacks' as const,
       label: 'Snacks',
-      targetCalories: Math.round(dailyCalories * 0.10),
+      targetCalories: mealTargets.snacks,
       consumedCalories: log?.snacks?.items?.length ?
         log.snacks.items.reduce((sum, item) => sum + (item.servings || 1) * 100, 0) : 0,
       isLogged: !!log?.snacks?.items?.length,
-      recipe: mealRecipes.snacks,
+      recipe: getCurrentRecipe('snacks'),
+      recipeCount: getRecipeCount('snacks'),
+      currentIndex: selectedIndices.snacks,
       planSlot: null,
     },
   ]
@@ -281,10 +299,27 @@ export function DashboardContent({
     fetchWeekData(selectedDate)
   }
   
-  // Handler for swapping a meal
+  // Handler for swapping a meal - navigates to next/previous recipe
   const handleSwapMeal = (mealName: string, direction: 'left' | 'right') => {
-    // TODO: Implement meal swap - this would typically open a modal to select a new recipe
-    console.log('Swap', mealName, direction)
+    const mealType = mealName as MealName
+    const recipes = recipesByMealType[mealType] || []
+    if (recipes.length <= 1) return // Nothing to swap to
+    
+    const currentIdx = selectedIndices[mealType]
+    let newIdx: number
+    
+    if (direction === 'right') {
+      // Next recipe (wrap around)
+      newIdx = (currentIdx + 1) % recipes.length
+    } else {
+      // Previous recipe (wrap around)
+      newIdx = currentIdx === 0 ? recipes.length - 1 : currentIdx - 1
+    }
+    
+    setSelectedIndices(prev => ({
+      ...prev,
+      [mealType]: newIdx,
+    }))
   }
 
   // Calculate weekly average from weekData
@@ -317,21 +352,13 @@ export function DashboardContent({
       </header>
 
       <main className="px-4 py-6 space-y-6 max-w-lg mx-auto">
-        {/* Week Selector */}
+        {/* Week Selector with inline progress bar */}
         <WeekSelector
           selectedDate={selectedDate}
           onDateSelect={setSelectedDate}
           weekData={weekData}
           dailyTarget={dailyCalories}
-        />
-
-        {/* Day Summary */}
-        <DaySummary
-          consumed={todayConsumed}
-          target={dailyCalories}
-          protein={{ current: currentProtein, target: proteinTarget }}
-          carbs={{ current: currentCarbs, target: carbsTarget }}
-          fat={{ current: currentFat, target: currentFat }}
+          showDayProgress={true}
         />
 
         {/* Meals Section */}

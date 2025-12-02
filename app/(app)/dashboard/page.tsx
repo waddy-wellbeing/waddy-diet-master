@@ -40,7 +40,7 @@ export default async function DashboardPage() {
     .eq('log_date', todayStr)
     .single()
   
-  // Fetch today's plan
+  // Fetch today's plan (if admin has assigned one)
   const { data: dailyPlan } = await supabase
     .from('daily_plans')
     .select('plan, daily_totals')
@@ -93,35 +93,120 @@ export default async function DashboardPage() {
     }
   }
   
-  // Fetch recipes for today's plan
-  const mealRecipes: Record<string, RecipeRecord | null> = {
-    breakfast: null,
-    lunch: null,
-    dinner: null,
-    snacks: null,
+  // Get user's daily calorie target and calculate meal targets
+  const dailyCalories = profile.targets?.daily_calories || 2000
+  const mealTargets = {
+    breakfast: Math.round(dailyCalories * 0.25),
+    lunch: Math.round(dailyCalories * 0.35),
+    dinner: Math.round(dailyCalories * 0.30),
+    snacks: Math.round(dailyCalories * 0.10),
   }
   
-  if (dailyPlan?.plan) {
-    const plan = dailyPlan.plan as DailyPlan
-    const recipeIds = [
-      plan.breakfast?.recipe_id,
-      plan.lunch?.recipe_id,
-      plan.dinner?.recipe_id,
-    ].filter(Boolean) as string[]
-    
-    if (recipeIds.length > 0) {
-      const { data: recipes } = await supabase
-        .from('recipes')
-        .select('*')
-        .in('id', recipeIds)
+  // Meal type mapping (same as test console)
+  // Database meal_types: breakfast, lunch, snacks & sweetes, smoothies, one pot, side dishes
+  const mealTypeMapping: Record<string, string[]> = {
+    breakfast: ['breakfast', 'smoothies'],
+    lunch: ['lunch', 'one pot'],
+    dinner: ['lunch', 'one pot', 'breakfast'],  // Dinner reuses lunch/one pot/breakfast recipes
+    snacks: ['snacks & sweetes', 'smoothies'],
+  }
+  
+  // Get scaling limits from system settings or use defaults
+  const minScale = 0.5
+  const maxScale = 2.0
+  
+  // Fetch ALL public recipes with nutrition info
+  const { data: allRecipes } = await supabase
+    .from('recipes')
+    .select('*')
+    .eq('is_public', true)
+    .not('nutrition_per_serving', 'is', null)
+    .order('name')
+  
+  // Process recipes for each meal type with scaling
+  interface ScaledRecipe extends RecipeRecord {
+    scale_factor: number
+    scaled_calories: number
+    original_calories: number
+  }
+  
+  const recipesByMealType: Record<string, ScaledRecipe[]> = {
+    breakfast: [],
+    lunch: [],
+    dinner: [],
+    snacks: [],
+  }
+  
+  if (allRecipes) {
+    for (const mealSlot of ['breakfast', 'lunch', 'dinner', 'snacks'] as const) {
+      const targetCalories = mealTargets[mealSlot]
+      const acceptedMealTypes = mealTypeMapping[mealSlot]
+      const primaryMealType = acceptedMealTypes[0]
       
-      if (recipes) {
-        for (const recipe of recipes) {
-          if (plan.breakfast?.recipe_id === recipe.id) mealRecipes.breakfast = recipe
-          if (plan.lunch?.recipe_id === recipe.id) mealRecipes.lunch = recipe
-          if (plan.dinner?.recipe_id === recipe.id) mealRecipes.dinner = recipe
-        }
+      const suitableRecipes: ScaledRecipe[] = []
+      
+      for (const recipe of allRecipes) {
+        const recipeMealTypes = recipe.meal_type || []
+        const matchesMealType = acceptedMealTypes.some(t => 
+          recipeMealTypes.some((rmt: string) => rmt.toLowerCase() === t.toLowerCase())
+        )
+        
+        if (!matchesMealType) continue
+        
+        const baseCalories = recipe.nutrition_per_serving?.calories
+        if (!baseCalories || baseCalories <= 0) continue
+        
+        // Calculate scale factor to hit exact target calories
+        const scaleFactor = targetCalories / baseCalories
+        
+        // Check if scaling is within acceptable limits
+        if (scaleFactor < minScale || scaleFactor > maxScale) continue
+        
+        suitableRecipes.push({
+          ...(recipe as RecipeRecord),
+          scale_factor: Math.round(scaleFactor * 100) / 100,
+          scaled_calories: targetCalories, // Always equals target after scaling
+          original_calories: baseCalories,
+        })
       }
+      
+      // Sort by: 1) Primary meal type first, 2) Scale factor closest to 1.0
+      suitableRecipes.sort((a, b) => {
+        const aPrimary = a.meal_type?.some(t => t.toLowerCase() === primaryMealType) ? 1 : 0
+        const bPrimary = b.meal_type?.some(t => t.toLowerCase() === primaryMealType) ? 1 : 0
+        if (bPrimary !== aPrimary) return bPrimary - aPrimary
+        
+        const aDistFromOne = Math.abs(a.scale_factor - 1)
+        const bDistFromOne = Math.abs(b.scale_factor - 1)
+        return aDistFromOne - bDistFromOne
+      })
+      
+      recipesByMealType[mealSlot] = suitableRecipes
+    }
+  }
+  
+  // If there's a daily plan, get the currently selected recipe indices
+  const plan = dailyPlan?.plan as DailyPlan | undefined
+  const selectedRecipeIndices: Record<string, number> = {
+    breakfast: 0,
+    lunch: 0,
+    dinner: 0,
+    snacks: 0,
+  }
+  
+  // If plan exists, find the index of the planned recipe in the available recipes
+  if (plan) {
+    if (plan.breakfast?.recipe_id) {
+      const idx = recipesByMealType.breakfast.findIndex(r => r.id === plan.breakfast?.recipe_id)
+      if (idx >= 0) selectedRecipeIndices.breakfast = idx
+    }
+    if (plan.lunch?.recipe_id) {
+      const idx = recipesByMealType.lunch.findIndex(r => r.id === plan.lunch?.recipe_id)
+      if (idx >= 0) selectedRecipeIndices.lunch = idx
+    }
+    if (plan.dinner?.recipe_id) {
+      const idx = recipesByMealType.dinner.findIndex(r => r.id === plan.dinner?.recipe_id)
+      if (idx >= 0) selectedRecipeIndices.dinner = idx
     }
   }
 
@@ -132,7 +217,9 @@ export default async function DashboardPage() {
       initialDailyPlan={dailyPlan}
       initialWeekLogs={weekData}
       initialStreak={streak}
-      initialMealRecipes={mealRecipes}
+      recipesByMealType={recipesByMealType}
+      initialSelectedIndices={selectedRecipeIndices}
+      mealTargets={mealTargets}
     />
   )
 }

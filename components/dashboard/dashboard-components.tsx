@@ -105,9 +105,10 @@ interface WeekSelectorProps {
   onDateSelect: (date: Date) => void
   weekData: Record<string, { consumed: number }>
   dailyTarget: number
+  showDayProgress?: boolean
 }
 
-export function WeekSelector({ selectedDate, onDateSelect, weekData, dailyTarget }: WeekSelectorProps) {
+export function WeekSelector({ selectedDate, onDateSelect, weekData, dailyTarget, showDayProgress = false }: WeekSelectorProps) {
   const [weekStart, setWeekStart] = useState(() => startOfWeek(new Date(), { weekStartsOn: 0 }))
   
   const weekDays = Array.from({ length: 7 }, (_, i) => addDays(weekStart, i))
@@ -119,6 +120,13 @@ export function WeekSelector({ selectedDate, onDateSelect, weekData, dailyTarget
   const goToNextWeek = () => {
     setWeekStart((prev: Date) => addDays(prev, 7))
   }
+
+  // Get consumed calories for the selected day
+  const selectedDateKey = format(selectedDate, 'yyyy-MM-dd')
+  const selectedDayData = weekData[selectedDateKey] || { consumed: 0 }
+  const consumed = selectedDayData.consumed
+  const progress = Math.min((consumed / dailyTarget) * 100, 100)
+  const remaining = dailyTarget - consumed
 
   return (
     <div className="bg-card rounded-xl border border-border p-4">
@@ -163,10 +171,131 @@ export function WeekSelector({ selectedDate, onDateSelect, weekData, dailyTarget
           )
         })}
       </div>
+      
+      {/* Simple progress bar when day is selected */}
+      {showDayProgress && (
+        <motion.div
+          initial={{ opacity: 0, height: 0 }}
+          animate={{ opacity: 1, height: 'auto' }}
+          className="mt-4 pt-4 border-t border-border/50"
+        >
+          <div className="flex items-center justify-between text-sm mb-2">
+            <span className="text-muted-foreground">
+              {format(selectedDate, 'EEEE, MMM d')}
+            </span>
+            <span className="font-medium">
+              {consumed.toLocaleString()} / {dailyTarget.toLocaleString()} kcal
+            </span>
+          </div>
+          
+          {/* Progress bar */}
+          <div className="h-3 bg-muted/30 rounded-full overflow-hidden">
+            <motion.div
+              className={cn(
+                'h-full rounded-full',
+                progress >= 100 ? 'bg-green-500' : 'bg-primary'
+              )}
+              initial={{ width: 0 }}
+              animate={{ width: `${progress}%` }}
+              transition={{ duration: 0.5, ease: 'easeOut' }}
+            />
+          </div>
+          
+          {/* Remaining calories */}
+          <div className="flex items-center justify-center gap-1.5 mt-2">
+            <Flame className="h-4 w-4 text-primary" />
+            <span className={cn(
+              'text-sm font-medium',
+              remaining > 0 ? 'text-muted-foreground' : 'text-orange-500'
+            )}>
+              {remaining > 0 
+                ? `${remaining.toLocaleString()} remaining`
+                : `${Math.abs(remaining).toLocaleString()} over target`
+              }
+            </span>
+          </div>
+        </motion.div>
+      )}
     </div>
   )
 }
 
+interface CalorieRingProps {
+  consumed: number
+  target: number
+}
+
+export function CalorieRing({ consumed, target }: CalorieRingProps) {
+  const remaining = target - consumed
+  const progress = Math.min((consumed / target) * 100, 100)
+  
+  // Circular progress
+  const radius = 70
+  const circumference = 2 * Math.PI * radius
+  const dashOffset = circumference - (progress / 100) * circumference
+  
+  return (
+    <div className="bg-card rounded-xl border border-border p-5">
+      <div className="flex items-center justify-center gap-8">
+        {/* Large circular progress ring */}
+        <div className="relative w-40 h-40">
+          <svg className="w-full h-full transform -rotate-90">
+            {/* Background circle */}
+            <circle
+              cx="80"
+              cy="80"
+              r={radius}
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="8"
+              className="text-muted/20"
+            />
+            {/* Progress circle */}
+            <motion.circle
+              cx="80"
+              cy="80"
+              r={radius}
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="8"
+              strokeLinecap="round"
+              strokeDasharray={circumference}
+              initial={{ strokeDashoffset: circumference }}
+              animate={{ strokeDashoffset: dashOffset }}
+              transition={{ duration: 0.8, ease: 'easeOut' }}
+              className={cn(
+                progress >= 100 ? 'text-green-500' : 'text-primary'
+              )}
+            />
+          </svg>
+          
+          {/* Center content */}
+          <div className="absolute inset-0 flex flex-col items-center justify-center">
+            <span className="text-3xl font-bold">{consumed.toLocaleString()}</span>
+            <span className="text-sm text-muted-foreground">of {target.toLocaleString()}</span>
+            <span className="text-xs text-muted-foreground">calories</span>
+          </div>
+        </div>
+        
+        {/* Remaining info */}
+        <div className="text-center">
+          <div className={cn(
+            'text-4xl font-bold mb-1',
+            remaining > 0 ? 'text-primary' : 'text-orange-500'
+          )}>
+            {Math.abs(remaining).toLocaleString()}
+          </div>
+          <div className="flex items-center justify-center gap-1 text-muted-foreground">
+            <Flame className="h-4 w-4" />
+            <span className="text-sm">{remaining > 0 ? 'remaining' : 'over'}</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// Keep DaySummary for backwards compatibility but simplified
 interface DaySummaryProps {
   consumed: number
   target: number
@@ -175,96 +304,9 @@ interface DaySummaryProps {
   fat: { current: number; target: number }
 }
 
-export function DaySummary({ consumed, target, protein, carbs, fat }: DaySummaryProps) {
-  const remaining = target - consumed
-  const progress = Math.min((consumed / target) * 100, 100)
-  
-  return (
-    <div className="bg-card rounded-xl border border-border p-5">
-      {/* Main calories */}
-      <div className="flex items-center justify-between mb-4">
-        <div>
-          <p className="text-sm text-muted-foreground mb-1">Today's Progress</p>
-          <div className="flex items-baseline gap-1">
-            <span className="text-3xl font-bold">{consumed.toLocaleString()}</span>
-            <span className="text-muted-foreground">/ {target.toLocaleString()} cal</span>
-          </div>
-        </div>
-        
-        <div className={cn(
-          'text-right',
-          remaining > 0 ? 'text-primary' : 'text-orange-500'
-        )}>
-          <div className="flex items-center gap-1">
-            <Flame className="h-4 w-4" />
-            <span className="font-semibold">{Math.abs(remaining).toLocaleString()}</span>
-          </div>
-          <p className="text-xs">{remaining > 0 ? 'remaining' : 'over'}</p>
-        </div>
-      </div>
-      
-      {/* Progress bar */}
-      <div className="h-2 bg-muted rounded-full overflow-hidden mb-4">
-        <motion.div
-          className={cn(
-            'h-full rounded-full',
-            progress >= 100 ? 'bg-green-500' : 'bg-primary'
-          )}
-          initial={{ width: 0 }}
-          animate={{ width: `${progress}%` }}
-          transition={{ duration: 0.5, ease: 'easeOut' }}
-        />
-      </div>
-      
-      {/* Macros */}
-      <div className="grid grid-cols-3 gap-3">
-        <MacroProgress
-          label="Protein"
-          current={protein.current}
-          target={protein.target}
-          color="bg-orange-500"
-        />
-        <MacroProgress
-          label="Carbs"
-          current={carbs.current}
-          target={carbs.target}
-          color="bg-blue-500"
-        />
-        <MacroProgress
-          label="Fat"
-          current={fat.current}
-          target={fat.target}
-          color="bg-purple-500"
-        />
-      </div>
-    </div>
-  )
-}
-
-function MacroProgress({
-  label,
-  current,
-  target,
-  color,
-}: {
-  label: string
-  current: number
-  target: number
-  color: string
-}) {
-  const progress = Math.min((current / target) * 100, 100)
-  
-  return (
-    <div className="text-center">
-      <div className="text-xs text-muted-foreground mb-1">{label}</div>
-      <div className="text-sm font-semibold mb-1">
-        {current}<span className="text-muted-foreground font-normal">/{target}g</span>
-      </div>
-      <div className="h-1.5 bg-muted rounded-full overflow-hidden">
-        <div className={cn('h-full rounded-full', color)} style={{ width: `${progress}%` }} />
-      </div>
-    </div>
-  )
+export function DaySummary({ consumed, target }: DaySummaryProps) {
+  // Simplified - just use CalorieRing
+  return <CalorieRing consumed={consumed} target={target} />
 }
 
 interface MealCardProps {
@@ -285,6 +327,8 @@ interface MealCardProps {
         fat_g?: number
       }
     } | null
+    recipeCount: number
+    currentIndex: number
     planSlot?: {
       recipe_id: string
       servings: number
@@ -301,6 +345,11 @@ export function MealCard({ meal, onLogMeal, onSwapMeal, onAddFood }: MealCardPro
   
   const progress = meal.isLogged ? 100 : 0
   const hasRecipe = !!meal.recipe
+  const canSwipe = meal.recipeCount > 1
+  
+  // Use scaled calories if available, otherwise use target
+  const displayCalories = (meal.recipe as any)?.scaled_calories || meal.targetCalories
+  const scaleFactor = (meal.recipe as any)?.scale_factor
   
   const mealEmojis: Record<string, string> = {
     breakfast: '🌅',
@@ -314,6 +363,8 @@ export function MealCard({ meal, onLogMeal, onSwapMeal, onAddFood }: MealCardPro
   // Swipe gesture handlers
   const handleDragEnd = (_: unknown, info: { offset: { x: number }; velocity: { x: number } }) => {
     setIsDragging(false)
+    if (!canSwipe) return
+    
     const threshold = 100
     const velocity = 500
     
@@ -330,27 +381,29 @@ export function MealCard({ meal, onLogMeal, onSwapMeal, onAddFood }: MealCardPro
   if (hasRecipe) {
     return (
       <div className="relative overflow-hidden rounded-xl">
-        {/* Swipe indicator background */}
-        <div className="absolute inset-0 flex items-center justify-between px-4">
-          <div className={cn(
-            'flex items-center gap-1 text-sm font-medium transition-opacity',
-            swipeX > 30 ? 'opacity-100 text-primary' : 'opacity-30'
-          )}>
-            <ChevronLeft className="h-4 w-4" />
-            <span>Previous</span>
+        {/* Swipe indicator background - only show if can swap */}
+        {canSwipe && (
+          <div className="absolute inset-0 flex items-center justify-between px-4 pointer-events-none">
+            <div className={cn(
+              'flex items-center gap-1 text-sm font-medium transition-opacity',
+              swipeX > 30 ? 'opacity-100 text-primary' : 'opacity-30'
+            )}>
+              <ChevronLeft className="h-4 w-4" />
+              <span>Previous</span>
+            </div>
+            <div className={cn(
+              'flex items-center gap-1 text-sm font-medium transition-opacity',
+              swipeX < -30 ? 'opacity-100 text-primary' : 'opacity-30'
+            )}>
+              <span>Next</span>
+              <ChevronRight className="h-4 w-4" />
+            </div>
           </div>
-          <div className={cn(
-            'flex items-center gap-1 text-sm font-medium transition-opacity',
-            swipeX < -30 ? 'opacity-100 text-primary' : 'opacity-30'
-          )}>
-            <span>Next</span>
-            <ChevronRight className="h-4 w-4" />
-          </div>
-        </div>
+        )}
         
         <motion.div
           className="bg-card rounded-xl border border-border overflow-hidden relative touch-manipulation"
-          drag="x"
+          drag={canSwipe ? "x" : false}
           dragConstraints={{ left: 0, right: 0 }}
           dragElastic={0.2}
           onDragStart={() => setIsDragging(true)}
@@ -382,12 +435,21 @@ export function MealCard({ meal, onLogMeal, onSwapMeal, onAddFood }: MealCardPro
             {/* Recipe info */}
             <div className="flex-1 p-3 flex flex-col justify-between">
               <div>
-                <h3 className="font-semibold text-sm line-clamp-1">{meal.recipe?.name}</h3>
+                <div className="flex items-center justify-between">
+                  <h3 className="font-semibold text-sm line-clamp-1 flex-1">{meal.recipe?.name}</h3>
+                  {canSwipe && (
+                    <span className="text-[10px] text-muted-foreground ml-2 whitespace-nowrap">
+                      {meal.currentIndex + 1}/{meal.recipeCount}
+                    </span>
+                  )}
+                </div>
                 <p className="text-xs text-muted-foreground mt-0.5">
-                  {meal.recipe?.nutrition_per_serving?.calories || meal.targetCalories} cal
-                  {meal.planSlot?.servings && meal.planSlot.servings > 1 && 
-                    ` × ${meal.planSlot.servings} servings`
-                  }
+                  {displayCalories} cal
+                  {scaleFactor && scaleFactor !== 1 && (
+                    <span className="text-[10px] ml-1">
+                      (×{scaleFactor.toFixed(1)})
+                    </span>
+                  )}
                 </p>
               </div>
               
@@ -413,18 +475,20 @@ export function MealCard({ meal, onLogMeal, onSwapMeal, onAddFood }: MealCardPro
                   </Button>
                 )}
                 
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  className="h-7 text-xs px-2 ml-auto"
-                  onClick={(e: React.MouseEvent) => {
-                    e.stopPropagation()
-                    onSwapMeal?.(meal.name, 'right')
-                  }}
-                >
-                  <ArrowLeftRight className="h-3 w-3 mr-1" />
-                  Swap
-                </Button>
+                {canSwipe && (
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="h-7 text-xs px-2 ml-auto"
+                    onClick={(e: React.MouseEvent) => {
+                      e.stopPropagation()
+                      onSwapMeal?.(meal.name, 'right')
+                    }}
+                  >
+                    <ArrowLeftRight className="h-3 w-3 mr-1" />
+                    Swap
+                  </Button>
+                )}
               </div>
             </div>
           </div>
