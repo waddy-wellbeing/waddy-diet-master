@@ -6,7 +6,7 @@ import { VisualSelect, VisualSelectList } from '../visual-select'
 import { UnitToggle } from '../unit-toggle'
 
 export interface GoalsData {
-  goalType: 'lose_weight' | 'maintain' | 'build_muscle' | ''
+  goalType: 'lose_weight' | 'maintain' | 'build_muscle' | 'recomposition' | ''
   targetWeight: string
   targetWeightUnit: 'kg' | 'lbs'
   pace: 'slow' | 'moderate' | 'aggressive' | ''
@@ -35,8 +35,14 @@ const goalTypeOptions = [
   {
     value: 'build_muscle',
     label: 'Build Muscle',
-    description: 'Gain strength and muscle mass',
+    description: 'Gain muscle mass (weight will increase)',
     emoji: '💪',
+  },
+  {
+    value: 'recomposition',
+    label: 'Recomposition',
+    description: 'Build muscle while losing fat',
+    emoji: '🔄',
   },
 ]
 
@@ -67,7 +73,7 @@ export function GoalsStep({ data, currentWeight, weightUnit, onChange }: GoalsSt
   }
 
   const showTargetWeight = data.goalType === 'lose_weight' || data.goalType === 'build_muscle'
-  const showPace = data.goalType === 'lose_weight' || data.goalType === 'build_muscle'
+  const showPace = data.goalType === 'lose_weight' || data.goalType === 'build_muscle' || data.goalType === 'recomposition'
 
   // Display weight in selected unit
   const getDisplayWeight = (kgValue: string) => {
@@ -122,7 +128,7 @@ export function GoalsStep({ data, currentWeight, weightUnit, onChange }: GoalsSt
           options={goalTypeOptions}
           value={data.goalType}
           onChange={(v) => updateField('goalType', v as GoalsData['goalType'])}
-          columns={3}
+          columns={2}
         />
       </div>
 

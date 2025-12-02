@@ -7,7 +7,7 @@
 
 export type Sex = 'male' | 'female'
 export type ActivityLevel = 'sedentary' | 'light' | 'moderate' | 'active' | 'very_active'
-export type GoalType = 'lose_weight' | 'maintain' | 'build_muscle'
+export type GoalType = 'lose_weight' | 'maintain' | 'build_muscle' | 'recomposition'
 export type Pace = 'slow' | 'moderate' | 'aggressive'
 
 export interface TDEEInput {
@@ -59,6 +59,11 @@ const GOAL_ADJUSTMENTS: Record<GoalType, Record<Pace, number>> = {
     moderate: 0.15,    // +15% (moderate bulk)
     aggressive: 0.20,  // +20% (aggressive bulk)
   },
+  recomposition: {
+    slow: -0.05,       // -5% (slight deficit, high protein)
+    moderate: 0,       // maintenance calories, high protein
+    aggressive: 0.05,  // +5% (slight surplus, high protein)
+  },
 }
 
 // Activity level labels for display
@@ -98,6 +103,10 @@ export const GOAL_LABELS: Record<GoalType, { label: string; description: string 
   build_muscle: { 
     label: 'Build Muscle', 
     description: 'Create calorie surplus for muscle growth' 
+  },
+  recomposition: {
+    label: 'Body Recomposition',
+    description: 'Build muscle while losing fat'
   },
 }
 

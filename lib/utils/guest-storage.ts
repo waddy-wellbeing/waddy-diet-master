@@ -17,7 +17,7 @@ export interface GuestOnboardingData {
   }
   activityLevel: 'sedentary' | 'light' | 'moderate' | 'active' | 'very_active' | ''
   goals: {
-    goalType: 'lose_weight' | 'maintain' | 'build_muscle' | ''
+    goalType: 'lose_weight' | 'maintain' | 'build_muscle' | 'recomposition' | ''
     targetWeight: string
     targetWeightUnit: 'kg' | 'lbs'
     pace: 'slow' | 'moderate' | 'aggressive' | ''

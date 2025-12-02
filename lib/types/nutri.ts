@@ -54,7 +54,7 @@ export interface ProfilePreferences {
 
 /** User goal information */
 export interface ProfileGoals {
-  goal_type?: 'lose_weight' | 'maintain' | 'build_muscle'
+  goal_type?: 'lose_weight' | 'maintain' | 'build_muscle' | 'recomposition'
   target_weight_kg?: number
   pace?: 'slow' | 'moderate' | 'aggressive'
 }
