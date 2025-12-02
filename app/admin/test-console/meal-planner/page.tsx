@@ -316,7 +316,7 @@ export default function MealPlannerPage() {
 
                             {/* Details */}
                             <div className="flex-1 min-w-0">
-                              <div className="font-medium truncate">{recipe.name}</div>
+                              <div className="font-medium truncate font-arabic">{recipe.name}</div>
                               <div className="flex items-center gap-4 text-sm text-muted-foreground mt-1">
                                 {recipe.cuisine && (
                                   <span>{recipe.cuisine}</span>

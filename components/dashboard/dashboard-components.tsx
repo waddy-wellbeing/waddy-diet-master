@@ -317,6 +317,7 @@ interface MealCardProps {
     targetCalories: number
     consumedCalories: number
     isLogged: boolean
+    loggedRecipeName?: string | null
     recipe: {
       id: string
       name: string
@@ -335,19 +336,21 @@ interface MealCardProps {
       servings: number
     } | null
   }
+  isToday?: boolean
   onLogMeal?: (mealName: string) => void
   onUnlogMeal?: (mealName: string) => void
   onSwapMeal?: (mealName: string, direction: 'left' | 'right') => void
   onAddFood?: () => void
 }
 
-export function MealCard({ meal, onLogMeal, onUnlogMeal, onSwapMeal, onAddFood }: MealCardProps) {
+export function MealCard({ meal, isToday = true, onLogMeal, onUnlogMeal, onSwapMeal, onAddFood }: MealCardProps) {
   const [swipeX, setSwipeX] = useState(0)
   const [isDragging, setIsDragging] = useState(false)
   
   const progress = meal.isLogged ? 100 : 0
   const hasRecipe = !!meal.recipe
-  const canSwipe = meal.recipeCount > 1
+  const canSwipe = meal.recipeCount > 1 && isToday
+  const canLog = isToday
   
   // Use scaled calories if available, otherwise use target
   const displayCalories = (meal.recipe as any)?.scaled_calories || meal.targetCalories
@@ -379,10 +382,13 @@ export function MealCard({ meal, onLogMeal, onUnlogMeal, onSwapMeal, onAddFood }
     setSwipeX(0)
   }
   
-  // If there's a recipe assigned
-  if (hasRecipe) {
+  // If there's a recipe assigned OR viewing a past day with logged meal
+  if (hasRecipe || (!isToday && meal.isLogged)) {
     return (
-      <div className="relative overflow-hidden rounded-xl">
+      <div className={cn(
+        "relative overflow-hidden rounded-xl",
+        !isToday && "opacity-75"
+      )}>
         {/* Swipe indicator background - only show if can swap */}
         {canSwipe && (
           <div className="absolute inset-0 flex items-center justify-between px-4 pointer-events-none">
@@ -404,7 +410,10 @@ export function MealCard({ meal, onLogMeal, onUnlogMeal, onSwapMeal, onAddFood }
         )}
         
         <motion.div
-          className="bg-card rounded-xl border border-border overflow-hidden relative touch-manipulation"
+          className={cn(
+            "bg-card rounded-xl border border-border overflow-hidden relative touch-manipulation",
+            !isToday && "bg-muted/30"
+          )}
           drag={canSwipe ? "x" : false}
           dragConstraints={{ left: 0, right: 0 }}
           dragElastic={0.2}
@@ -416,7 +425,10 @@ export function MealCard({ meal, onLogMeal, onUnlogMeal, onSwapMeal, onAddFood }
         >
           <div className="flex">
             {/* Recipe image */}
-            <div className="relative w-24 h-24 flex-shrink-0 bg-muted">
+            <div className={cn(
+              "relative w-24 h-24 flex-shrink-0 bg-muted",
+              !isToday && "grayscale"
+            )}>
               {meal.recipe?.image_url ? (
                 <img
                   src={meal.recipe.image_url}
@@ -438,7 +450,9 @@ export function MealCard({ meal, onLogMeal, onUnlogMeal, onSwapMeal, onAddFood }
             <div className="flex-1 p-3 flex flex-col justify-between">
               <div>
                 <div className="flex items-center justify-between">
-                  <h3 className="font-semibold text-sm line-clamp-1 flex-1">{meal.recipe?.name}</h3>
+                  <h3 className="font-semibold text-sm line-clamp-1 flex-1 font-arabic">
+                    {!isToday && meal.loggedRecipeName ? meal.loggedRecipeName : meal.recipe?.name || 'No recipe'}
+                  </h3>
                   {canSwipe && (
                     <span className="text-[10px] text-muted-foreground ml-2 whitespace-nowrap">
                       {meal.currentIndex + 1}/{meal.recipeCount}
@@ -455,9 +469,19 @@ export function MealCard({ meal, onLogMeal, onUnlogMeal, onSwapMeal, onAddFood }
                 </p>
               </div>
               
-              {/* Action buttons */}
+              {/* Action buttons - only for today */}
               <div className="flex items-center gap-2 mt-2">
-                {meal.isLogged ? (
+                {!isToday ? (
+                  // Past day - just show status
+                  meal.isLogged ? (
+                    <span className="inline-flex items-center gap-1 text-xs text-green-600/70 font-medium">
+                      <Check className="h-3 w-3" />
+                      Eaten
+                    </span>
+                  ) : (
+                    <span className="text-xs text-muted-foreground">Not logged</span>
+                  )
+                ) : meal.isLogged ? (
                   <>
                     <span className="inline-flex items-center gap-1 text-xs text-green-600 font-medium">
                       <Check className="h-3 w-3" />

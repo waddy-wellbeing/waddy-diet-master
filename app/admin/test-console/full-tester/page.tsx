@@ -477,7 +477,7 @@ export default function FullTesterPage() {
                             </div>
 
                             <div className="flex-1 min-w-0">
-                              <div className="font-medium text-sm truncate">{recipe.name}</div>
+                              <div className="font-medium text-sm truncate font-arabic">{recipe.name}</div>
                               <div className="flex items-center gap-3 text-xs text-muted-foreground mt-0.5">
                                 <span className="flex items-center gap-1 text-primary font-medium">
                                   <Scale className="h-3 w-3" />

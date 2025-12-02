@@ -153,7 +153,7 @@ export default function AlternativesPage() {
                           : 'hover:bg-muted/50'
                       }`}
                     >
-                      <div className="font-medium truncate">{recipe.name}</div>
+                      <div className="font-medium truncate font-arabic">{recipe.name}</div>
                       <div className="text-xs text-muted-foreground">
                         {recipe.meal_type?.join(', ')} • {recipe.nutrition_per_serving?.calories || 0} kcal
                       </div>
@@ -246,7 +246,7 @@ export default function AlternativesPage() {
                     )}
                   </div>
                   <div className="flex-1">
-                    <div className="font-semibold text-lg">{originalRecipe.name}</div>
+                    <div className="font-semibold text-lg font-arabic">{originalRecipe.name}</div>
                     <div className="flex items-center gap-3 text-sm text-muted-foreground mt-1">
                       {originalRecipe.cuisine && <span>{originalRecipe.cuisine}</span>}
                       {originalRecipe.meal_type && (
@@ -305,7 +305,7 @@ export default function AlternativesPage() {
                           )}
                         </div>
                         <div className="flex-1 min-w-0">
-                          <div className="font-medium text-sm truncate">{recipe.name}</div>
+                          <div className="font-medium text-sm truncate font-arabic">{recipe.name}</div>
                           <div className="flex items-center gap-2 text-xs text-muted-foreground mt-1">
                             {(recipe.prep_time_minutes || recipe.cook_time_minutes) && (
                               <span className="flex items-center gap-0.5">

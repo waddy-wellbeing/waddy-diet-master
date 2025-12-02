@@ -359,7 +359,7 @@ export function RecipesTable({
                   <TableCell>
                     <div className="flex flex-col">
                       <div className="flex items-center gap-2">
-                        <span className="font-medium line-clamp-1">{recipe.name}</span>
+                        <span className="font-medium line-clamp-1 font-arabic">{recipe.name}</span>
                         {(recipe.ingredient_count === 0 || recipe.unmatched_count > 0) && (
                           <TooltipProvider>
                             <Tooltip>

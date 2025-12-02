@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import Link from 'next/link'
-import { format, startOfWeek, endOfWeek } from 'date-fns'
+import { format, startOfWeek, endOfWeek, isToday as isDateToday } from 'date-fns'
 import { Settings, Bell } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import {
@@ -157,6 +157,17 @@ export function DashboardContent({
   const plan = dailyPlan?.plan as DailyPlan | undefined
   const log = dailyLog?.log as DailyLog | undefined
   
+  // Check if selected date is today
+  const isSelectedToday = isDateToday(selectedDate)
+  
+  // Helper to get logged recipe name from log items
+  const getLoggedRecipeName = (mealLog: { items?: Array<{ recipe_id?: string; recipe_name?: string }> } | undefined): string | null => {
+    if (!mealLog?.items?.length) return null
+    // Try to get recipe name from the first logged item
+    const firstItem = mealLog.items[0]
+    return firstItem?.recipe_name || null
+  }
+  
   const meals = [
     {
       name: 'breakfast' as const,
@@ -165,6 +176,7 @@ export function DashboardContent({
       consumedCalories: log?.breakfast?.items?.length ? 
         log.breakfast.items.reduce((sum, item) => sum + (item.servings || 1) * 100, 0) : 0,
       isLogged: !!log?.breakfast?.items?.length,
+      loggedRecipeName: getLoggedRecipeName(log?.breakfast),
       recipe: getCurrentRecipe('breakfast'),
       recipeCount: getRecipeCount('breakfast'),
       currentIndex: selectedIndices.breakfast,
@@ -177,6 +189,7 @@ export function DashboardContent({
       consumedCalories: log?.lunch?.items?.length ?
         log.lunch.items.reduce((sum, item) => sum + (item.servings || 1) * 100, 0) : 0,
       isLogged: !!log?.lunch?.items?.length,
+      loggedRecipeName: getLoggedRecipeName(log?.lunch),
       recipe: getCurrentRecipe('lunch'),
       recipeCount: getRecipeCount('lunch'),
       currentIndex: selectedIndices.lunch,
@@ -189,6 +202,7 @@ export function DashboardContent({
       consumedCalories: log?.dinner?.items?.length ?
         log.dinner.items.reduce((sum, item) => sum + (item.servings || 1) * 100, 0) : 0,
       isLogged: !!log?.dinner?.items?.length,
+      loggedRecipeName: getLoggedRecipeName(log?.dinner),
       recipe: getCurrentRecipe('dinner'),
       recipeCount: getRecipeCount('dinner'),
       currentIndex: selectedIndices.dinner,
@@ -201,6 +215,7 @@ export function DashboardContent({
       consumedCalories: log?.snacks?.items?.length ?
         log.snacks.items.reduce((sum, item) => sum + (item.servings || 1) * 100, 0) : 0,
       isLogged: !!log?.snacks?.items?.length,
+      loggedRecipeName: getLoggedRecipeName(log?.snacks),
       recipe: getCurrentRecipe('snacks'),
       recipeCount: getRecipeCount('snacks'),
       currentIndex: selectedIndices.snacks,
@@ -229,6 +244,7 @@ export function DashboardContent({
     const logEntry = {
       type: 'recipe' as const,
       recipe_id: meal.recipe.id,
+      recipe_name: meal.recipe.name, // Store recipe name for historical display
       servings: meal.planSlot?.servings || 1,
       from_plan: true,
     }
@@ -425,7 +441,9 @@ export function DashboardContent({
         {/* Meals Section */}
         <section>
           <div className="flex items-center justify-between mb-4">
-            <h2 className="text-lg font-semibold">Today's Meals</h2>
+            <h2 className="text-lg font-semibold">
+              {isSelectedToday ? "Today's Meals" : format(selectedDate, 'EEEE\'s Meals')}
+            </h2>
             <Button variant="ghost" size="sm" className="text-primary" asChild>
               <Link href="/plans">View Plan</Link>
             </Button>
@@ -436,6 +454,7 @@ export function DashboardContent({
               <MealCard
                 key={meal.name}
                 meal={meal}
+                isToday={isSelectedToday}
                 onLogMeal={handleLogMeal}
                 onUnlogMeal={handleUnlogMeal}
                 onSwapMeal={handleSwapMeal}
