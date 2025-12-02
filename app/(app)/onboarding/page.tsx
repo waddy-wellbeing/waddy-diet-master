@@ -27,16 +27,24 @@ export default async function OnboardingPage() {
   }
 
   // Check if user has already completed onboarding
-  const { data: profile } = await supabase
+  // Use maybeSingle() instead of single() to handle case where profile doesn't exist yet
+  const { data: profile, error: profileError } = await supabase
     .from('profiles')
     .select('onboarding_completed')
     .eq('user_id', user.id)
-    .single()
+    .maybeSingle()
 
+  // If profile query failed for a reason other than not found, log it
+  if (profileError) {
+    console.error('Error fetching profile in onboarding:', profileError)
+  }
+
+  // If profile exists and onboarding is complete, redirect to dashboard
   if (profile?.onboarding_completed) {
     redirect('/dashboard')
   }
 
+  // Otherwise, show onboarding (profile might not exist yet for new users)
   return (
     <Suspense fallback={<LoadingSpinner />}>
       <OnboardingContent />

@@ -12,9 +12,27 @@ const PROMPT_DELAY_MS = 3000 // Show after 3 seconds
 export function PushNotificationPrompt() {
   const [isVisible, setIsVisible] = useState(false)
   const [isEnabling, setIsEnabling] = useState(false)
-  const { isSupported, isSubscribed, permission, subscribe } = usePushNotifications()
+  const [mounted, setMounted] = useState(false)
+  
+  // Wrap in try-catch to handle any hook errors gracefully
+  let pushState = { isSupported: false, isSubscribed: false, permission: 'default' as NotificationPermission, subscribe: async () => false }
+  try {
+    pushState = usePushNotifications()
+  } catch (e) {
+    console.error('[PushPrompt] Hook error:', e)
+  }
+  
+  const { isSupported, isSubscribed, permission, subscribe } = pushState
+
+  // Only run on client
+  useEffect(() => {
+    setMounted(true)
+  }, [])
 
   useEffect(() => {
+    // Don't show if not mounted (SSR) or hook failed
+    if (!mounted) return
+    
     // Don't show if:
     // - Not supported
     // - Already subscribed
@@ -24,8 +42,13 @@ export function PushNotificationPrompt() {
       return
     }
 
-    const dismissed = sessionStorage.getItem(PROMPT_DISMISSED_KEY)
-    if (dismissed) {
+    try {
+      const dismissed = sessionStorage.getItem(PROMPT_DISMISSED_KEY)
+      if (dismissed) {
+        return
+      }
+    } catch (e) {
+      // sessionStorage might not be available
       return
     }
 
@@ -35,21 +58,33 @@ export function PushNotificationPrompt() {
     }, PROMPT_DELAY_MS)
 
     return () => clearTimeout(timer)
-  }, [isSupported, isSubscribed, permission])
+  }, [mounted, isSupported, isSubscribed, permission])
 
   const handleDismiss = () => {
     setIsVisible(false)
-    sessionStorage.setItem(PROMPT_DISMISSED_KEY, 'true')
+    try {
+      sessionStorage.setItem(PROMPT_DISMISSED_KEY, 'true')
+    } catch (e) {
+      // Ignore storage errors
+    }
   }
 
   const handleEnable = async () => {
     setIsEnabling(true)
-    const success = await subscribe()
-    setIsEnabling(false)
-    
-    if (success) {
-      setIsVisible(false)
+    try {
+      const success = await subscribe()
+      if (success) {
+        setIsVisible(false)
+      }
+    } catch (e) {
+      console.error('[PushPrompt] Enable error:', e)
     }
+    setIsEnabling(false)
+  }
+
+  // Don't render during SSR or if not visible
+  if (!mounted || !isVisible) {
+    return null
   }
 
   return (

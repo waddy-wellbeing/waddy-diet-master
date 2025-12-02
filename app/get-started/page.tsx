@@ -17,7 +17,7 @@ export default async function GetStartedPage() {
       .from('profiles')
       .select('onboarding_completed')
       .eq('user_id', user.id)
-      .single()
+      .maybeSingle()
 
     if (profile?.onboarding_completed) {
       redirect('/dashboard')

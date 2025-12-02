@@ -68,8 +68,8 @@ interface OnboardingFlowProps {
 export function OnboardingFlow({ initialData, onComplete }: OnboardingFlowProps) {
   const router = useRouter()
   const [isSubmitting, setIsSubmitting] = useState(false)
-  // If we have completed guest data, skip to the preview step (step 7)
-  const [currentStep, setCurrentStep] = useState(initialData?.completedAt ? 7 : 0)
+  // If we have completed guest data, skip to the preview step (last step, index 6)
+  const [currentStep, setCurrentStep] = useState(initialData?.completedAt ? TOTAL_STEPS - 1 : 0)
   const [direction, setDirection] = useState(1)
   
   // Form state for all steps - initialize from initialData if available

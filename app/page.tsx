@@ -11,11 +11,12 @@ export default async function HomePage() {
   }
 
   // Check if user has completed onboarding
+  // Use maybeSingle() to handle new users without a profile yet
   const { data: profile } = await supabase
     .from('profiles')
     .select('onboarding_completed')
     .eq('user_id', user.id)
-    .single()
+    .maybeSingle()
 
   if (profile?.onboarding_completed) {
     redirect('/dashboard')

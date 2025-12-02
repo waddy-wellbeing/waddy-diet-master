@@ -1,7 +1,7 @@
 import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import { BottomNav } from '@/components/app/navigation/bottom-nav'
-import { PushNotificationPrompt } from '@/components/push-notification-prompt'
+// import { PushNotificationPrompt } from '@/components/push-notification-prompt'
 
 export default async function AppLayout({
   children,
@@ -16,11 +16,12 @@ export default async function AppLayout({
   }
 
   // Check if user has completed onboarding
+  // Use maybeSingle() to handle case where profile doesn't exist yet for new users
   const { data: profile } = await supabase
     .from('profiles')
     .select('onboarding_completed, onboarding_step')
     .eq('user_id', user.id)
-    .single()
+    .maybeSingle()
 
   // Get current path to determine if we're in onboarding
   // This will be handled by individual pages
@@ -32,8 +33,9 @@ export default async function AppLayout({
       </main>
       {/* Only show bottom nav if onboarding is complete */}
       {profile?.onboarding_completed && <BottomNav />}
-      {/* Push notification prompt - shows once per session for non-subscribed users */}
+      {/* Push notification prompt - temporarily disabled
       {profile?.onboarding_completed && <PushNotificationPrompt />}
+      */}
     </div>
   )
 }
