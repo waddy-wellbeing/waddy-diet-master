@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useTransition, useEffect } from 'react'
+import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { motion, AnimatePresence } from 'framer-motion'
 import { OnboardingLayout } from '@/components/onboarding/onboarding-layout'
@@ -20,7 +20,11 @@ import {
   type LifestyleData,
   type MealsPerDay,
 } from '@/components/onboarding/steps'
-import { saveOnboardingData } from '@/lib/actions/onboarding'
+import {
+  saveGuestOnboardingData,
+  loadGuestOnboardingData,
+  type GuestOnboardingData,
+} from '@/lib/utils/guest-storage'
 import { toast } from 'sonner'
 
 const TOTAL_STEPS = 8
@@ -30,7 +34,7 @@ const stepConfig = [
   { id: 'basic-info', title: 'About You', subtitle: "Let's personalize your experience" },
   { id: 'activity', title: 'Activity Level', subtitle: 'How active are you?' },
   { id: 'goals', title: 'Your Goals', subtitle: 'What do you want to achieve?' },
-  { id: 'preferences', title: 'Dietary Preferences', subtitle: 'Any restrictions or dislikes?' },
+  { id: 'preferences', title: 'Dietary Preferences', subtitle: 'What type of diet?' },
   { id: 'lifestyle', title: 'Lifestyle', subtitle: 'Your cooking preferences' },
   { id: 'meals', title: 'Meal Structure', subtitle: 'How do you like to eat?' },
   { id: 'preview', title: 'Your Plan', subtitle: 'Review your personalized plan' },
@@ -51,73 +55,75 @@ const slideVariants = {
   }),
 }
 
-interface InitialOnboardingData {
-  basicInfo: BasicInfoData
-  activityLevel: ActivityLevel
-  goals: GoalsData
-  dietaryPreferences: DietaryPreferencesData
-  lifestyle: LifestyleData
-  mealsPerDay: MealsPerDay
-  completedAt?: string
-}
-
-interface OnboardingFlowProps {
-  initialData?: InitialOnboardingData
-  onComplete?: () => void
-}
-
-export function OnboardingFlow({ initialData, onComplete }: OnboardingFlowProps) {
+export function GuestOnboardingFlow() {
   const router = useRouter()
-  const [isPending, startTransition] = useTransition()
-  // If we have completed guest data, skip to the preview step (step 7)
-  const [currentStep, setCurrentStep] = useState(initialData?.completedAt ? 7 : 0)
+  const [isLoading, setIsLoading] = useState(false)
+  const [currentStep, setCurrentStep] = useState(0)
   const [direction, setDirection] = useState(1)
+  const [isInitialized, setIsInitialized] = useState(false)
   
-  // Form state for all steps - initialize from initialData if available
-  const [basicInfo, setBasicInfo] = useState<BasicInfoData>(
-    initialData?.basicInfo || {
-      name: '',
-      age: '',
-      sex: '',
-      height: '',
-      heightUnit: 'cm',
-      weight: '',
-      weightUnit: 'kg',
+  // Form state for all steps
+  const [basicInfo, setBasicInfo] = useState<BasicInfoData>({
+    name: '',
+    age: '',
+    sex: '',
+    height: '',
+    heightUnit: 'cm',
+    weight: '',
+    weightUnit: 'kg',
+  })
+  
+  const [activityLevel, setActivityLevel] = useState<ActivityLevel>('')
+  
+  const [goals, setGoals] = useState<GoalsData>({
+    goalType: '',
+    targetWeight: '',
+    targetWeightUnit: 'kg',
+    pace: '',
+  })
+  
+  const [dietaryPreferences, setDietaryPreferences] = useState<DietaryPreferencesData>({
+    dietType: '',
+    allergies: [],
+    hasNoAllergies: false,
+    dislikes: [],
+  })
+  
+  const [lifestyle, setLifestyle] = useState<LifestyleData>({
+    cookingSkill: '',
+    maxPrepTime: 30,
+  })
+  
+  const [mealsPerDay, setMealsPerDay] = useState<MealsPerDay>(3)
+
+  // Load saved data from local storage on mount
+  useEffect(() => {
+    const savedData = loadGuestOnboardingData()
+    if (savedData) {
+      if (savedData.basicInfo) setBasicInfo(savedData.basicInfo)
+      if (savedData.activityLevel) setActivityLevel(savedData.activityLevel)
+      if (savedData.goals) setGoals(savedData.goals)
+      if (savedData.dietaryPreferences) setDietaryPreferences(savedData.dietaryPreferences)
+      if (savedData.lifestyle) setLifestyle(savedData.lifestyle)
+      if (savedData.mealsPerDay) setMealsPerDay(savedData.mealsPerDay)
     }
-  )
-  
-  const [activityLevel, setActivityLevel] = useState<ActivityLevel>(
-    initialData?.activityLevel || ''
-  )
-  
-  const [goals, setGoals] = useState<GoalsData>(
-    initialData?.goals || {
-      goalType: '',
-      targetWeight: '',
-      targetWeightUnit: 'kg',
-      pace: '',
+    setIsInitialized(true)
+  }, [])
+
+  // Auto-save to local storage whenever form data changes
+  useEffect(() => {
+    if (!isInitialized) return
+    
+    const data: GuestOnboardingData = {
+      basicInfo,
+      activityLevel,
+      goals,
+      dietaryPreferences,
+      lifestyle,
+      mealsPerDay,
     }
-  )
-  
-  const [dietaryPreferences, setDietaryPreferences] = useState<DietaryPreferencesData>(
-    initialData?.dietaryPreferences || {
-      dietType: '',
-      allergies: [],
-      hasNoAllergies: false,
-      dislikes: [],
-    }
-  )
-  
-  const [lifestyle, setLifestyle] = useState<LifestyleData>(
-    initialData?.lifestyle || {
-      cookingSkill: '',
-      maxPrepTime: 30,
-    }
-  )
-  
-  const [mealsPerDay, setMealsPerDay] = useState<MealsPerDay>(
-    initialData?.mealsPerDay || 3
-  )
+    saveGuestOnboardingData(data)
+  }, [basicInfo, activityLevel, goals, dietaryPreferences, lifestyle, mealsPerDay, isInitialized])
 
   const goToNext = () => {
     if (currentStep < TOTAL_STEPS - 1) {
@@ -164,29 +170,25 @@ export function OnboardingFlow({ initialData, onComplete }: OnboardingFlowProps)
   }
 
   const handleComplete = () => {
-    startTransition(async () => {
-      console.log('Starting onboarding save...')
-      const result = await saveOnboardingData({
-        basicInfo,
-        activityLevel,
-        goals,
-        dietaryPreferences,
-        lifestyle,
-        mealsPerDay,
-      })
-      console.log('Onboarding save result:', result)
-      
-      if (result.success) {
-        // Clear guest data if callback provided
-        onComplete?.()
-        toast.success('Welcome to Waddy! ⚡')
-        router.push('/dashboard')
-        router.refresh()
-      } else {
-        console.error('Failed to save onboarding data:', result.error)
-        toast.error(result.error || 'Something went wrong. Please try again.')
-      }
-    })
+    setIsLoading(true)
+    
+    // Save final data with completion timestamp
+    const data: GuestOnboardingData = {
+      basicInfo,
+      activityLevel,
+      goals,
+      dietaryPreferences,
+      lifestyle,
+      mealsPerDay,
+      completedAt: new Date().toISOString(),
+    }
+    saveGuestOnboardingData(data)
+    
+    toast.success('Your plan is ready! ⚡')
+    toast.info('Sign in to save your progress and access all features')
+    
+    // Redirect to sign up with a flag to sync data
+    router.push('/signup?from=onboarding')
   }
 
   const renderStep = () => {
@@ -238,13 +240,13 @@ export function OnboardingFlow({ initialData, onComplete }: OnboardingFlowProps)
   return (
     <OnboardingLayout
       currentStep={currentStep - 1}
-      totalSteps={TOTAL_STEPS - 1} // Exclude welcome from step count
+      totalSteps={TOTAL_STEPS - 1}
       title={config.title}
       subtitle={config.subtitle}
       onBack={currentStep > 1 ? goToPrevious : undefined}
-      nextLabel={currentStep === TOTAL_STEPS - 1 ? "Let's Start!" : 'Continue'}
+      nextLabel={currentStep === TOTAL_STEPS - 1 ? 'Save & Sign Up' : 'Continue'}
       isNextDisabled={!canContinue()}
-      isLoading={isPending}
+      isLoading={isLoading}
       onNext={currentStep === TOTAL_STEPS - 1 ? handleComplete : goToNext}
     >
       <AnimatePresence mode="wait" custom={direction}>

@@ -37,9 +37,9 @@ export async function middleware(request: NextRequest) {
   const pathname = request.nextUrl.pathname
 
   // Public routes that don't require auth
-  const publicRoutes = ['/', '/login', '/signup', '/health']
+  const publicRoutes = ['/', '/login', '/signup', '/health', '/get-started']
   const isPublicRoute = publicRoutes.some(
-    (route) => pathname === route || pathname.startsWith('/health')
+    (route) => pathname === route || pathname.startsWith('/health') || pathname.startsWith('/get-started')
   )
 
   // Auth routes (login/signup) - redirect to dashboard if already logged in
