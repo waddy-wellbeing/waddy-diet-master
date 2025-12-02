@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useTransition, useEffect } from 'react'
+import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { motion, AnimatePresence } from 'framer-motion'
 import { OnboardingLayout } from '@/components/onboarding/onboarding-layout'
@@ -68,7 +68,7 @@ interface OnboardingFlowProps {
 
 export function OnboardingFlow({ initialData, onComplete }: OnboardingFlowProps) {
   const router = useRouter()
-  const [isPending, startTransition] = useTransition()
+  const [isSubmitting, setIsSubmitting] = useState(false)
   // If we have completed guest data, skip to the preview step (step 7)
   const [currentStep, setCurrentStep] = useState(initialData?.completedAt ? 7 : 0)
   const [direction, setDirection] = useState(1)
@@ -163,9 +163,11 @@ export function OnboardingFlow({ initialData, onComplete }: OnboardingFlowProps)
     }
   }
 
-  const handleComplete = () => {
-    startTransition(async () => {
-      console.log('Starting onboarding save...')
+  const handleComplete = async () => {
+    setIsSubmitting(true)
+    console.log('Starting onboarding save...')
+    
+    try {
       const result = await saveOnboardingData({
         basicInfo,
         activityLevel,
@@ -180,13 +182,18 @@ export function OnboardingFlow({ initialData, onComplete }: OnboardingFlowProps)
         // Clear guest data if callback provided
         onComplete?.()
         toast.success('Welcome to Waddy! ⚡')
-        router.push('/dashboard')
-        router.refresh()
+        // Use replace to prevent back navigation to onboarding
+        router.replace('/dashboard')
       } else {
         console.error('Failed to save onboarding data:', result.error)
         toast.error(result.error || 'Something went wrong. Please try again.')
+        setIsSubmitting(false)
       }
-    })
+    } catch (error) {
+      console.error('Error saving onboarding:', error)
+      toast.error('Something went wrong. Please try again.')
+      setIsSubmitting(false)
+    }
   }
 
   const renderStep = () => {
@@ -244,7 +251,7 @@ export function OnboardingFlow({ initialData, onComplete }: OnboardingFlowProps)
       onBack={currentStep > 1 ? goToPrevious : undefined}
       nextLabel={currentStep === TOTAL_STEPS - 1 ? "Let's Start!" : 'Continue'}
       isNextDisabled={!canContinue()}
-      isLoading={isPending}
+      isLoading={isSubmitting}
       onNext={currentStep === TOTAL_STEPS - 1 ? handleComplete : goToNext}
     >
       <AnimatePresence mode="wait" custom={direction}>
