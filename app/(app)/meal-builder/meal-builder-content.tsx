@@ -12,6 +12,7 @@ import {
   Beef,
   Wheat,
   Droplet,
+  Info,
   X,
   Loader2,
   List,
@@ -58,6 +59,7 @@ export function MealBuilderContent({
   const [loadingSwaps, setLoadingSwaps] = useState(false)
   const [selectedSwaps, setSelectedSwaps] = useState<Record<string, IngredientSwapOption>>({})
   const [swipeX, setSwipeX] = useState(0)
+  const [showMacroLabels, setShowMacroLabels] = useState(false)
   
   // Get current recipe for selected meal
   const currentRecipe = selectedMeal 
@@ -179,23 +181,105 @@ export function MealBuilderContent({
                 {/* Content */}
                 <div className="absolute inset-x-0 bottom-0 p-3 text-left text-white">
                   <h3 className="font-bold text-lg">{mealLabels[meal]}</h3>
-                  <div className="flex items-center gap-2 text-xs text-white/80 mt-1 flex-wrap">
-                    <span className="flex items-center gap-1">
-                      <Flame className="w-3 h-3" />
-                      {target.calories}
-                    </span>
-                    <span className="flex items-center gap-1">
-                      <Beef className="w-3 h-3" />
-                      {target.protein}g
-                    </span>
-                    <span className="flex items-center gap-1">
-                      <Wheat className="w-3 h-3" />
-                      {target.carbs}g
-                    </span>
-                    <span className="flex items-center gap-1">
-                      <Droplet className="w-3 h-3" />
-                      {target.fat}g
-                    </span>
+                  <div className="flex items-center text-xs text-white/80 mt-1">
+                    <div className="flex items-center gap-2 overflow-hidden">
+                      <motion.div 
+                        className="flex items-center gap-1 shrink-0"
+                        layout
+                        transition={{ duration: 0.2 }}
+                      >
+                        <Flame className="w-3 h-3 shrink-0" />
+                        <span>{target.calories}</span>
+                        <AnimatePresence mode="popLayout">
+                          {showMacroLabels && (
+                            <motion.span
+                              initial={{ width: 0, opacity: 0 }}
+                              animate={{ width: 'auto', opacity: 1 }}
+                              exit={{ width: 0, opacity: 0 }}
+                              transition={{ duration: 0.2 }}
+                              className="text-white/60 overflow-hidden whitespace-nowrap"
+                            >
+                              cal
+                            </motion.span>
+                          )}
+                        </AnimatePresence>
+                      </motion.div>
+                      <span className="text-white/40">•</span>
+                      <motion.div 
+                        className="flex items-center gap-1 shrink-0"
+                        layout
+                        transition={{ duration: 0.2 }}
+                      >
+                        <Beef className="w-3 h-3 shrink-0" />
+                        <span>{target.protein}g</span>
+                        <AnimatePresence mode="popLayout">
+                          {showMacroLabels && (
+                            <motion.span
+                              initial={{ width: 0, opacity: 0 }}
+                              animate={{ width: 'auto', opacity: 1 }}
+                              exit={{ width: 0, opacity: 0 }}
+                              transition={{ duration: 0.2 }}
+                              className="text-white/60 overflow-hidden whitespace-nowrap"
+                            >
+                              protein
+                            </motion.span>
+                          )}
+                        </AnimatePresence>
+                      </motion.div>
+                      <span className="text-white/40">•</span>
+                      <motion.div 
+                        className="flex items-center gap-1 shrink-0"
+                        layout
+                        transition={{ duration: 0.2 }}
+                      >
+                        <Wheat className="w-3 h-3 shrink-0" />
+                        <span>{target.carbs}g</span>
+                        <AnimatePresence mode="popLayout">
+                          {showMacroLabels && (
+                            <motion.span
+                              initial={{ width: 0, opacity: 0 }}
+                              animate={{ width: 'auto', opacity: 1 }}
+                              exit={{ width: 0, opacity: 0 }}
+                              transition={{ duration: 0.2 }}
+                              className="text-white/60 overflow-hidden whitespace-nowrap"
+                            >
+                              carbs
+                            </motion.span>
+                          )}
+                        </AnimatePresence>
+                      </motion.div>
+                      <span className="text-white/40">•</span>
+                      <motion.div 
+                        className="flex items-center gap-1 shrink-0"
+                        layout
+                        transition={{ duration: 0.2 }}
+                      >
+                        <Droplet className="w-3 h-3 shrink-0" />
+                        <span>{target.fat}g</span>
+                        <AnimatePresence mode="popLayout">
+                          {showMacroLabels && (
+                            <motion.span
+                              initial={{ width: 0, opacity: 0 }}
+                              animate={{ width: 'auto', opacity: 1 }}
+                              exit={{ width: 0, opacity: 0 }}
+                              transition={{ duration: 0.2 }}
+                              className="text-white/60 overflow-hidden whitespace-nowrap"
+                            >
+                              fat
+                            </motion.span>
+                          )}
+                        </AnimatePresence>
+                      </motion.div>
+                    </div>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        setShowMacroLabels(!showMacroLabels)
+                      }}
+                      className="ml-2 p-1 rounded-full bg-white/10 hover:bg-white/20 transition-colors shrink-0"
+                    >
+                      <Info className="w-3 h-3" />
+                    </button>
                   </div>
                   <p className="text-[10px] text-white/60 mt-1">
                     {recipes.length} recipes
@@ -324,23 +408,99 @@ export function MealBuilderContent({
             {mealLabels[selectedMeal]}
           </Badge>
           <h1 className="text-2xl font-bold font-arabic">{currentRecipe.name}</h1>
-          <div className="flex items-center gap-3 mt-2 text-sm flex-wrap">
-            <span className="flex items-center gap-1.5 font-semibold text-primary">
-              <Flame className="w-4 h-4" />
-              {currentRecipe.scaled_calories} cal
-            </span>
-            <span className="flex items-center gap-1.5">
-              <Beef className="w-4 h-4" />
-              {scaledProtein}g
-            </span>
-            <span className="flex items-center gap-1.5">
-              <Wheat className="w-4 h-4" />
-              {scaledCarbs}g
-            </span>
-            <span className="flex items-center gap-1.5">
-              <Droplet className="w-4 h-4" />
-              {scaledFat}g
-            </span>
+          <div className="flex items-center mt-2 text-sm pointer-events-auto">
+            <div className="flex items-center gap-3">
+              <motion.div 
+                className="flex items-center gap-1.5 font-semibold text-primary"
+                layout
+                transition={{ duration: 0.2 }}
+              >
+                <Flame className="w-4 h-4 shrink-0" />
+                <span>{currentRecipe.scaled_calories}</span>
+                <AnimatePresence mode="popLayout">
+                  {showMacroLabels && (
+                    <motion.span
+                      initial={{ width: 0, opacity: 0 }}
+                      animate={{ width: 'auto', opacity: 1 }}
+                      exit={{ width: 0, opacity: 0 }}
+                      transition={{ duration: 0.2 }}
+                      className="font-normal text-muted-foreground overflow-hidden whitespace-nowrap"
+                    >
+                      cal
+                    </motion.span>
+                  )}
+                </AnimatePresence>
+              </motion.div>
+              <motion.div 
+                className="flex items-center gap-1.5"
+                layout
+                transition={{ duration: 0.2 }}
+              >
+                <Beef className="w-4 h-4 shrink-0" />
+                <span>{scaledProtein}g</span>
+                <AnimatePresence mode="popLayout">
+                  {showMacroLabels && (
+                    <motion.span
+                      initial={{ width: 0, opacity: 0 }}
+                      animate={{ width: 'auto', opacity: 1 }}
+                      exit={{ width: 0, opacity: 0 }}
+                      transition={{ duration: 0.2 }}
+                      className="text-muted-foreground overflow-hidden whitespace-nowrap"
+                    >
+                      protein
+                    </motion.span>
+                  )}
+                </AnimatePresence>
+              </motion.div>
+              <motion.div 
+                className="flex items-center gap-1.5"
+                layout
+                transition={{ duration: 0.2 }}
+              >
+                <Wheat className="w-4 h-4 shrink-0" />
+                <span>{scaledCarbs}g</span>
+                <AnimatePresence mode="popLayout">
+                  {showMacroLabels && (
+                    <motion.span
+                      initial={{ width: 0, opacity: 0 }}
+                      animate={{ width: 'auto', opacity: 1 }}
+                      exit={{ width: 0, opacity: 0 }}
+                      transition={{ duration: 0.2 }}
+                      className="text-muted-foreground overflow-hidden whitespace-nowrap"
+                    >
+                      carbs
+                    </motion.span>
+                  )}
+                </AnimatePresence>
+              </motion.div>
+              <motion.div 
+                className="flex items-center gap-1.5"
+                layout
+                transition={{ duration: 0.2 }}
+              >
+                <Droplet className="w-4 h-4 shrink-0" />
+                <span>{scaledFat}g</span>
+                <AnimatePresence mode="popLayout">
+                  {showMacroLabels && (
+                    <motion.span
+                      initial={{ width: 0, opacity: 0 }}
+                      animate={{ width: 'auto', opacity: 1 }}
+                      exit={{ width: 0, opacity: 0 }}
+                      transition={{ duration: 0.2 }}
+                      className="text-muted-foreground overflow-hidden whitespace-nowrap"
+                    >
+                      fat
+                    </motion.span>
+                  )}
+                </AnimatePresence>
+              </motion.div>
+            </div>
+            <button
+              onClick={() => setShowMacroLabels(!showMacroLabels)}
+              className="ml-3 p-1.5 rounded-full bg-muted/30 hover:bg-muted/50 transition-colors shrink-0"
+            >
+              <Info className="w-4 h-4 text-muted-foreground" />
+            </button>
           </div>
         </div>
       </motion.div>
