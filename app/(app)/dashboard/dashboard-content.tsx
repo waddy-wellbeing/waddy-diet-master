@@ -2,9 +2,17 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 import { format, startOfWeek, endOfWeek, isToday as isDateToday } from 'date-fns'
-import { Settings, Bell } from 'lucide-react'
+import { Settings, Bell, LogOut, User } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
 import {
   WeekSelector,
   MealCard,
@@ -43,6 +51,7 @@ export function DashboardContent({
   initialSelectedIndices,
   mealTargets,
 }: DashboardContentProps) {
+  const router = useRouter()
   const [selectedDate, setSelectedDate] = useState(new Date())
   const [dailyLog, setDailyLog] = useState(initialDailyLog)
   const [dailyPlan, setDailyPlan] = useState(initialDailyPlan)
@@ -232,6 +241,14 @@ export function DashboardContent({
 
   const firstName = profile.basic_info?.name?.split(' ')[0] || 'there'
 
+  // Handle logout
+  const handleLogout = async () => {
+    const supabase = createClient()
+    await supabase.auth.signOut()
+    router.push('/login')
+    router.refresh()
+  }
+
   // Handler for logging a meal
   const handleLogMeal = async (mealName: string) => {
     const supabase = createClient()
@@ -419,11 +436,30 @@ export function DashboardContent({
               <Bell className="h-5 w-5" />
               <span className="absolute top-1 right-1 w-2 h-2 bg-primary rounded-full" />
             </Button>
-            <Button variant="ghost" size="icon" asChild>
-              <Link href="/profile">
-                <Settings className="h-5 w-5" />
-              </Link>
-            </Button>
+            
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="ghost" size="icon">
+                  <Settings className="h-5 w-5" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-48">
+                <DropdownMenuItem asChild>
+                  <Link href="/profile" className="flex items-center gap-2">
+                    <User className="h-4 w-4" />
+                    Profile Settings
+                  </Link>
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem 
+                  onClick={handleLogout}
+                  className="text-destructive focus:text-destructive"
+                >
+                  <LogOut className="h-4 w-4 mr-2" />
+                  Sign Out
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
           </div>
         </div>
       </header>
