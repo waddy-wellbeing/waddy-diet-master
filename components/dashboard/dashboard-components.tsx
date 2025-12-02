@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import Link from 'next/link'
 import { format, addDays, startOfWeek, isSameDay, isToday } from 'date-fns'
 import { motion, AnimatePresence } from 'framer-motion'
 import { cn } from '@/lib/utils'
@@ -16,6 +17,7 @@ import {
   ArrowLeftRight,
   Undo2,
   Loader2,
+  ExternalLink,
 } from 'lucide-react'
 import type { ProfileTargets } from '@/lib/types/nutri'
 
@@ -329,6 +331,8 @@ interface MealCardProps {
         carbs_g?: number
         fat_g?: number
       }
+      scale_factor?: number
+      scaled_calories?: number
     } | null
     recipeCount: number
     currentIndex: number
@@ -451,9 +455,19 @@ export function MealCard({ meal, isToday = true, onLogMeal, onUnlogMeal, onSwapM
             <div className="flex-1 p-3 flex flex-col justify-between">
               <div>
                 <div className="flex items-center justify-between">
-                  <h3 className="font-semibold text-sm line-clamp-1 flex-1 font-arabic">
-                    {!isToday && meal.loggedRecipeName ? meal.loggedRecipeName : meal.recipe?.name || 'No recipe'}
-                  </h3>
+                  {meal.recipe?.id ? (
+                    <Link 
+                      href={`/recipes/${meal.recipe.id}?scale=${meal.recipe.scale_factor || 1}&meal=${meal.name}`}
+                      className="font-semibold text-sm line-clamp-1 flex-1 font-arabic hover:text-primary transition-colors"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      {!isToday && meal.loggedRecipeName ? meal.loggedRecipeName : meal.recipe?.name || 'No recipe'}
+                    </Link>
+                  ) : (
+                    <h3 className="font-semibold text-sm line-clamp-1 flex-1 font-arabic">
+                      {!isToday && meal.loggedRecipeName ? meal.loggedRecipeName : meal.recipe?.name || 'No recipe'}
+                    </h3>
+                  )}
                   {canSwipe && (
                     <span className="text-[10px] text-muted-foreground ml-2 whitespace-nowrap">
                       {meal.currentIndex + 1}/{meal.recipeCount}

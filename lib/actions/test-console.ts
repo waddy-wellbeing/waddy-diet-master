@@ -48,6 +48,14 @@ export interface RecipeForMealPlan {
 }
 
 /**
+ * Round a number to the nearest 5 for practical measuring
+ * e.g., 42.5 → 45, 48 → 50, 12 → 10
+ */
+function roundToNearest5(value: number): number {
+  return Math.round(value / 5) * 5
+}
+
+/**
  * Transform Supabase recipe response to proper RecipeForMealPlan type
  */
 function transformRecipe(recipe: any, scaleFactor?: number, scaledCalories?: number): RecipeForMealPlan {
@@ -55,8 +63,13 @@ function transformRecipe(recipe: any, scaleFactor?: number, scaledCalories?: num
   
   const transformedIngredients = (recipe.recipe_ingredients || []).map((ri: any) => {
     const originalQty = ri.quantity || null
-    // Calculate scaled quantity (round to 1 decimal for display)
-    const scaledQty = originalQty !== null ? Math.round(originalQty * sf * 10) / 10 : null
+    // Calculate scaled quantity and round to nearest 5 for practical measuring
+    // For small quantities (< 10), round to nearest 1 instead
+    let scaledQty: number | null = null
+    if (originalQty !== null) {
+      const rawScaled = originalQty * sf
+      scaledQty = rawScaled < 10 ? Math.round(rawScaled) : roundToNearest5(rawScaled)
+    }
     
     return {
       id: ri.id,

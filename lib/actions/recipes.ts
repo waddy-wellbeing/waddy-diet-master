@@ -528,3 +528,274 @@ export async function searchSpices(query: string, limit: number = 10) {
 
   return { spices: data ?? [], error: null }
 }
+
+// =============================================================================
+// USER-FACING: Recipe Details with Scaling
+// =============================================================================
+
+export interface RecipeIngredientDetail {
+  id: string
+  ingredient_id: string | null
+  raw_name: string
+  quantity: number | null
+  scaled_quantity: number | null
+  unit: string | null
+  is_spice: boolean
+  is_optional: boolean
+  ingredient?: {
+    id: string
+    name: string
+    name_ar: string | null
+    food_group: string | null
+    subgroup: string | null
+  } | null
+}
+
+export interface InstructionStep {
+  step: number
+  instruction: string
+}
+
+export interface UserRecipeDetails {
+  id: string
+  name: string
+  description: string | null
+  image_url: string | null
+  meal_type: string[]
+  cuisine: string | null
+  tags: string[]
+  prep_time_minutes: number | null
+  cook_time_minutes: number | null
+  servings: number
+  difficulty: string | null
+  instructions: InstructionStep[]
+  nutrition_per_serving: {
+    calories?: number
+    protein_g?: number
+    carbs_g?: number
+    fat_g?: number
+  }
+  is_vegetarian: boolean
+  is_vegan: boolean
+  is_gluten_free: boolean
+  is_dairy_free: boolean
+  recipe_ingredients: RecipeIngredientDetail[]
+  // Scaling info
+  scale_factor: number
+  scaled_calories: number
+  original_calories: number
+}
+
+export interface IngredientSwapOption {
+  id: string
+  name: string
+  name_ar: string | null
+  food_group: string | null
+  subgroup: string | null
+  serving_size: number
+  serving_unit: string
+  macros: { calories?: number; protein_g?: number; carbs_g?: number; fat_g?: number }
+  suggested_amount: number
+  calorie_diff_percent: number
+}
+
+/**
+ * Round a number for practical measuring
+ * < 10: round to nearest 1
+ * >= 10: round to nearest 5
+ */
+function roundForMeasuring(value: number): number {
+  if (value < 10) return Math.round(value)
+  return Math.round(value / 5) * 5
+}
+
+/**
+ * Get recipe details with scaled ingredients for user view
+ */
+export async function getUserRecipeDetails(options: {
+  recipeId: string
+  targetCalories?: number
+  scaleFactor?: number
+}): Promise<{ data: UserRecipeDetails | null; error: string | null }> {
+  const supabase = await createClient()
+  
+  const { recipeId, targetCalories, scaleFactor: providedScaleFactor } = options
+
+  const { data: recipe, error } = await supabase
+    .from('recipes')
+    .select(`
+      id, name, description, image_url, meal_type, cuisine, tags,
+      prep_time_minutes, cook_time_minutes, servings, difficulty,
+      instructions, nutrition_per_serving,
+      is_vegetarian, is_vegan, is_gluten_free, is_dairy_free,
+      recipe_ingredients (
+        id, ingredient_id, raw_name, quantity, unit, is_spice, is_optional,
+        ingredient:ingredients!recipe_ingredients_ingredient_id_fkey (
+          id, name, name_ar, food_group, subgroup
+        )
+      )
+    `)
+    .eq('id', recipeId)
+    .single()
+
+  if (error || !recipe) {
+    return { data: null, error: error?.message || 'Recipe not found' }
+  }
+
+  const baseCalories = recipe.nutrition_per_serving?.calories || 0
+  
+  // Determine scale factor
+  let scaleFactor = providedScaleFactor || 1
+  if (targetCalories && baseCalories > 0) {
+    scaleFactor = targetCalories / baseCalories
+  }
+
+  // Transform ingredients with scaling
+  const transformedIngredients: RecipeIngredientDetail[] = (recipe.recipe_ingredients || []).map((ri: any) => {
+    const originalQty = ri.quantity || null
+    let scaledQty: number | null = null
+    if (originalQty !== null) {
+      scaledQty = roundForMeasuring(originalQty * scaleFactor)
+    }
+
+    return {
+      id: ri.id,
+      ingredient_id: ri.ingredient_id,
+      raw_name: ri.raw_name,
+      quantity: originalQty,
+      scaled_quantity: scaledQty,
+      unit: ri.unit,
+      is_spice: ri.is_spice,
+      is_optional: ri.is_optional,
+      ingredient: ri.ingredient || null,
+    }
+  })
+
+  // Parse instructions - handle array of objects or strings
+  let instructions: InstructionStep[] = []
+  if (Array.isArray(recipe.instructions)) {
+    instructions = recipe.instructions.map((item: any, index: number) => {
+      if (typeof item === 'string') {
+        return { step: index + 1, instruction: item }
+      }
+      return { step: item.step || index + 1, instruction: item.instruction || String(item) }
+    })
+  } else if (typeof recipe.instructions === 'string') {
+    try {
+      const parsed = JSON.parse(recipe.instructions)
+      instructions = Array.isArray(parsed) 
+        ? parsed.map((item: any, index: number) => ({
+            step: item.step || index + 1,
+            instruction: item.instruction || String(item)
+          }))
+        : [{ step: 1, instruction: recipe.instructions }]
+    } catch {
+      instructions = [{ step: 1, instruction: recipe.instructions }]
+    }
+  }
+
+  const result: UserRecipeDetails = {
+    id: recipe.id,
+    name: recipe.name,
+    description: recipe.description,
+    image_url: recipe.image_url,
+    meal_type: recipe.meal_type || [],
+    cuisine: recipe.cuisine,
+    tags: recipe.tags || [],
+    prep_time_minutes: recipe.prep_time_minutes,
+    cook_time_minutes: recipe.cook_time_minutes,
+    servings: recipe.servings,
+    difficulty: recipe.difficulty,
+    instructions,
+    nutrition_per_serving: recipe.nutrition_per_serving || {},
+    is_vegetarian: recipe.is_vegetarian,
+    is_vegan: recipe.is_vegan,
+    is_gluten_free: recipe.is_gluten_free,
+    is_dairy_free: recipe.is_dairy_free,
+    recipe_ingredients: transformedIngredients,
+    scale_factor: Math.round(scaleFactor * 100) / 100,
+    scaled_calories: Math.round(baseCalories * scaleFactor),
+    original_calories: baseCalories,
+  }
+
+  return { data: result, error: null }
+}
+
+/**
+ * Get ingredient swap alternatives
+ */
+export async function getUserIngredientSwaps(options: {
+  ingredientId: string
+  targetAmount: number
+  targetUnit: string
+}): Promise<{ data: IngredientSwapOption[] | null; error: string | null }> {
+  const supabase = await createClient()
+  
+  const { ingredientId, targetAmount } = options
+
+  // Get original ingredient
+  const { data: original, error: originalError } = await supabase
+    .from('ingredients')
+    .select('id, name, name_ar, food_group, subgroup, serving_size, serving_unit, macros')
+    .eq('id', ingredientId)
+    .single()
+
+  if (originalError || !original) {
+    return { data: null, error: originalError?.message || 'Ingredient not found' }
+  }
+
+  if (!original.food_group) {
+    return { data: [], error: null }
+  }
+
+  // Get alternatives in same food group
+  const { data: alternatives, error } = await supabase
+    .from('ingredients')
+    .select('id, name, name_ar, food_group, subgroup, serving_size, serving_unit, macros')
+    .eq('food_group', original.food_group)
+    .neq('id', ingredientId)
+    .limit(20)
+
+  if (error) {
+    return { data: null, error: error.message }
+  }
+
+  // Calculate calorie equivalence
+  const originalCaloriesPerUnit = (original.macros?.calories || 0) / original.serving_size
+  const targetCalories = originalCaloriesPerUnit * targetAmount
+
+  const swapOptions: IngredientSwapOption[] = (alternatives || []).map(alt => {
+    const altCaloriesPerUnit = (alt.macros?.calories || 0) / alt.serving_size
+    
+    let suggested_amount = 0
+    let calorie_diff_percent = 0
+    
+    if (targetCalories > 0 && altCaloriesPerUnit > 0) {
+      suggested_amount = roundForMeasuring(targetCalories / altCaloriesPerUnit)
+      const suggestedCalories = suggested_amount * altCaloriesPerUnit
+      calorie_diff_percent = Math.round(((suggestedCalories - targetCalories) / targetCalories) * 100)
+    }
+
+    return {
+      id: alt.id,
+      name: alt.name,
+      name_ar: alt.name_ar,
+      food_group: alt.food_group,
+      subgroup: alt.subgroup,
+      serving_size: alt.serving_size,
+      serving_unit: alt.serving_unit,
+      macros: alt.macros || {},
+      suggested_amount,
+      calorie_diff_percent,
+    }
+  })
+
+  // Sort by same subgroup first, then by name
+  swapOptions.sort((a, b) => {
+    if (a.subgroup === original.subgroup && b.subgroup !== original.subgroup) return -1
+    if (b.subgroup === original.subgroup && a.subgroup !== original.subgroup) return 1
+    return a.name.localeCompare(b.name)
+  })
+
+  return { data: swapOptions, error: null }
+}
