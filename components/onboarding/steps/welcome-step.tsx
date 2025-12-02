@@ -1,8 +1,9 @@
 'use client'
 
+import Link from 'next/link'
 import { motion } from 'framer-motion'
 import { Button } from '@/components/ui/button'
-import { Sparkles, Target, Utensils, ArrowRight } from 'lucide-react'
+import { Sparkles, Target, Utensils, ArrowRight, LogIn } from 'lucide-react'
 
 interface WelcomeStepProps {
   onContinue: () => void
@@ -100,7 +101,7 @@ export function WelcomeStep({ onContinue }: WelcomeStepProps) {
           </motion.p>
 
           {/* CTA Button */}
-          <motion.div variants={itemVariants}>
+          <motion.div variants={itemVariants} className="space-y-3">
             <Button
               onClick={onContinue}
               size="lg"
@@ -108,6 +109,18 @@ export function WelcomeStep({ onContinue }: WelcomeStepProps) {
             >
               Let's Get Started
               <ArrowRight className="ml-2 h-5 w-5" />
+            </Button>
+            
+            <Button
+              variant="ghost"
+              size="lg"
+              className="w-full"
+              asChild
+            >
+              <Link href="/login">
+                <LogIn className="mr-2 h-4 w-4" />
+                Sign in to existing account
+              </Link>
             </Button>
           </motion.div>
         </motion.div>

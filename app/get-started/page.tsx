@@ -1,7 +1,6 @@
 import { Metadata } from 'next'
 import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
-import { GetStartedContent } from './get-started-content'
 
 export const metadata: Metadata = {
   title: 'Get Started | Waddy Diet Master',
@@ -27,5 +26,6 @@ export default async function GetStartedPage() {
     }
   }
 
-  return <GetStartedContent />
+  // Guest user - go directly to onboarding flow
+  redirect('/get-started/onboarding')
 }
