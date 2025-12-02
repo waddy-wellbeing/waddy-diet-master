@@ -299,6 +299,67 @@ export function DashboardContent({
     fetchWeekData(selectedDate)
   }
   
+  // Handler for unlogging a meal
+  const handleUnlogMeal = async (mealName: string) => {
+    const supabase = createClient()
+    const dateStr = format(selectedDate, 'yyyy-MM-dd')
+    
+    // Get current daily log
+    const { data: existingLog } = await supabase
+      .from('daily_logs')
+      .select('*')
+      .eq('user_id', profile.user_id)
+      .eq('log_date', dateStr)
+      .single()
+    
+    if (!existingLog) return
+    
+    const currentLog = (existingLog.log || {}) as DailyLog
+    const currentTotals = (existingLog.logged_totals || {}) as DailyTotals
+    
+    // Get the meal log to remove
+    const mealLog = currentLog[mealName as keyof DailyLog]
+    if (!mealLog?.items?.length) return
+    
+    // Calculate calories to subtract (from the last logged item)
+    const meal = meals.find(m => m.name === mealName)
+    const recipeCalories = meal?.recipe?.nutrition_per_serving?.calories || 0
+    const recipeProtein = meal?.recipe?.nutrition_per_serving?.protein_g || 0
+    const recipeCarbs = meal?.recipe?.nutrition_per_serving?.carbs_g || 0
+    const recipeFat = meal?.recipe?.nutrition_per_serving?.fat_g || 0
+    const servings = meal?.planSlot?.servings || 1
+    
+    // Remove the meal from log
+    const updatedLog = {
+      ...currentLog,
+      [mealName]: { logged_at: null, items: [] },
+    }
+    
+    // Update totals (subtract the calories)
+    const updatedTotals = {
+      calories: Math.max(0, (currentTotals.calories || 0) - recipeCalories * servings),
+      protein_g: Math.max(0, (currentTotals.protein_g || 0) - recipeProtein * servings),
+      carbs_g: Math.max(0, (currentTotals.carbs_g || 0) - recipeCarbs * servings),
+      fat_g: Math.max(0, (currentTotals.fat_g || 0) - recipeFat * servings),
+    }
+    
+    await supabase
+      .from('daily_logs')
+      .update({
+        log: updatedLog,
+        logged_totals: updatedTotals,
+        meals_logged: Object.keys(updatedLog).filter(k => {
+          const ml = updatedLog[k as keyof DailyLog]
+          return ml?.items && ml.items.length > 0
+        }).length,
+      })
+      .eq('id', existingLog.id)
+    
+    // Refresh the data
+    fetchDayData(selectedDate)
+    fetchWeekData(selectedDate)
+  }
+  
   // Handler for swapping a meal - navigates to next/previous recipe
   const handleSwapMeal = (mealName: string, direction: 'left' | 'right') => {
     const mealType = mealName as MealName
@@ -376,6 +437,7 @@ export function DashboardContent({
                 key={meal.name}
                 meal={meal}
                 onLogMeal={handleLogMeal}
+                onUnlogMeal={handleUnlogMeal}
                 onSwapMeal={handleSwapMeal}
                 onAddFood={() => {
                   // Navigate to meal builder or open add food modal

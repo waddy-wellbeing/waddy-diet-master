@@ -14,6 +14,7 @@ import {
   Utensils,
   Check,
   ArrowLeftRight,
+  Undo2,
 } from 'lucide-react'
 import type { ProfileTargets } from '@/lib/types/nutri'
 
@@ -180,11 +181,11 @@ export function WeekSelector({ selectedDate, onDateSelect, weekData, dailyTarget
           className="mt-4 pt-4 border-t border-border/50"
         >
           <div className="flex items-center justify-between text-sm mb-2">
-            <span className="text-muted-foreground">
-              {format(selectedDate, 'EEEE, MMM d')}
-            </span>
             <span className="font-medium">
-              {consumed.toLocaleString()} / {dailyTarget.toLocaleString()} kcal
+              {consumed.toLocaleString()} kcal consumed
+            </span>
+            <span className="text-muted-foreground">
+              of {dailyTarget.toLocaleString()}
             </span>
           </div>
           
@@ -335,11 +336,12 @@ interface MealCardProps {
     } | null
   }
   onLogMeal?: (mealName: string) => void
+  onUnlogMeal?: (mealName: string) => void
   onSwapMeal?: (mealName: string, direction: 'left' | 'right') => void
   onAddFood?: () => void
 }
 
-export function MealCard({ meal, onLogMeal, onSwapMeal, onAddFood }: MealCardProps) {
+export function MealCard({ meal, onLogMeal, onUnlogMeal, onSwapMeal, onAddFood }: MealCardProps) {
   const [swipeX, setSwipeX] = useState(0)
   const [isDragging, setIsDragging] = useState(false)
   
@@ -456,10 +458,24 @@ export function MealCard({ meal, onLogMeal, onSwapMeal, onAddFood }: MealCardPro
               {/* Action buttons */}
               <div className="flex items-center gap-2 mt-2">
                 {meal.isLogged ? (
-                  <span className="inline-flex items-center gap-1 text-xs text-green-600 font-medium">
-                    <Check className="h-3 w-3" />
-                    Logged
-                  </span>
+                  <>
+                    <span className="inline-flex items-center gap-1 text-xs text-green-600 font-medium">
+                      <Check className="h-3 w-3" />
+                      Logged
+                    </span>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="h-7 text-xs px-2 text-muted-foreground hover:text-destructive"
+                      onClick={(e: React.MouseEvent) => {
+                        e.stopPropagation()
+                        onUnlogMeal?.(meal.name)
+                      }}
+                    >
+                      <Undo2 className="h-3 w-3 mr-1" />
+                      Undo
+                    </Button>
+                  </>
                 ) : (
                   <Button
                     size="sm"
