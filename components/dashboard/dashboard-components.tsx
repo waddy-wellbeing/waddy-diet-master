@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { format, addDays, startOfWeek, isSameDay, isToday } from 'date-fns'
 import { motion, AnimatePresence } from 'framer-motion'
 import { cn } from '@/lib/utils'
+import { Button } from '@/components/ui/button'
 import {
   ChevronLeft,
   ChevronRight,
@@ -11,6 +12,8 @@ import {
   Target,
   TrendingUp,
   Utensils,
+  Check,
+  ArrowLeftRight,
 } from 'lucide-react'
 import type { ProfileTargets } from '@/lib/types/nutri'
 
@@ -266,28 +269,171 @@ function MacroProgress({
 
 interface MealCardProps {
   meal: {
-    name: string
+    name: 'breakfast' | 'lunch' | 'dinner' | 'snacks'
     label: string
     targetCalories: number
     consumedCalories: number
-    items: { name: string; calories: number }[]
+    isLogged: boolean
+    recipe: {
+      id: string
+      name: string
+      image_url?: string | null
+      nutrition_per_serving?: {
+        calories?: number
+        protein_g?: number
+        carbs_g?: number
+        fat_g?: number
+      }
+    } | null
+    planSlot?: {
+      recipe_id: string
+      servings: number
+    } | null
   }
+  onLogMeal?: (mealName: string) => void
+  onSwapMeal?: (mealName: string, direction: 'left' | 'right') => void
   onAddFood?: () => void
 }
 
-export function MealCard({ meal, onAddFood }: MealCardProps) {
-  const progress = Math.min((meal.consumedCalories / meal.targetCalories) * 100, 100)
-  const hasItems = meal.items.length > 0
+export function MealCard({ meal, onLogMeal, onSwapMeal, onAddFood }: MealCardProps) {
+  const [swipeX, setSwipeX] = useState(0)
+  const [isDragging, setIsDragging] = useState(false)
+  
+  const progress = meal.isLogged ? 100 : 0
+  const hasRecipe = !!meal.recipe
   
   const mealEmojis: Record<string, string> = {
     breakfast: '🌅',
     lunch: '☀️',
     dinner: '🌙',
-    snack: '🍎',
+    snacks: '🍎',
   }
   
-  const emoji = mealEmojis[meal.name.toLowerCase()] || '🍽️'
+  const emoji = mealEmojis[meal.name] || '🍽️'
   
+  // Swipe gesture handlers
+  const handleDragEnd = (_: unknown, info: { offset: { x: number }; velocity: { x: number } }) => {
+    setIsDragging(false)
+    const threshold = 100
+    const velocity = 500
+    
+    if (info.offset.x > threshold || info.velocity.x > velocity) {
+      onSwapMeal?.(meal.name, 'right')
+    } else if (info.offset.x < -threshold || info.velocity.x < -velocity) {
+      onSwapMeal?.(meal.name, 'left')
+    }
+    
+    setSwipeX(0)
+  }
+  
+  // If there's a recipe assigned
+  if (hasRecipe) {
+    return (
+      <div className="relative overflow-hidden rounded-xl">
+        {/* Swipe indicator background */}
+        <div className="absolute inset-0 flex items-center justify-between px-4">
+          <div className={cn(
+            'flex items-center gap-1 text-sm font-medium transition-opacity',
+            swipeX > 30 ? 'opacity-100 text-primary' : 'opacity-30'
+          )}>
+            <ChevronLeft className="h-4 w-4" />
+            <span>Previous</span>
+          </div>
+          <div className={cn(
+            'flex items-center gap-1 text-sm font-medium transition-opacity',
+            swipeX < -30 ? 'opacity-100 text-primary' : 'opacity-30'
+          )}>
+            <span>Next</span>
+            <ChevronRight className="h-4 w-4" />
+          </div>
+        </div>
+        
+        <motion.div
+          className="bg-card rounded-xl border border-border overflow-hidden relative touch-manipulation"
+          drag="x"
+          dragConstraints={{ left: 0, right: 0 }}
+          dragElastic={0.2}
+          onDragStart={() => setIsDragging(true)}
+          onDrag={(_, info) => setSwipeX(info.offset.x)}
+          onDragEnd={handleDragEnd}
+          animate={{ x: 0 }}
+          whileTap={{ scale: isDragging ? 1 : 0.99 }}
+        >
+          <div className="flex">
+            {/* Recipe image */}
+            <div className="relative w-24 h-24 flex-shrink-0 bg-muted">
+              {meal.recipe?.image_url ? (
+                <img
+                  src={meal.recipe.image_url}
+                  alt={meal.recipe.name}
+                  className="w-full h-full object-cover"
+                />
+              ) : (
+                <div className="w-full h-full flex items-center justify-center text-3xl bg-primary/10">
+                  {emoji}
+                </div>
+              )}
+              {/* Meal type badge */}
+              <span className="absolute bottom-1 left-1 px-1.5 py-0.5 bg-background/90 rounded text-[10px] font-medium">
+                {meal.label}
+              </span>
+            </div>
+            
+            {/* Recipe info */}
+            <div className="flex-1 p-3 flex flex-col justify-between">
+              <div>
+                <h3 className="font-semibold text-sm line-clamp-1">{meal.recipe?.name}</h3>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  {meal.recipe?.nutrition_per_serving?.calories || meal.targetCalories} cal
+                  {meal.planSlot?.servings && meal.planSlot.servings > 1 && 
+                    ` × ${meal.planSlot.servings} servings`
+                  }
+                </p>
+              </div>
+              
+              {/* Action buttons */}
+              <div className="flex items-center gap-2 mt-2">
+                {meal.isLogged ? (
+                  <span className="inline-flex items-center gap-1 text-xs text-green-600 font-medium">
+                    <Check className="h-3 w-3" />
+                    Logged
+                  </span>
+                ) : (
+                  <Button
+                    size="sm"
+                    variant="default"
+                    className="h-7 text-xs px-3"
+                    onClick={(e: React.MouseEvent) => {
+                      e.stopPropagation()
+                      onLogMeal?.(meal.name)
+                    }}
+                  >
+                    <Check className="h-3 w-3 mr-1" />
+                    I ate it
+                  </Button>
+                )}
+                
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="h-7 text-xs px-2 ml-auto"
+                  onClick={(e: React.MouseEvent) => {
+                    e.stopPropagation()
+                    onSwapMeal?.(meal.name, 'right')
+                  }}
+                >
+                  <ArrowLeftRight className="h-3 w-3 mr-1" />
+                  Swap
+                </Button>
+              </div>
+            </div>
+          </div>
+        </motion.div>
+      </div>
+    )
+  }
+  
+  // No recipe assigned - empty state
   return (
     <motion.div
       className="bg-card rounded-xl border border-border p-4 touch-manipulation"
@@ -299,7 +445,7 @@ export function MealCard({ meal, onAddFood }: MealCardProps) {
           <div>
             <h3 className="font-semibold">{meal.label}</h3>
             <p className="text-sm text-muted-foreground">
-              {meal.consumedCalories} / {meal.targetCalories} cal
+              0 / {meal.targetCalories} cal
             </p>
           </div>
         </div>
@@ -335,29 +481,12 @@ export function MealCard({ meal, onAddFood }: MealCardProps) {
         </div>
       </div>
       
-      {/* Food items or empty state */}
-      {hasItems ? (
-        <div className="space-y-2">
-          {meal.items.slice(0, 3).map((item, index) => (
-            <div key={index} className="flex items-center justify-between text-sm">
-              <span className="truncate">{item.name}</span>
-              <span className="text-muted-foreground">{item.calories} cal</span>
-            </div>
-          ))}
-          {meal.items.length > 3 && (
-            <p className="text-xs text-muted-foreground">
-              +{meal.items.length - 3} more items
-            </p>
-          )}
-        </div>
-      ) : (
-        <button
-          onClick={onAddFood}
-          className="w-full py-3 border-2 border-dashed border-muted rounded-lg text-sm text-muted-foreground hover:border-primary hover:text-primary transition-colors"
-        >
-          + Add food
-        </button>
-      )}
+      <button
+        onClick={onAddFood}
+        className="w-full py-3 border-2 border-dashed border-muted rounded-lg text-sm text-muted-foreground hover:border-primary hover:text-primary transition-colors"
+      >
+        + Add food
+      </button>
     </motion.div>
   )
 }
