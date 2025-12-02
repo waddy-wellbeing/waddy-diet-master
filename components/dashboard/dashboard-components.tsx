@@ -15,6 +15,7 @@ import {
   Check,
   ArrowLeftRight,
   Undo2,
+  Loader2,
 } from 'lucide-react'
 import type { ProfileTargets } from '@/lib/types/nutri'
 
@@ -341,9 +342,10 @@ interface MealCardProps {
   onUnlogMeal?: (mealName: string) => void
   onSwapMeal?: (mealName: string, direction: 'left' | 'right') => void
   onAddFood?: () => void
+  isLoading?: boolean
 }
 
-export function MealCard({ meal, isToday = true, onLogMeal, onUnlogMeal, onSwapMeal, onAddFood }: MealCardProps) {
+export function MealCard({ meal, isToday = true, onLogMeal, onUnlogMeal, onSwapMeal, onAddFood, isLoading = false }: MealCardProps) {
   const [swipeX, setSwipeX] = useState(0)
   const [isDragging, setIsDragging] = useState(false)
   
@@ -354,7 +356,6 @@ export function MealCard({ meal, isToday = true, onLogMeal, onUnlogMeal, onSwapM
   
   // Use scaled calories if available, otherwise use target
   const displayCalories = (meal.recipe as any)?.scaled_calories || meal.targetCalories
-  const scaleFactor = (meal.recipe as any)?.scale_factor
   
   const mealEmojis: Record<string, string> = {
     breakfast: '🌅',
@@ -461,11 +462,6 @@ export function MealCard({ meal, isToday = true, onLogMeal, onUnlogMeal, onSwapM
                 </div>
                 <p className="text-xs text-muted-foreground mt-0.5">
                   {displayCalories} cal
-                  {scaleFactor && scaleFactor !== 1 && (
-                    <span className="text-[10px] ml-1">
-                      (×{scaleFactor.toFixed(1)})
-                    </span>
-                  )}
                 </p>
               </div>
               
@@ -491,12 +487,17 @@ export function MealCard({ meal, isToday = true, onLogMeal, onUnlogMeal, onSwapM
                       size="sm"
                       variant="ghost"
                       className="h-7 text-xs px-2 text-muted-foreground hover:text-destructive"
+                      disabled={isLoading}
                       onClick={(e: React.MouseEvent) => {
                         e.stopPropagation()
                         onUnlogMeal?.(meal.name)
                       }}
                     >
-                      <Undo2 className="h-3 w-3 mr-1" />
+                      {isLoading ? (
+                        <Loader2 className="h-3 w-3 mr-1 animate-spin" />
+                      ) : (
+                        <Undo2 className="h-3 w-3 mr-1" />
+                      )}
                       Undo
                     </Button>
                   </>
@@ -505,13 +506,18 @@ export function MealCard({ meal, isToday = true, onLogMeal, onUnlogMeal, onSwapM
                     size="sm"
                     variant="default"
                     className="h-7 text-xs px-3"
+                    disabled={isLoading}
                     onClick={(e: React.MouseEvent) => {
                       e.stopPropagation()
                       onLogMeal?.(meal.name)
                     }}
                   >
-                    <Check className="h-3 w-3 mr-1" />
-                    I ate it
+                    {isLoading ? (
+                      <Loader2 className="h-3 w-3 mr-1 animate-spin" />
+                    ) : (
+                      <Check className="h-3 w-3 mr-1" />
+                    )}
+                    {isLoading ? 'Logging...' : 'I ate it'}
                   </Button>
                 )}
                 
