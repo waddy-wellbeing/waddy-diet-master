@@ -537,25 +537,29 @@ export default function FullTesterPage() {
                             {recipe.recipe_ingredients && recipe.recipe_ingredients.length > 0 ? (
                               recipe.recipe_ingredients
                                 .filter((ing) => ing.ingredient_id) // Only show ingredients with valid IDs
-                                .map((ing) => (
-                                <button
-                                  key={ing.id}
-                                  onClick={() => handleViewIngredientSwaps(
-                                    ing.ingredient_id!,
-                                    ing.ingredient?.name || ing.raw_name || 'Unknown',
-                                    ing.quantity || 1,
-                                    ing.unit || 'g'
-                                  )}
-                                  className={`px-2 py-1 rounded-full text-xs transition-colors ${
-                                    selectedIngredient?.id === ing.ingredient_id
-                                      ? 'bg-primary text-primary-foreground'
-                                      : 'bg-muted hover:bg-muted/80'
-                                  }`}
-                                >
-                                  <Apple className="h-3 w-3 inline mr-1" />
-                                  {ing.ingredient?.name || ing.raw_name || 'Unknown'} ({ing.quantity || '?'}{ing.unit || ''})
-                                </button>
-                              ))
+                                .map((ing) => {
+                                  // Use scaled_quantity if available, otherwise fall back to quantity
+                                  const displayQty = ing.scaled_quantity ?? ing.quantity
+                                  return (
+                                    <button
+                                      key={ing.id}
+                                      onClick={() => handleViewIngredientSwaps(
+                                        ing.ingredient_id!,
+                                        ing.ingredient?.name || ing.raw_name || 'Unknown',
+                                        displayQty || 1,  // Use scaled quantity for swaps lookup
+                                        ing.unit || 'g'
+                                      )}
+                                      className={`px-2 py-1 rounded-full text-xs transition-colors ${
+                                        selectedIngredient?.id === ing.ingredient_id
+                                          ? 'bg-primary text-primary-foreground'
+                                          : 'bg-muted hover:bg-muted/80'
+                                      }`}
+                                    >
+                                      <Apple className="h-3 w-3 inline mr-1" />
+                                      {ing.ingredient?.name || ing.raw_name || 'Unknown'} ({displayQty || '?'}{ing.unit || ''})
+                                    </button>
+                                  )
+                                })
                             ) : (
                               <span className="text-xs text-muted-foreground">No ingredients data available</span>
                             )}

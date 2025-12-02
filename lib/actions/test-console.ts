@@ -9,6 +9,7 @@ export interface RecipeIngredientForPlan {
   ingredient_id: string | null
   raw_name: string
   quantity: number | null
+  scaled_quantity: number | null  // Quantity adjusted by scale_factor
   unit: string | null
   is_spice: boolean
   is_optional: boolean
@@ -50,16 +51,25 @@ export interface RecipeForMealPlan {
  * Transform Supabase recipe response to proper RecipeForMealPlan type
  */
 function transformRecipe(recipe: any, scaleFactor?: number, scaledCalories?: number): RecipeForMealPlan {
-  const transformedIngredients = (recipe.recipe_ingredients || []).map((ri: any) => ({
-    id: ri.id,
-    ingredient_id: ri.ingredient_id,
-    raw_name: ri.raw_name,
-    quantity: ri.quantity,
-    unit: ri.unit,
-    is_spice: ri.is_spice,
-    is_optional: ri.is_optional,
-    ingredient: ri.ingredient || null,
-  }))
+  const sf = scaleFactor || 1
+  
+  const transformedIngredients = (recipe.recipe_ingredients || []).map((ri: any) => {
+    const originalQty = ri.quantity || null
+    // Calculate scaled quantity (round to 1 decimal for display)
+    const scaledQty = originalQty !== null ? Math.round(originalQty * sf * 10) / 10 : null
+    
+    return {
+      id: ri.id,
+      ingredient_id: ri.ingredient_id,
+      raw_name: ri.raw_name,
+      quantity: originalQty,
+      scaled_quantity: scaledQty,
+      unit: ri.unit,
+      is_spice: ri.is_spice,
+      is_optional: ri.is_optional,
+      ingredient: ri.ingredient || null,
+    }
+  })
 
   return {
     id: recipe.id,
