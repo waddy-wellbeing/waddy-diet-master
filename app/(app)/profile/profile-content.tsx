@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   User,
@@ -25,15 +25,22 @@ import {
   Zap,
   Settings,
   LogOut,
-  Moon,
   Bell,
+  BellOff,
+  Smartphone,
+  Loader2,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import type { Profile } from '@/lib/types/nutri'
+import type { Profile, NotificationSettings } from '@/lib/types/nutri'
 import { updateProfile } from '@/lib/actions/profile'
+import { 
+  getNotificationSettings, 
+  updateNotificationSettings 
+} from '@/lib/actions/notifications'
+import { usePushNotifications } from '@/lib/hooks/use-push-notifications'
 import { ACTIVITY_LABELS, GOAL_LABELS } from '@/lib/utils/tdee'
 
 interface ProfileContentProps {
@@ -206,6 +213,246 @@ function SelectOption({
         )}
       </div>
     </motion.button>
+  )
+}
+
+// Toggle Switch Component
+function ToggleSwitch({
+  enabled,
+  onChange,
+  disabled = false,
+}: {
+  enabled: boolean
+  onChange: (enabled: boolean) => void
+  disabled?: boolean
+}) {
+  return (
+    <button
+      type="button"
+      onClick={() => !disabled && onChange(!enabled)}
+      disabled={disabled}
+      className={cn(
+        'relative inline-flex h-6 w-11 items-center rounded-full transition-colors',
+        enabled ? 'bg-primary' : 'bg-muted',
+        disabled && 'opacity-50 cursor-not-allowed'
+      )}
+    >
+      <span
+        className={cn(
+          'inline-block h-4 w-4 transform rounded-full bg-white transition-transform',
+          enabled ? 'translate-x-6' : 'translate-x-1'
+        )}
+      />
+    </button>
+  )
+}
+
+// Notifications Section Component
+function NotificationsSection() {
+  const {
+    isSupported,
+    isSubscribed,
+    isLoading: pushLoading,
+    permission,
+    error: pushError,
+    subscribe,
+    unsubscribe,
+  } = usePushNotifications()
+
+  const [isExpanded, setIsExpanded] = useState(false)
+  const [settings, setSettings] = useState<NotificationSettings | null>(null)
+  const [isLoadingSettings, setIsLoadingSettings] = useState(false)
+  const [isSaving, setIsSaving] = useState(false)
+
+  // Load notification settings
+  useEffect(() => {
+    const loadSettings = async () => {
+      setIsLoadingSettings(true)
+      const result = await getNotificationSettings()
+      if (result.success && result.data) {
+        setSettings(result.data)
+      }
+      setIsLoadingSettings(false)
+    }
+    loadSettings()
+  }, [])
+
+  const handleTogglePush = async () => {
+    if (isSubscribed) {
+      await unsubscribe()
+      await updateNotificationSettings({ push_enabled: false })
+      setSettings(s => s ? { ...s, push_enabled: false } : null)
+    } else {
+      const success = await subscribe()
+      if (success) {
+        await updateNotificationSettings({ push_enabled: true })
+        setSettings(s => s ? { ...s, push_enabled: true } : null)
+      }
+    }
+  }
+
+  const handleSettingChange = async (key: keyof NotificationSettings, value: boolean) => {
+    setIsSaving(true)
+    const result = await updateNotificationSettings({ [key]: value })
+    if (result.success) {
+      setSettings(s => s ? { ...s, [key]: value } : null)
+    }
+    setIsSaving(false)
+  }
+
+  return (
+    <motion.div
+      className="bg-card rounded-2xl border border-border overflow-hidden"
+      initial={{ opacity: 0, y: 10 }}
+      animate={{ opacity: 1, y: 0 }}
+    >
+      {/* Header - Always Visible */}
+      <button
+        onClick={() => setIsExpanded(!isExpanded)}
+        className="w-full flex items-center justify-between p-4 border-b border-border/50"
+      >
+        <div className="flex items-center gap-3">
+          <div className="p-2 rounded-xl bg-primary/10">
+            <Bell className="w-5 h-5 text-primary" />
+          </div>
+          <div className="text-left">
+            <h3 className="font-semibold">Notifications</h3>
+            <p className="text-xs text-muted-foreground">
+              {isSubscribed ? 'Push notifications enabled' : 'Manage your notification preferences'}
+            </p>
+          </div>
+        </div>
+        <div className="flex items-center gap-3">
+          {isSubscribed && (
+            <div className="flex items-center gap-1 text-xs text-green-500">
+              <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
+              Active
+            </div>
+          )}
+          <ChevronRight className={cn(
+            'w-5 h-5 text-muted-foreground transition-transform',
+            isExpanded && 'rotate-90'
+          )} />
+        </div>
+      </button>
+
+      {/* Expanded Content */}
+      <AnimatePresence>
+        {isExpanded && (
+          <motion.div
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: 'auto', opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            transition={{ duration: 0.2 }}
+            className="overflow-hidden"
+          >
+            <div className="p-4 space-y-4">
+              {/* Push Notification Support Check */}
+              {!isSupported && (
+                <div className="p-3 bg-amber-500/10 border border-amber-500/20 rounded-xl text-amber-600 text-sm">
+                  Push notifications are not supported on this browser/device.
+                </div>
+              )}
+
+              {/* Permission Denied */}
+              {isSupported && permission === 'denied' && (
+                <div className="p-3 bg-red-500/10 border border-red-500/20 rounded-xl text-red-500 text-sm">
+                  Notifications are blocked. Please enable them in your browser settings.
+                </div>
+              )}
+
+              {/* Error Display */}
+              {pushError && (
+                <div className="p-3 bg-red-500/10 border border-red-500/20 rounded-xl text-red-500 text-sm">
+                  {pushError}
+                </div>
+              )}
+
+              {/* Main Push Toggle */}
+              {isSupported && permission !== 'denied' && (
+                <div className="flex items-center justify-between p-3 bg-muted/30 rounded-xl">
+                  <div className="flex items-center gap-3">
+                    <Smartphone className="w-5 h-5 text-muted-foreground" />
+                    <div>
+                      <p className="font-medium">Push Notifications</p>
+                      <p className="text-xs text-muted-foreground">
+                        Receive notifications on this device
+                      </p>
+                    </div>
+                  </div>
+                  {pushLoading ? (
+                    <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
+                  ) : (
+                    <ToggleSwitch
+                      enabled={isSubscribed}
+                      onChange={handleTogglePush}
+                    />
+                  )}
+                </div>
+              )}
+
+              {/* Notification Categories */}
+              {(isSubscribed || settings?.push_enabled) && (
+                <div className="space-y-2">
+                  <p className="text-sm font-medium text-muted-foreground">
+                    Notification Types
+                  </p>
+                  
+                  {isLoadingSettings ? (
+                    <div className="flex items-center justify-center py-4">
+                      <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
+                    </div>
+                  ) : (
+                    <div className="space-y-1">
+                      {[
+                        { key: 'meal_reminders', label: 'Meal Reminders', desc: 'Get reminded when it\'s time to eat' },
+                        { key: 'daily_summary', label: 'Daily Summary', desc: 'End of day nutrition summary' },
+                        { key: 'weekly_report', label: 'Weekly Report', desc: 'Weekly progress and insights' },
+                        { key: 'goal_achievements', label: 'Achievements', desc: 'Celebrate your milestones' },
+                        { key: 'plan_updates', label: 'Plan Updates', desc: 'When your meal plan is updated' },
+                      ].map(({ key, label, desc }) => (
+                        <div
+                          key={key}
+                          className="flex items-center justify-between py-2 px-1"
+                        >
+                          <div>
+                            <p className="text-sm font-medium">{label}</p>
+                            <p className="text-xs text-muted-foreground">{desc}</p>
+                          </div>
+                          <ToggleSwitch
+                            enabled={settings?.[key as keyof NotificationSettings] as boolean ?? true}
+                            onChange={(value) => handleSettingChange(key as keyof NotificationSettings, value)}
+                            disabled={isSaving}
+                          />
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Not Subscribed Message */}
+              {!isSubscribed && isSupported && permission !== 'denied' && (
+                <div className="text-center py-4">
+                  <BellOff className="w-10 h-10 text-muted-foreground mx-auto mb-2" />
+                  <p className="text-sm text-muted-foreground mb-3">
+                    Enable push notifications to stay updated with your nutrition journey
+                  </p>
+                  <Button onClick={handleTogglePush} disabled={pushLoading}>
+                    {pushLoading ? (
+                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    ) : (
+                      <Bell className="w-4 h-4 mr-2" />
+                    )}
+                    Enable Notifications
+                  </Button>
+                </div>
+              )}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </motion.div>
   )
 }
 
@@ -752,29 +999,8 @@ export function ProfileContent({ profile, userEmail }: ProfileContentProps) {
           </div>
         </SectionCard>
 
-        {/* Settings Links */}
-        <div className="space-y-2">
-          <motion.button
-            className="w-full flex items-center justify-between p-4 bg-card rounded-xl border border-border"
-            whileTap={{ scale: 0.98 }}
-          >
-            <div className="flex items-center gap-3">
-              <Bell className="w-5 h-5 text-muted-foreground" />
-              <span>Notifications</span>
-            </div>
-            <ChevronRight className="w-5 h-5 text-muted-foreground" />
-          </motion.button>
-          <motion.button
-            className="w-full flex items-center justify-between p-4 bg-card rounded-xl border border-border"
-            whileTap={{ scale: 0.98 }}
-          >
-            <div className="flex items-center gap-3">
-              <Moon className="w-5 h-5 text-muted-foreground" />
-              <span>Appearance</span>
-            </div>
-            <ChevronRight className="w-5 h-5 text-muted-foreground" />
-          </motion.button>
-        </div>
+        {/* Notifications Section */}
+        <NotificationsSection />
 
         {/* Logout Button */}
         <form action="/auth/signout" method="POST">

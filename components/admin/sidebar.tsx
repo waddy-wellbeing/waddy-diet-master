@@ -14,6 +14,7 @@ import {
   ChevronLeft,
   Menu,
   FlaskConical,
+  Bell,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
@@ -60,6 +61,11 @@ const navItems = [
     title: 'Users',
     href: '/admin/users',
     icon: Users,
+  },
+  {
+    title: 'Notifications',
+    href: '/admin/notifications',
+    icon: Bell,
   },
   {
     title: 'Test Console',

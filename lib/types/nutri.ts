@@ -409,3 +409,64 @@ export interface SystemSettingsMap {
 }
 
 export type SystemSettingKey = keyof SystemSettingsMap
+
+// =============================================================================
+// PUSH NOTIFICATIONS
+// =============================================================================
+
+/** Push subscription record from database */
+export interface PushSubscription {
+  id: string
+  user_id: string
+  endpoint: string
+  p256dh: string
+  auth: string
+  device_type?: 'web' | 'android' | 'ios' | 'desktop'
+  device_name?: string
+  is_active: boolean
+  created_at: string
+  updated_at: string
+}
+
+/** Notification settings per user */
+export interface NotificationSettings {
+  id: string
+  user_id: string
+  push_enabled: boolean
+  meal_reminders: boolean
+  daily_summary: boolean
+  weekly_report: boolean
+  goal_achievements: boolean
+  plan_updates: boolean
+  quiet_hours_start?: string // Time format 'HH:MM'
+  quiet_hours_end?: string
+  created_at: string
+  updated_at: string
+}
+
+/** Notification log record */
+export interface NotificationLog {
+  id: string
+  user_id?: string
+  title: string
+  body: string
+  icon?: string
+  url?: string
+  notification_type: 'meal_reminder' | 'achievement' | 'admin' | 'plan_update' | 'weekly_report' | 'daily_summary'
+  is_broadcast: boolean
+  status: 'sent' | 'failed' | 'clicked'
+  sent_at: string
+  clicked_at?: string
+  error_message?: string
+}
+
+/** Payload for sending push notifications */
+export interface PushNotificationPayload {
+  title: string
+  body: string
+  icon?: string
+  badge?: string
+  url?: string
+  tag?: string
+  data?: Record<string, unknown>
+}
