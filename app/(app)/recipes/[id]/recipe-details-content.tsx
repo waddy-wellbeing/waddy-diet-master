@@ -356,10 +356,8 @@ export function RecipeDetailsContent({ recipe, mealType }: RecipeDetailsContentP
               <ol className="space-y-4">
                 {recipe.instructions.map((item, index) => (
                   <li key={index} className="flex gap-4">
-                    <div className="flex-shrink-0 w-8 h-8 rounded-full bg-primary/10 text-primary flex items-center justify-center font-bold text-sm">
-                      {item.step || index + 1}
-                    </div>
-                    <p className="text-sm leading-relaxed pt-1">{item.instruction}</p>
+                    <div className="flex-shrink-0 w-2 h-2 rounded-full bg-primary mt-2" />
+                    <p className="text-sm leading-relaxed">{item.instruction}</p>
                   </li>
                 ))}
               </ol>
