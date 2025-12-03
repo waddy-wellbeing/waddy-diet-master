@@ -51,6 +51,10 @@ export function PlanPreviewStep({
         return 'Lose Weight'
       case 'build_muscle':
         return 'Build Muscle'
+      case 'recomposition':
+        return 'Recomposition'
+      case 'maintain':
+        return 'Maintain Weight'
       default:
         return 'Maintain Weight'
     }
