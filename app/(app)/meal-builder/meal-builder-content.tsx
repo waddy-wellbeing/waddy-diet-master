@@ -442,74 +442,105 @@ export function MealBuilderContent({
     <div className="min-h-screen bg-background pb-24">
       {/* Hero Section with Recipe Image - Swipeable */}
       <motion.div 
-        className="relative h-72 cursor-grab active:cursor-grabbing touch-pan-y"
+        className="relative w-full bg-gradient-to-br from-muted to-muted/50 cursor-grab active:cursor-grabbing touch-pan-y overflow-hidden"
+        style={{ aspectRatio: '4/3', x: swipeX * 0.3 }}
         drag="x"
         dragConstraints={{ left: 0, right: 0 }}
         dragElastic={0.2}
         onDrag={(_, info) => setSwipeX(info.offset.x)}
         onDragEnd={handleDragEnd}
         animate={{ x: 0 }}
-        style={{ x: swipeX * 0.3 }}
+        initial={{ opacity: 0 }}
+        whileInView={{ opacity: 1 }}
+        transition={{ duration: 0.3 }}
         whileDrag={{ scale: 0.98 }}
       >
         {currentRecipe.image_url ? (
-          <Image
-            src={currentRecipe.image_url}
-            alt={currentRecipe.name}
-            fill
-            className="object-cover pointer-events-none"
-            priority
-          />
+          <>
+            <Image
+              src={currentRecipe.image_url}
+              alt={currentRecipe.name}
+              fill
+              className="object-cover pointer-events-none"
+              sizes="100vw"
+              priority
+              quality={90}
+            />
+            {/* Enhanced gradient overlay for better text readability */}
+            <div className="absolute inset-0 bg-gradient-to-t from-background via-transparent to-transparent pointer-events-none" />
+          </>
         ) : (
-          <div className="w-full h-full bg-gradient-to-br from-primary/30 to-primary/10 flex items-center justify-center">
-            <ChefHat className="w-20 h-20 text-primary/40" />
+          <div className="w-full h-full bg-gradient-to-br from-primary/25 via-primary/15 to-muted flex items-center justify-center relative">
+            <div className="absolute inset-0 opacity-30 pointer-events-none" style={{
+              backgroundImage: 'radial-gradient(circle at 30% 50%, rgba(0,0,0,0.1) 0%, transparent 50%)',
+            }} />
+            <ChefHat className="w-24 h-24 text-primary/40" />
           </div>
         )}
         
-        {/* Gradient overlay */}
-        <div className="absolute inset-0 bg-gradient-to-t from-background via-background/50 to-transparent pointer-events-none" />
-        
-        {/* Swipe indicators */}
+        {/* Swipe indicators - Enhanced visibility */}
         {totalRecipes > 1 && (
           <>
             <motion.div 
-              className="absolute left-2 top-1/2 -translate-y-1/2 flex items-center gap-1 text-sm text-muted-foreground pointer-events-none"
-              animate={{ opacity: swipeX > 30 ? 1 : 0.4, x: swipeX > 30 ? 5 : 0 }}
+              className="absolute left-3 top-1/2 -translate-y-1/2 flex items-center gap-2 text-sm text-white/80 pointer-events-none"
+              animate={{ opacity: swipeX > 30 ? 1 : 0.3, x: swipeX > 30 ? 5 : 0 }}
             >
-              <ChevronLeft className="w-5 h-5" />
-              <span className="hidden sm:inline">Previous</span>
+              <motion.div animate={{ x: swipeX > 30 ? -2 : 0 }} transition={{ duration: 0.1 }}>
+                <ChevronLeft className="w-6 h-6" />
+              </motion.div>
+              <span className="hidden sm:inline font-medium">Previous</span>
             </motion.div>
             <motion.div 
-              className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1 text-sm text-muted-foreground pointer-events-none"
-              animate={{ opacity: swipeX < -30 ? 1 : 0.4, x: swipeX < -30 ? -5 : 0 }}
+              className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center gap-2 text-sm text-white/80 pointer-events-none"
+              animate={{ opacity: swipeX < -30 ? 1 : 0.3, x: swipeX < -30 ? -5 : 0 }}
             >
-              <span className="hidden sm:inline">Next</span>
-              <ChevronRight className="w-5 h-5" />
+              <span className="hidden sm:inline font-medium">Next</span>
+              <motion.div animate={{ x: swipeX < -30 ? 2 : 0 }} transition={{ duration: 0.1 }}>
+                <ChevronRight className="w-6 h-6" />
+              </motion.div>
             </motion.div>
           </>
         )}
         
-        {/* Back button */}
-        <button
+        {/* Back button - Enhanced styling */}
+        <motion.button
           onClick={handleBack}
-          className="absolute top-4 left-4 w-10 h-10 rounded-full bg-background/80 backdrop-blur-sm flex items-center justify-center z-10"
+          whileHover={{ scale: 1.1 }}
+          whileTap={{ scale: 0.95 }}
+          className="absolute top-4 left-4 w-11 h-11 rounded-full bg-background/85 backdrop-blur-md hover:bg-background flex items-center justify-center z-10 border border-border/40 shadow-lg"
         >
           <ChevronLeft className="w-5 h-5" />
-        </button>
+        </motion.button>
 
-        {/* Recipe counter */}
-        <div className="absolute top-4 right-4 px-3 py-1.5 rounded-full bg-background/80 backdrop-blur-sm text-sm font-medium">
+        {/* Recipe counter - Enhanced styling */}
+        <motion.div 
+          initial={{ opacity: 0, scale: 0.8 }}
+          animate={{ opacity: 1, scale: 1 }}
+          className="absolute top-4 right-4 px-3 py-1.5 rounded-full bg-background/85 backdrop-blur-md text-sm font-semibold border border-border/40 shadow-lg"
+        >
           {recipeIndices[selectedMeal] + 1} / {totalRecipes}
-        </div>
+        </motion.div>
 
-        {/* Recipe info overlay */}
-        <div className="absolute bottom-0 left-0 right-0 p-4 pointer-events-none">
-          <Badge variant="secondary" className="mb-2">
-            {mealLabels[selectedMeal]}
-          </Badge>
-          <h1 className="text-2xl font-bold font-arabic">{currentRecipe.name}</h1>
-          <div className="flex items-center mt-2 text-sm pointer-events-auto">
-            <div className="flex items-center gap-3">
+        {/* Recipe info overlay - Better positioning and styling */}
+        <div className="absolute bottom-0 left-0 right-0 p-5 pointer-events-none">
+          <motion.div
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.1 }}
+          >
+            <Badge variant="secondary" className="mb-3 shadow-md">
+              {mealLabels[selectedMeal]}
+            </Badge>
+            <h1 className="text-3xl font-bold font-arabic text-white drop-shadow-lg mb-2">{currentRecipe.name}</h1>
+          </motion.div>
+          
+          <motion.div 
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.15 }}
+            className="flex items-center mt-3 text-sm pointer-events-auto"
+          >
+            <div className="flex items-center gap-4 bg-background/70 backdrop-blur-md rounded-lg px-3 py-2 border border-border/30">
               <motion.div 
                 className="flex items-center gap-1.5 font-semibold text-primary"
                 layout
@@ -531,12 +562,13 @@ export function MealBuilderContent({
                   )}
                 </AnimatePresence>
               </motion.div>
+              <div className="h-4 w-px bg-border/30" />
               <motion.div 
-                className="flex items-center gap-1.5"
+                className="flex items-center gap-1.5 text-foreground"
                 layout
                 transition={{ duration: 0.2 }}
               >
-                <Beef className="w-4 h-4 shrink-0" />
+                <Beef className="w-4 h-4 shrink-0 text-orange-500" />
                 <span>{scaledProtein}g</span>
                 <AnimatePresence mode="popLayout">
                   {showMacroLabels && (
@@ -552,12 +584,13 @@ export function MealBuilderContent({
                   )}
                 </AnimatePresence>
               </motion.div>
+              <div className="h-4 w-px bg-border/30" />
               <motion.div 
-                className="flex items-center gap-1.5"
+                className="flex items-center gap-1.5 text-foreground"
                 layout
                 transition={{ duration: 0.2 }}
               >
-                <Wheat className="w-4 h-4 shrink-0" />
+                <Wheat className="w-4 h-4 shrink-0 text-blue-500" />
                 <span>{scaledCarbs}g</span>
                 <AnimatePresence mode="popLayout">
                   {showMacroLabels && (
@@ -573,12 +606,13 @@ export function MealBuilderContent({
                   )}
                 </AnimatePresence>
               </motion.div>
+              <div className="h-4 w-px bg-border/30" />
               <motion.div 
-                className="flex items-center gap-1.5"
+                className="flex items-center gap-1.5 text-foreground"
                 layout
                 transition={{ duration: 0.2 }}
               >
-                <Droplet className="w-4 h-4 shrink-0" />
+                <Droplet className="w-4 h-4 shrink-0 text-amber-500" />
                 <span>{scaledFat}g</span>
                 <AnimatePresence mode="popLayout">
                   {showMacroLabels && (
@@ -595,13 +629,15 @@ export function MealBuilderContent({
                 </AnimatePresence>
               </motion.div>
             </div>
-            <button
+            <motion.button
+              whileHover={{ scale: 1.1 }}
+              whileTap={{ scale: 0.95 }}
               onClick={() => setShowMacroLabels(!showMacroLabels)}
-              className="ml-3 p-1.5 rounded-full bg-muted/30 hover:bg-muted/50 transition-colors shrink-0"
+              className="ml-2 p-2 rounded-full bg-background/70 backdrop-blur-md hover:bg-background border border-border/30 transition-colors shrink-0"
             >
               <Info className="w-4 h-4 text-muted-foreground" />
-            </button>
-          </div>
+            </motion.button>
+          </motion.div>
         </div>
       </motion.div>
 
