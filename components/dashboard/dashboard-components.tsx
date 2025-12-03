@@ -591,7 +591,7 @@ export function MealCard({ meal, isToday = true, onLogMeal, onUnlogMeal, onSwapM
               </div>
               
               {/* Action buttons - only for today */}
-              <div className="flex items-center gap-2 mt-2">
+              <div className="flex items-center gap-1.5 mt-2 flex-wrap">
                 {!isToday ? (
                   // Past day - just show status
                   meal.isLogged ? (
@@ -650,14 +650,14 @@ export function MealCard({ meal, isToday = true, onLogMeal, onUnlogMeal, onSwapM
                   <Button
                     size="sm"
                     variant="ghost"
-                    className="h-7 text-xs px-2 ml-auto"
+                    className="h-7 text-xs px-1.5 ml-auto"
                     onClick={(e: React.MouseEvent) => {
                       e.stopPropagation()
                       onSwapMeal?.(meal.name, 'right')
                     }}
                   >
                     <ArrowLeftRight className="h-3 w-3 mr-1" />
-                    Swap
+                    <span className="hidden sm:inline">Swap</span>
                   </Button>
                 )}
 
@@ -670,10 +670,10 @@ export function MealCard({ meal, isToday = true, onLogMeal, onUnlogMeal, onSwapM
                     <Button
                       size="sm"
                       variant="outline"
-                      className="h-7 text-xs px-2 border-primary/50 hover:bg-primary/5"
+                      className="h-7 text-xs px-1.5 border-primary/50 hover:bg-primary/5"
                     >
-                      <Flame className="h-3 w-3 mr-1 text-primary" />
-                      Edit Swaps
+                      <Flame className="h-3 w-3 mr-0 sm:mr-1 text-primary" />
+                      <span className="hidden sm:inline">Edit Swaps</span>
                     </Button>
                   </Link>
                 )}
