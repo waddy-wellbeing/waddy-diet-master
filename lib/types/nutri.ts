@@ -70,6 +70,7 @@ export interface Profile {
   id: string
   user_id: string
   name: string | null
+  mobile?: string | null
   email: string | null
   avatar_url: string | null
   role: UserRole
@@ -277,6 +278,7 @@ export const MEAL_SLOT_OPTIONS = [
 export interface ProfileRecord {
   id: string
   user_id: string
+  mobile?: string | null
   role: 'admin' | 'moderator' | 'client'
   basic_info: ProfileBasicInfo
   targets: ProfileTargets

@@ -14,6 +14,7 @@ export interface GuestOnboardingData {
     heightUnit: 'cm' | 'ft'
     weight: string
     weightUnit: 'kg' | 'lbs'
+    mobile?: string
   }
   activityLevel: 'sedentary' | 'light' | 'moderate' | 'active' | 'very_active' | ''
   goals: {
@@ -102,6 +103,7 @@ export function getInitialOnboardingState(): Partial<GuestOnboardingData> {
       heightUnit: 'cm',
       weight: '',
       weightUnit: 'kg',
+      mobile: '',
     },
     activityLevel: '',
     goals: {

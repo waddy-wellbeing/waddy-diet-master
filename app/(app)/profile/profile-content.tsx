@@ -468,6 +468,7 @@ export function ProfileContent({ profile, userEmail }: ProfileContentProps) {
     height_cm: profile.basic_info?.height_cm?.toString() || '',
     weight_kg: profile.basic_info?.weight_kg?.toString() || '',
     sex: profile.basic_info?.sex || 'male',
+    mobile: profile.mobile || '',
   })
 
   const [activityLevel, setActivityLevel] = useState(
@@ -505,6 +506,7 @@ export function ProfileContent({ profile, userEmail }: ProfileContentProps) {
               weight_kg: parseFloat(basicInfo.weight_kg) || undefined,
               sex: basicInfo.sex as 'male' | 'female' | 'other',
             },
+            mobile: basicInfo.mobile || undefined,
           }
           break
         case 'activity':
@@ -553,6 +555,7 @@ export function ProfileContent({ profile, userEmail }: ProfileContentProps) {
       height_cm: profile.basic_info?.height_cm?.toString() || '',
       weight_kg: profile.basic_info?.weight_kg?.toString() || '',
       sex: profile.basic_info?.sex || 'male',
+      mobile: profile.mobile || '',
     })
     setActivityLevel(profile.basic_info?.activity_level || 'moderate')
     setGoals({
@@ -744,6 +747,17 @@ export function ProfileContent({ profile, userEmail }: ProfileContentProps) {
                   />
                 </div>
               </div>
+              <div>
+                <Label htmlFor="mobile">Mobile number</Label>
+                <Input
+                  id="mobile"
+                  type="tel"
+                  value={basicInfo.mobile}
+                  onChange={(e) => setBasicInfo({ ...basicInfo, mobile: e.target.value })}
+                  placeholder="e.g., +971 50 123 4567"
+                  className="mt-1"
+                />
+              </div>
             </div>
           ) : (
             <div className="divide-y divide-border/50">
@@ -751,6 +765,7 @@ export function ProfileContent({ profile, userEmail }: ProfileContentProps) {
               <InfoRow icon={Calendar} label="Age" value={profile.basic_info?.age ? `${profile.basic_info.age} years` : undefined} />
               <InfoRow icon={Ruler} label="Height" value={profile.basic_info?.height_cm ? `${profile.basic_info.height_cm} cm` : undefined} />
               <InfoRow icon={Weight} label="Weight" value={profile.basic_info?.weight_kg ? `${profile.basic_info.weight_kg} kg` : undefined} />
+              <InfoRow icon={Smartphone} label="Mobile" value={profile.mobile || undefined} />
             </div>
           )}
         </SectionCard>

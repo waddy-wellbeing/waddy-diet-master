@@ -25,6 +25,7 @@ CREATE TABLE profiles (
   user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
   name VARCHAR(255),
   email VARCHAR(255),
+  mobile TEXT,
   avatar_url TEXT,
   role user_role NOT NULL DEFAULT 'client',
   plan_status plan_status NOT NULL DEFAULT 'pending_assignment',
@@ -36,12 +37,14 @@ CREATE TABLE profiles (
   onboarding_step INTEGER NOT NULL DEFAULT 0,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-  CONSTRAINT profiles_user_id_unique UNIQUE (user_id)
+  CONSTRAINT profiles_user_id_unique UNIQUE (user_id),
+  CONSTRAINT profiles_mobile_unique UNIQUE (mobile)
 );
 
 CREATE INDEX profiles_user_id_idx ON profiles(user_id);
 CREATE INDEX profiles_role_idx ON profiles(role);
 CREATE INDEX profiles_name_idx ON profiles(name);
+CREATE INDEX profiles_mobile_idx ON profiles(mobile) WHERE mobile IS NOT NULL;
 
 -- =============================================================================
 -- INGREDIENTS

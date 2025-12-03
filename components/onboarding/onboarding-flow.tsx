@@ -82,6 +82,7 @@ export function OnboardingFlow({ initialData, onComplete }: OnboardingFlowProps)
       heightUnit: 'cm',
       weight: '',
       weightUnit: 'kg',
+      mobile: '',
     }
   )
   

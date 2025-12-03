@@ -14,6 +14,7 @@ export interface BasicInfoData {
   heightUnit: 'cm' | 'ft'
   weight: string
   weightUnit: 'kg' | 'lbs'
+  mobile?: string
 }
 
 interface BasicInfoStepProps {
@@ -107,6 +108,20 @@ export function BasicInfoStep({ data, onChange }: BasicInfoStepProps) {
         <p className="text-xs text-muted-foreground">
           This is just for personalization
         </p>
+      </div>
+
+      {/* Mobile number */}
+      <div className="space-y-2">
+        <Label htmlFor="mobile">Mobile number</Label>
+        <Input
+          id="mobile"
+          type="tel"
+          placeholder="e.g., +971 50 123 4567"
+          value={data.mobile || ''}
+          onChange={(e) => updateField('mobile', e.target.value)}
+          className="h-12 text-base"
+        />
+        <p className="text-xs text-muted-foreground">We may use this for account verification and SMS notifications</p>
       </div>
 
       {/* Age */}

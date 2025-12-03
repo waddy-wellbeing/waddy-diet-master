@@ -17,6 +17,7 @@ interface UpdateProfileData {
     weight_kg?: number
     sex?: 'male' | 'female' | 'other'
   }
+  mobile?: string
   activity_level?: 'sedentary' | 'light' | 'moderate' | 'active' | 'very_active'
   goals?: {
     goal_type?: 'lose_weight' | 'maintain' | 'build_muscle' | 'recomposition'
@@ -151,12 +152,19 @@ export async function updateProfile(data: UpdateProfileData): Promise<UpdateResu
     }
 
     // Update profile
+    const updateData: any = {
+      ...updates,
+      updated_at: new Date().toISOString(),
+    }
+    
+    // Add mobile if provided
+    if (data.mobile !== undefined) {
+      updateData.mobile = data.mobile || null
+    }
+    
     const { error: updateError } = await supabase
       .from('profiles')
-      .update({
-        ...updates,
-        updated_at: new Date().toISOString(),
-      })
+      .update(updateData)
       .eq('user_id', user.id)
 
     if (updateError) {

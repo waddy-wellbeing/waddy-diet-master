@@ -18,6 +18,7 @@ interface OnboardingFormData {
     heightUnit: 'cm' | 'ft'
     weight: string
     weightUnit: 'kg' | 'lbs'
+    mobile?: string
   }
   activityLevel: 'sedentary' | 'light' | 'moderate' | 'active' | 'very_active' | ''
   goals: {
@@ -67,6 +68,7 @@ export async function saveOnboardingData(formData: OnboardingFormData): Promise<
     console.log('Saving onboarding data for user:', user.id)
 
     const { basicInfo, activityLevel, goals, dietaryPreferences, lifestyle, mealsPerDay } = formData
+    const mobile = basicInfo.mobile || undefined
 
     // Parse and convert values (always store in metric)
     const height_cm = parseFloat(basicInfo.height) || 0
@@ -132,6 +134,7 @@ export async function saveOnboardingData(formData: OnboardingFormData): Promise<
           user_id: user.id,
           name: basicInfo.name,
           email: user.email,
+          mobile: mobile || null,
           basic_info: profileBasicInfo,
           targets: profileTargets,
           preferences: profilePreferences,

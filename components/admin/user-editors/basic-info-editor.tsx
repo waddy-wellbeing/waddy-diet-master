@@ -28,6 +28,7 @@ export function BasicInfoEditor({ user, onUpdate }: BasicInfoEditorProps) {
   const [weightKg, setWeightKg] = useState(user.profile?.basic_info?.weight_kg?.toString() || '')
   const [sex, setSex] = useState(user.profile?.basic_info?.sex || '')
   const [activityLevel, setActivityLevel] = useState(user.profile?.basic_info?.activity_level || '')
+  const [mobile, setMobile] = useState(user.profile?.mobile || '')
 
   const handleSave = async () => {
     setSaving(true)
@@ -41,7 +42,7 @@ export function BasicInfoEditor({ user, onUpdate }: BasicInfoEditorProps) {
       activity_level: (activityLevel || undefined) as 'sedentary' | 'light' | 'moderate' | 'active' | 'very_active' | undefined,
     }
 
-    const result = await updateUserBasicInfo(user.id, basicInfo, name)
+    const result = await updateUserBasicInfo(user.id, basicInfo, name, mobile || undefined)
     
     if (result.success) {
       onUpdate({
@@ -49,6 +50,7 @@ export function BasicInfoEditor({ user, onUpdate }: BasicInfoEditorProps) {
         profile: user.profile ? {
           ...user.profile,
           name,
+          mobile: mobile || null,
           basic_info: { ...user.profile.basic_info, ...basicInfo },
         } : null,
       })
@@ -114,6 +116,17 @@ export function BasicInfoEditor({ user, onUpdate }: BasicInfoEditorProps) {
               value={weightKg}
               onChange={(e) => setWeightKg(e.target.value)}
               placeholder="Weight in kg"
+            />
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="mobile">Mobile</Label>
+            <Input
+              id="mobile"
+              type="tel"
+              value={mobile}
+              onChange={(e) => setMobile(e.target.value)}
+              placeholder="e.g., +971 50 123 4567"
             />
           </div>
 

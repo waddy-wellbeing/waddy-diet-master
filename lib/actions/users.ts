@@ -12,6 +12,7 @@ export interface UserWithProfile {
     id: string
     name: string | null
     email: string | null
+    mobile?: string | null
     avatar_url: string | null
     role: 'admin' | 'moderator' | 'client'
     plan_status: PlanStatus
@@ -105,6 +106,7 @@ export async function getUsers(options?: {
       id: profile.id,
       name: profile.name,
       email: profile.email,
+      mobile: profile.mobile,
       avatar_url: profile.avatar_url,
       role: profile.role,
       plan_status: profile.plan_status,
@@ -159,6 +161,7 @@ export async function getUser(userId: string): Promise<{
         id: profile.id,
         name: profile.name,
         email: profile.email,
+        mobile: profile.mobile,
         avatar_url: profile.avatar_url,
         role: profile.role,
         plan_status: profile.plan_status,
@@ -320,7 +323,8 @@ export async function updateUserCalories(
 export async function updateUserBasicInfo(
   userId: string,
   basicInfo: Partial<ProfileBasicInfo>,
-  name?: string
+  name?: string,
+  mobile?: string
 ): Promise<{ success: boolean; error: string | null }> {
   const supabase = await createClient()
 
@@ -341,6 +345,10 @@ export async function updateUserBasicInfo(
   
   if (name !== undefined) {
     updateData.name = name
+  }
+  
+  if (mobile !== undefined) {
+    updateData.mobile = mobile || null
   }
 
   const { error } = await supabase
