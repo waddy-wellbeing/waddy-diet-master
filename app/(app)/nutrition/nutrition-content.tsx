@@ -45,13 +45,14 @@ function MacroRing({
   icon: React.ElementType
   label: string
   unit?: string
-  size?: 'sm' | 'md' | 'lg'
+  size?: 'xs' | 'sm' | 'md' | 'lg'
 }) {
   const percentage = Math.min((value / target) * 100, 100)
   const remaining = Math.round(target - value)
   
   const sizes = {
-    sm: { ring: 60, stroke: 4, icon: 14, text: 'text-sm' },
+    xs: { ring: 56, stroke: 4, icon: 14, text: 'text-sm' },
+    sm: { ring: 64, stroke: 4, icon: 16, text: 'text-sm' },
     md: { ring: 80, stroke: 6, icon: 18, text: 'text-base' },
     lg: { ring: 100, stroke: 8, icon: 22, text: 'text-lg' },
   }
@@ -64,7 +65,7 @@ function MacroRing({
   return (
     <div className="flex flex-col items-center">
       <div className="relative" style={{ width: s.ring, height: s.ring }}>
-        <svg className="w-full h-full transform -rotate-90">
+      <svg className="w-full h-full transform -rotate-90">
           {/* Background circle */}
           <circle
             cx={s.ring / 2}
@@ -81,8 +82,9 @@ function MacroRing({
             cy={s.ring / 2}
             r={radius}
             fill="none"
-            stroke={color}
+            stroke="currentColor"
             strokeWidth={s.stroke}
+            style={{ color }}
             strokeLinecap="round"
             strokeDasharray={circumference}
             initial={{ strokeDashoffset: circumference }}
@@ -222,7 +224,7 @@ function TodaySummary({ today, targets }: { today: DayLog; targets: NutritionSta
   const remaining = Math.round(targets.calories - today.calories)
 
   return (
-    <div className="bg-gradient-to-br from-primary/10 via-primary/5 to-background rounded-2xl border border-primary/20 p-5">
+    <div className="bg-gradient-to-br from-primary/10 via-primary/5 to-background rounded-2xl border border-primary/20 p-4 overflow-visible">
       <div className="flex items-center justify-between mb-4">
         <div>
           <h3 className="text-lg font-semibold">Today&apos;s Progress</h3>
@@ -288,31 +290,37 @@ function TodaySummary({ today, targets }: { today: DayLog; targets: NutritionSta
       </div>
 
       {/* Macros row */}
-      <div className="grid grid-cols-3 gap-4">
-        <MacroRing
-          value={Math.round(today.protein)}
-          target={Math.round(targets.protein)}
-          color="hsl(var(--primary))"
-          icon={Beef}
-          label="Protein"
-          size="sm"
-        />
-        <MacroRing
-          value={Math.round(today.carbs)}
-          target={Math.round(targets.carbs)}
-          color="#f59e0b"
-          icon={Wheat}
-          label="Carbs"
-          size="sm"
-        />
-        <MacroRing
-          value={Math.round(today.fat)}
-          target={Math.round(targets.fat)}
-          color="#3b82f6"
-          icon={Droplet}
-          label="Fat"
-          size="sm"
-        />
+      <div className="flex justify-between items-start w-full">
+        <div className="flex-1 flex justify-center">
+          <MacroRing
+            value={Math.round(today.protein)}
+            target={Math.round(targets.protein)}
+            color="var(--primary)"
+            icon={Beef}
+            label="Protein"
+            size="xs"
+          />
+        </div>
+        <div className="flex-1 flex justify-center">
+          <MacroRing
+            value={Math.round(today.carbs)}
+            target={Math.round(targets.carbs)}
+            color="#f59e0b"
+            icon={Wheat}
+            label="Carbs"
+            size="xs"
+          />
+        </div>
+        <div className="flex-1 flex justify-center">
+          <MacroRing
+            value={Math.round(today.fat)}
+            target={Math.round(targets.fat)}
+            color="#3b82f6"
+            icon={Droplet}
+            label="Fat"
+            size="xs"
+          />
+        </div>
       </div>
     </div>
   )

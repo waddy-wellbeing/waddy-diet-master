@@ -28,11 +28,11 @@ export function StepIndicator({ currentStep, totalSteps, className }: StepIndica
                   : 'w-2 bg-muted'
             )}
             initial={false}
-            animate={{
+              animate={{
               width: isCurrent ? 32 : 8,
               backgroundColor: isCurrent || isCompleted 
-                ? 'hsl(var(--primary))' 
-                : 'hsl(var(--muted))'
+                ? 'var(--primary)' 
+                : 'var(--muted)'
             }}
             transition={{ duration: 0.3, ease: 'easeInOut' }}
           />
