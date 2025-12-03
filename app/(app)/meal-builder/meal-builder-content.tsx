@@ -64,8 +64,8 @@ export function MealBuilderContent({
         Object.entries(mealPlan.swapped_ingredients).forEach(([originalId, swapData]: [string, any]) => {
           swapsMap[originalId] = {
             id: swapData.ingredient_id,
-            name: swapData.name,
-            name_ar: swapData.name, // We don't have name_ar in saved data, use name
+            name: swapData.name || swapData.name_ar,
+            name_ar: swapData.name_ar || swapData.name,
             food_group: null,
             subgroup: null,
             serving_size: swapData.quantity,
@@ -198,11 +198,12 @@ export function MealBuilderContent({
     setSaving(true)
     
     // Prepare swapped ingredients data
-    const swappedIngredients: Record<string, { ingredient_id: string; name: string; quantity: number; unit: string }> = {}
+    const swappedIngredients: Record<string, { ingredient_id: string; name: string; name_ar?: string; quantity: number; unit: string }> = {}
     Object.entries(selectedSwaps).forEach(([ingredientId, swap]) => {
       swappedIngredients[ingredientId] = {
         ingredient_id: swap.id,
         name: swap.name,
+        name_ar: swap.name_ar || undefined,
         quantity: swap.suggested_amount,
         unit: swap.serving_unit,
       }
