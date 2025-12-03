@@ -153,12 +153,11 @@ export function MealBuilderContent({
             const target = mealTargets[meal]
 
             return (
-              <motion.div
+              <div
                 key={meal}
                 role="button"
                 tabIndex={0}
-                className="relative aspect-[4/5] rounded-2xl overflow-hidden group cursor-pointer"
-                whileTap={{ scale: 0.97 }}
+                className="relative aspect-[4/5] rounded-2xl overflow-hidden group cursor-pointer active:scale-[0.97] transition-transform duration-75"
                 onClick={() => handleSelectMeal(meal)}
                 onKeyDown={(e) => {
                   if (e.key === 'Enter' || e.key === ' ') {
@@ -174,7 +173,9 @@ export function MealBuilderContent({
                       src={firstRecipe.image_url}
                       alt={mealLabels[meal]}
                       fill
-                      className="object-cover transition-transform duration-300 group-hover:scale-105"
+                      sizes="(max-width: 768px) 50vw, 25vw"
+                      className="object-cover"
+                      priority={meal === 'breakfast' || meal === 'lunch'}
                     />
                   ) : (
                     <div className="w-full h-full bg-gradient-to-br from-primary/30 to-primary/10 flex items-center justify-center">
@@ -298,7 +299,7 @@ export function MealBuilderContent({
                 <div className="absolute top-3 right-3 w-8 h-8 rounded-full bg-white/20 backdrop-blur-sm flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
                   <ChevronRight className="w-4 h-4 text-white" />
                 </div>
-              </motion.div>
+              </div>
             )
           })}
         </div>

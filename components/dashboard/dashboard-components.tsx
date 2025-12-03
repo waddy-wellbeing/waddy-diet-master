@@ -41,17 +41,16 @@ function WeekDayCard({ date, isSelected, onClick, consumed, target }: WeekDayCar
   const dashOffset = circumference - (progress / 100) * circumference
 
   return (
-    <motion.button
+    <button
       onClick={onClick}
       className={cn(
-        'flex flex-col items-center p-2 rounded-xl transition-all touch-manipulation min-w-[52px]',
-        'border-2',
+        'flex flex-col items-center p-2 rounded-xl touch-manipulation min-w-[52px]',
+        'border-2 active:scale-95 transition-transform duration-75',
         isSelected
           ? 'border-primary bg-primary/5 shadow-sm'
           : 'border-transparent hover:bg-muted/50',
         today && !isSelected && 'border-primary/30'
       )}
-      whileTap={{ scale: 0.95 }}
     >
       <span className={cn(
         'text-xs font-medium mb-1',
@@ -100,7 +99,7 @@ function WeekDayCard({ date, isSelected, onClick, consumed, target }: WeekDayCar
       {today && (
         <span className="w-1.5 h-1.5 rounded-full bg-primary" />
       )}
-    </motion.button>
+    </button>
   )
 }
 
@@ -559,9 +558,8 @@ export function MealCard({ meal, isToday = true, onLogMeal, onUnlogMeal, onSwapM
   
   // No recipe assigned - empty state
   return (
-    <motion.div
-      className="bg-card rounded-xl border border-border p-4 touch-manipulation"
-      whileTap={{ scale: 0.99 }}
+    <div
+      className="bg-card rounded-xl border border-border p-4 touch-manipulation active:scale-[0.99] transition-transform duration-75"
     >
       <div className="flex items-start justify-between mb-3">
         <div className="flex items-center gap-2">
@@ -611,7 +609,7 @@ export function MealCard({ meal, isToday = true, onLogMeal, onUnlogMeal, onSwapM
       >
         + Add food
       </button>
-    </motion.div>
+    </div>
   )
 }
 

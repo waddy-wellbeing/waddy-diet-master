@@ -51,12 +51,28 @@ export default async function MealBuilderPage({ searchParams }: PageProps) {
     redirect('/login')
   }
 
-  // Fetch user profile
-  const { data: profile } = await supabase
-    .from('profiles')
-    .select('*')
-    .eq('user_id', user.id)
-    .single()
+  // Fetch profile and recipes in parallel
+  const [{ data: profile }, { data: allRecipes }] = await Promise.all([
+    supabase
+      .from('profiles')
+      .select('*')
+      .eq('user_id', user.id)
+      .single(),
+    supabase
+      .from('recipes')
+      .select(`
+        *,
+        recipe_ingredients (
+          id, ingredient_id, raw_name, quantity, unit, is_spice, is_optional,
+          ingredient:ingredients!recipe_ingredients_ingredient_id_fkey (
+            id, name, name_ar, food_group
+          )
+        )
+      `)
+      .eq('is_public', true)
+      .not('nutrition_per_serving', 'is', null)
+      .order('name'),
+  ])
 
   if (!profile?.onboarding_completed) {
     redirect('/onboarding')
@@ -105,22 +121,6 @@ export default async function MealBuilderPage({ searchParams }: PageProps) {
 
   const minScale = 0.5
   const maxScale = 2.0
-
-  // Fetch recipes WITH ingredients
-  const { data: allRecipes } = await supabase
-    .from('recipes')
-    .select(`
-      *,
-      recipe_ingredients (
-        id, ingredient_id, raw_name, quantity, unit, is_spice, is_optional,
-        ingredient:ingredients!recipe_ingredients_ingredient_id_fkey (
-          id, name, name_ar, food_group
-        )
-      )
-    `)
-    .eq('is_public', true)
-    .not('nutrition_per_serving', 'is', null)
-    .order('name')
 
   // Process recipes for each meal type
   const recipesByMealType: Record<string, ScaledRecipeWithIngredients[]> = {

@@ -31,34 +31,61 @@ export default async function DashboardPage() {
 
   const today = new Date()
   const todayStr = format(today, 'yyyy-MM-dd')
-  
-  // Fetch today's log
-  const { data: dailyLog } = await supabase
-    .from('daily_logs')
-    .select('log, logged_totals')
-    .eq('user_id', user.id)
-    .eq('log_date', todayStr)
-    .single()
-  
-  // Fetch today's plan (if admin has assigned one)
-  const { data: dailyPlan } = await supabase
-    .from('daily_plans')
-    .select('plan, daily_totals')
-    .eq('user_id', user.id)
-    .eq('plan_date', todayStr)
-    .single()
-  
-  // Fetch week logs for the week selector
   const weekStart = startOfWeek(today, { weekStartsOn: 0 })
   const weekEnd = endOfWeek(today, { weekStartsOn: 0 })
+  const thirtyDaysAgo = format(subDays(today, 30), 'yyyy-MM-dd')
   
-  const { data: weekLogs } = await supabase
-    .from('daily_logs')
-    .select('log_date, logged_totals')
-    .eq('user_id', user.id)
-    .gte('log_date', format(weekStart, 'yyyy-MM-dd'))
-    .lte('log_date', format(weekEnd, 'yyyy-MM-dd'))
+  // Run ALL queries in parallel for maximum speed
+  const [
+    { data: dailyLog },
+    { data: dailyPlan },
+    { data: weekLogs },
+    { data: streakLogs },
+    { data: allRecipes },
+  ] = await Promise.all([
+    // Today's log
+    supabase
+      .from('daily_logs')
+      .select('log, logged_totals')
+      .eq('user_id', user.id)
+      .eq('log_date', todayStr)
+      .maybeSingle(),
+    
+    // Today's plan
+    supabase
+      .from('daily_plans')
+      .select('plan, daily_totals')
+      .eq('user_id', user.id)
+      .eq('plan_date', todayStr)
+      .maybeSingle(),
+    
+    // Week logs for the week selector
+    supabase
+      .from('daily_logs')
+      .select('log_date, logged_totals')
+      .eq('user_id', user.id)
+      .gte('log_date', format(weekStart, 'yyyy-MM-dd'))
+      .lte('log_date', format(weekEnd, 'yyyy-MM-dd')),
+    
+    // Last 30 days for streak calculation (single query instead of 30!)
+    supabase
+      .from('daily_logs')
+      .select('log_date')
+      .eq('user_id', user.id)
+      .gte('log_date', thirtyDaysAgo)
+      .lte('log_date', todayStr)
+      .order('log_date', { ascending: false }),
+    
+    // All public recipes
+    supabase
+      .from('recipes')
+      .select('*')
+      .eq('is_public', true)
+      .not('nutrition_per_serving', 'is', null)
+      .order('name'),
+  ])
   
+  // Process week data
   const weekData: Record<string, { consumed: number }> = {}
   if (weekLogs) {
     for (const log of weekLogs) {
@@ -67,29 +94,21 @@ export default async function DashboardPage() {
     }
   }
   
-  // Calculate streak (consecutive days of logging)
+  // Calculate streak from the fetched logs (no more loop queries!)
   let streak = 0
-  let checkDate = subDays(today, 1) // Start from yesterday
-  
-  // First check if today has logs
-  if (dailyLog?.log) {
-    streak = 1
-  }
-  
-  // Then check backwards
-  for (let i = 0; i < 30; i++) { // Check up to 30 days back
-    const { data: logData } = await supabase
-      .from('daily_logs')
-      .select('id')
-      .eq('user_id', user.id)
-      .eq('log_date', format(checkDate, 'yyyy-MM-dd'))
-      .single()
+  if (streakLogs && streakLogs.length > 0) {
+    const logDates = new Set(streakLogs.map(l => l.log_date))
+    let checkDate = today
     
-    if (logData) {
-      streak++
-      checkDate = subDays(checkDate, 1)
-    } else {
-      break
+    // Count consecutive days from today backwards
+    for (let i = 0; i < 30; i++) {
+      const dateStr = format(checkDate, 'yyyy-MM-dd')
+      if (logDates.has(dateStr)) {
+        streak++
+        checkDate = subDays(checkDate, 1)
+      } else {
+        break
+      }
     }
   }
   
@@ -114,14 +133,6 @@ export default async function DashboardPage() {
   // Get scaling limits from system settings or use defaults
   const minScale = 0.5
   const maxScale = 2.0
-  
-  // Fetch ALL public recipes with nutrition info
-  const { data: allRecipes } = await supabase
-    .from('recipes')
-    .select('*')
-    .eq('is_public', true)
-    .not('nutrition_per_serving', 'is', null)
-    .order('name')
   
   // Process recipes for each meal type with scaling
   interface ScaledRecipe extends RecipeRecord {
