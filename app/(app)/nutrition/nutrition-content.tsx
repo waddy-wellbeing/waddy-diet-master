@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useMemo, useCallback, memo } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { format, subDays, parseISO } from 'date-fns'
 import {
@@ -431,6 +431,131 @@ function InsightsCard({ stats }: { stats: NutritionStats }) {
 export function NutritionContent({ stats, userName }: NutritionContentProps) {
   const [activeTab, setActiveTab] = useState<'today' | 'week' | 'month'>('today')
 
+  // Memoize tab handler to prevent unnecessary re-renders
+  const handleTabChange = useCallback((tab: 'today' | 'week' | 'month') => {
+    setActiveTab(tab)
+  }, [])
+
+  // Memoize today content
+  const todayContent = useMemo(() => (
+    <>
+      <TodaySummary today={stats.today} targets={stats.targets} />
+      <InsightsCard stats={stats} />
+      
+      {/* Quick Stats */}
+      <div className="grid grid-cols-2 gap-3">
+        <StatCard
+          icon={Zap}
+          label="Current Streak"
+          value={`${stats.currentStreak} days`}
+          trend={stats.currentStreak > 0 ? 'up' : 'neutral'}
+        />
+        <StatCard
+          icon={Target}
+          label="Perfect Days"
+          value={stats.perfectDays}
+          subtext="Within 10% of target"
+          color="text-green-500"
+        />
+      </div>
+    </>
+  ), [stats])
+
+  // Memoize week content
+  const weekContent = useMemo(() => (
+    <>
+      {/* Weekly Chart */}
+      <div className="bg-card rounded-xl border border-border p-4">
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="font-semibold">Calorie Intake</h3>
+          <span className="text-xs text-muted-foreground">Last 7 days</span>
+        </div>
+        <WeeklyChart 
+          logs={stats.weeklyLogs} 
+          target={stats.targets.calories}
+          metric="calories"
+        />
+        <div className="flex items-center justify-center gap-4 mt-4 text-xs text-muted-foreground">
+          <div className="flex items-center gap-1">
+            <div className="w-3 h-3 rounded-sm bg-primary" />
+            <span>Daily intake</span>
+          </div>
+          <div className="flex items-center gap-1">
+            <div className="w-6 border-t border-dashed border-primary/30" />
+            <span>Target</span>
+          </div>
+        </div>
+      </div>
+
+      {/* Weekly Averages */}
+      <div className="bg-card rounded-xl border border-border p-4">
+        <h3 className="font-semibold mb-4">Weekly Averages</h3>
+        <div className="grid grid-cols-4 gap-2">
+          <div className="text-center p-3 bg-muted/30 rounded-lg">
+            <Flame className="w-5 h-5 mx-auto mb-1 text-primary" />
+            <p className="text-lg font-bold">{Math.round(stats.weeklyAverages.calories)}</p>
+            <p className="text-[10px] text-muted-foreground">Calories</p>
+          </div>
+          <div className="text-center p-3 bg-muted/30 rounded-lg">
+            <Beef className="w-5 h-5 mx-auto mb-1 text-primary" />
+            <p className="text-lg font-bold">{Math.round(stats.weeklyAverages.protein)}g</p>
+            <p className="text-[10px] text-muted-foreground">Protein</p>
+          </div>
+          <div className="text-center p-3 bg-muted/30 rounded-lg">
+            <Wheat className="w-5 h-5 mx-auto mb-1 text-amber-500" />
+            <p className="text-lg font-bold">{Math.round(stats.weeklyAverages.carbs)}g</p>
+            <p className="text-[10px] text-muted-foreground">Carbs</p>
+          </div>
+          <div className="text-center p-3 bg-muted/30 rounded-lg">
+            <Droplet className="w-5 h-5 mx-auto mb-1 text-blue-500" />
+            <p className="text-lg font-bold">{Math.round(stats.weeklyAverages.fat)}g</p>
+            <p className="text-[10px] text-muted-foreground">Fat</p>
+          </div>
+        </div>
+      </div>
+
+      {/* Comparison to targets */}
+      <div className="bg-card rounded-xl border border-border p-4">
+        <h3 className="font-semibold mb-4">vs. Targets</h3>
+        <div className="space-y-3">
+          {[
+            { label: 'Calories', avg: stats.weeklyAverages.calories, target: stats.targets.calories, unit: '' },
+            { label: 'Protein', avg: stats.weeklyAverages.protein, target: stats.targets.protein, unit: 'g' },
+            { label: 'Carbs', avg: stats.weeklyAverages.carbs, target: stats.targets.carbs, unit: 'g' },
+            { label: 'Fat', avg: stats.weeklyAverages.fat, target: stats.targets.fat, unit: 'g' },
+          ].map(item => {
+            const percentage = Math.round((item.avg / item.target) * 100)
+            const isOver = percentage > 100
+            return (
+              <div key={item.label}>
+                <div className="flex items-center justify-between text-sm mb-1">
+                  <span>{item.label}</span>
+                  <span className={cn(
+                    'font-medium',
+                    isOver ? 'text-orange-500' : 'text-foreground'
+                  )}>
+                    {Math.round(item.avg)}{item.unit} / {Math.round(item.target)}{item.unit}
+                  </span>
+                </div>
+                <div className="h-2 bg-muted/30 rounded-full overflow-hidden">
+                  <motion.div
+                    className={cn(
+                      'h-full rounded-full',
+                      isOver ? 'bg-orange-500' : 'bg-primary'
+                    )}
+                    initial={{ width: 0 }}
+                    animate={{ width: `${Math.min(percentage, 100)}%` }}
+                    transition={{ duration: 0.3 }}
+                  />
+                </div>
+              </div>
+            )
+          })}
+        </div>
+      </div>
+    </>
+  ), [stats])
+
   return (
     <div className="min-h-screen bg-gradient-to-b from-background to-muted/20 pb-24">
       {/* Header */}
@@ -450,7 +575,7 @@ export function NutritionContent({ stats, userName }: NutritionContentProps) {
           {(['today', 'week', 'month'] as const).map((tab) => (
             <button
               key={tab}
-              onClick={() => setActiveTab(tab)}
+              onClick={() => handleTabChange(tab)}
               className={cn(
                 'flex-1 py-2 px-4 rounded-lg text-sm font-medium transition-all',
                 activeTab === tab
@@ -468,129 +593,14 @@ export function NutritionContent({ stats, userName }: NutritionContentProps) {
       <AnimatePresence mode="wait">
         <motion.div
           key={activeTab}
-          initial={{ opacity: 0, y: 10 }}
-          animate={{ opacity: 1, y: 0 }}
-          exit={{ opacity: 0, y: -10 }}
-          transition={{ duration: 0.2 }}
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          transition={{ duration: 0.15 }}
           className="px-4 space-y-4"
         >
-          {activeTab === 'today' && (
-            <>
-              <TodaySummary today={stats.today} targets={stats.targets} />
-              <InsightsCard stats={stats} />
-              
-              {/* Quick Stats */}
-              <div className="grid grid-cols-2 gap-3">
-                <StatCard
-                  icon={Zap}
-                  label="Current Streak"
-                  value={`${stats.currentStreak} days`}
-                  trend={stats.currentStreak > 0 ? 'up' : 'neutral'}
-                />
-                <StatCard
-                  icon={Target}
-                  label="Perfect Days"
-                  value={stats.perfectDays}
-                  subtext="Within 10% of target"
-                  color="text-green-500"
-                />
-              </div>
-            </>
-          )}
-
-          {activeTab === 'week' && (
-            <>
-              {/* Weekly Chart */}
-              <div className="bg-card rounded-xl border border-border p-4">
-                <div className="flex items-center justify-between mb-4">
-                  <h3 className="font-semibold">Calorie Intake</h3>
-                  <span className="text-xs text-muted-foreground">Last 7 days</span>
-                </div>
-                <WeeklyChart 
-                  logs={stats.weeklyLogs} 
-                  target={stats.targets.calories}
-                  metric="calories"
-                />
-                <div className="flex items-center justify-center gap-4 mt-4 text-xs text-muted-foreground">
-                  <div className="flex items-center gap-1">
-                    <div className="w-3 h-3 rounded-sm bg-primary" />
-                    <span>Daily intake</span>
-                  </div>
-                  <div className="flex items-center gap-1">
-                    <div className="w-6 border-t border-dashed border-primary/30" />
-                    <span>Target</span>
-                  </div>
-                </div>
-              </div>
-
-              {/* Weekly Averages */}
-              <div className="bg-card rounded-xl border border-border p-4">
-                <h3 className="font-semibold mb-4">Weekly Averages</h3>
-                <div className="grid grid-cols-4 gap-2">
-                  <div className="text-center p-3 bg-muted/30 rounded-lg">
-                    <Flame className="w-5 h-5 mx-auto mb-1 text-primary" />
-                    <p className="text-lg font-bold">{Math.round(stats.weeklyAverages.calories)}</p>
-                    <p className="text-[10px] text-muted-foreground">Calories</p>
-                  </div>
-                  <div className="text-center p-3 bg-muted/30 rounded-lg">
-                    <Beef className="w-5 h-5 mx-auto mb-1 text-primary" />
-                    <p className="text-lg font-bold">{Math.round(stats.weeklyAverages.protein)}g</p>
-                    <p className="text-[10px] text-muted-foreground">Protein</p>
-                  </div>
-                  <div className="text-center p-3 bg-muted/30 rounded-lg">
-                    <Wheat className="w-5 h-5 mx-auto mb-1 text-amber-500" />
-                    <p className="text-lg font-bold">{Math.round(stats.weeklyAverages.carbs)}g</p>
-                    <p className="text-[10px] text-muted-foreground">Carbs</p>
-                  </div>
-                  <div className="text-center p-3 bg-muted/30 rounded-lg">
-                    <Droplet className="w-5 h-5 mx-auto mb-1 text-blue-500" />
-                    <p className="text-lg font-bold">{Math.round(stats.weeklyAverages.fat)}g</p>
-                    <p className="text-[10px] text-muted-foreground">Fat</p>
-                  </div>
-                </div>
-              </div>
-
-              {/* Comparison to targets */}
-              <div className="bg-card rounded-xl border border-border p-4">
-                <h3 className="font-semibold mb-4">vs. Targets</h3>
-                <div className="space-y-3">
-                  {[
-                    { label: 'Calories', avg: stats.weeklyAverages.calories, target: stats.targets.calories, unit: '' },
-                    { label: 'Protein', avg: stats.weeklyAverages.protein, target: stats.targets.protein, unit: 'g' },
-                    { label: 'Carbs', avg: stats.weeklyAverages.carbs, target: stats.targets.carbs, unit: 'g' },
-                    { label: 'Fat', avg: stats.weeklyAverages.fat, target: stats.targets.fat, unit: 'g' },
-                  ].map(item => {
-                    const percentage = Math.round((item.avg / item.target) * 100)
-                    const isOver = percentage > 100
-                    return (
-                      <div key={item.label}>
-                        <div className="flex items-center justify-between text-sm mb-1">
-                          <span>{item.label}</span>
-                          <span className={cn(
-                            'font-medium',
-                            isOver ? 'text-orange-500' : 'text-foreground'
-                          )}>
-                            {Math.round(item.avg)}{item.unit} / {Math.round(item.target)}{item.unit}
-                          </span>
-                        </div>
-                        <div className="h-2 bg-muted/30 rounded-full overflow-hidden">
-                          <motion.div
-                            className={cn(
-                              'h-full rounded-full',
-                              isOver ? 'bg-orange-500' : 'bg-primary'
-                            )}
-                            initial={{ width: 0 }}
-                            animate={{ width: `${Math.min(percentage, 100)}%` }}
-                            transition={{ duration: 0.5 }}
-                          />
-                        </div>
-                      </div>
-                    )
-                  })}
-                </div>
-              </div>
-            </>
-          )}
+          {activeTab === 'today' && todayContent}
+          {activeTab === 'week' && weekContent}
 
           {activeTab === 'month' && (
             <>
