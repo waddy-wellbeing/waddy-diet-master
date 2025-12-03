@@ -701,15 +701,24 @@ export function MealBuilderContent({
                             <Badge variant="secondary" className="text-[10px] px-1.5">
                               swapped
                             </Badge>
-                            <button
+                            <div
                               onClick={(e) => {
                                 e.stopPropagation()
                                 handleClearSwap(ingredient.id)
                               }}
-                              className="p-1 hover:bg-destructive/20 rounded-full"
+                              role="button"
+                              tabIndex={0}
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter' || e.key === ' ') {
+                                  e.stopPropagation()
+                                  e.preventDefault()
+                                  handleClearSwap(ingredient.id)
+                                }
+                              }}
+                              className="p-1 hover:bg-destructive/20 rounded-full cursor-pointer transition-colors"
                             >
                               <X className="w-3 h-3" />
-                            </button>
+                            </div>
                           </div>
                         ) : (
                           <span className={cn(
