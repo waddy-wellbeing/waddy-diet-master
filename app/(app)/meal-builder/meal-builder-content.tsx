@@ -153,11 +153,19 @@ export function MealBuilderContent({
             const target = mealTargets[meal]
 
             return (
-              <motion.button
+              <motion.div
                 key={meal}
-                className="relative aspect-[4/5] rounded-2xl overflow-hidden group"
+                role="button"
+                tabIndex={0}
+                className="relative aspect-[4/5] rounded-2xl overflow-hidden group cursor-pointer"
                 whileTap={{ scale: 0.97 }}
                 onClick={() => handleSelectMeal(meal)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault()
+                    handleSelectMeal(meal)
+                  }
+                }}
               >
                 {/* Background Image */}
                 <div className="absolute inset-0 bg-muted">
@@ -290,7 +298,7 @@ export function MealBuilderContent({
                 <div className="absolute top-3 right-3 w-8 h-8 rounded-full bg-white/20 backdrop-blur-sm flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
                   <ChevronRight className="w-4 h-4 text-white" />
                 </div>
-              </motion.button>
+              </motion.div>
             )
           })}
         </div>
