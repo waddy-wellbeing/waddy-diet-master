@@ -34,6 +34,7 @@ import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { PhoneInput } from '@/components/onboarding/phone-input'
 import type { Profile, NotificationSettings } from '@/lib/types/nutri'
 import { updateProfile } from '@/lib/actions/profile'
 import { 
@@ -748,14 +749,10 @@ export function ProfileContent({ profile, userEmail }: ProfileContentProps) {
                 </div>
               </div>
               <div>
-                <Label htmlFor="mobile">Mobile number</Label>
-                <Input
-                  id="mobile"
-                  type="tel"
+                <PhoneInput
                   value={basicInfo.mobile}
-                  onChange={(e) => setBasicInfo({ ...basicInfo, mobile: e.target.value })}
-                  placeholder="e.g., +971 50 123 4567"
-                  className="mt-1"
+                  onChange={(value) => setBasicInfo({ ...basicInfo, mobile: value })}
+                  label="Mobile number"
                 />
               </div>
             </div>

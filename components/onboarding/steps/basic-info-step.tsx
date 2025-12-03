@@ -5,6 +5,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { VisualSelect } from '../visual-select'
 import { UnitToggle } from '../unit-toggle'
+import { PhoneInput } from '../phone-input'
 
 export interface BasicInfoData {
   name: string
@@ -111,18 +112,10 @@ export function BasicInfoStep({ data, onChange }: BasicInfoStepProps) {
       </div>
 
       {/* Mobile number */}
-      <div className="space-y-2">
-        <Label htmlFor="mobile">Mobile number</Label>
-        <Input
-          id="mobile"
-          type="tel"
-          placeholder="e.g., +971 50 123 4567"
-          value={data.mobile || ''}
-          onChange={(e) => updateField('mobile', e.target.value)}
-          className="h-12 text-base"
-        />
-        <p className="text-xs text-muted-foreground">We may use this for account verification and SMS notifications</p>
-      </div>
+      <PhoneInput
+        value={data.mobile || ''}
+        onChange={(value) => updateField('mobile', value)}
+      />
 
       {/* Age */}
       <div className="space-y-2">

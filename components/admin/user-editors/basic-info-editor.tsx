@@ -13,6 +13,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+import { PhoneInput } from '@/components/onboarding/phone-input'
 import { updateUserBasicInfo, type UserWithProfile } from '@/lib/actions/users'
 
 interface BasicInfoEditorProps {
@@ -121,11 +122,9 @@ export function BasicInfoEditor({ user, onUpdate }: BasicInfoEditorProps) {
 
           <div className="space-y-2">
             <Label htmlFor="mobile">Mobile</Label>
-            <Input
-              id="mobile"
-              type="tel"
+            <PhoneInput
               value={mobile}
-              onChange={(e) => setMobile(e.target.value)}
+              onChange={setMobile}
               placeholder="e.g., +971 50 123 4567"
             />
           </div>
