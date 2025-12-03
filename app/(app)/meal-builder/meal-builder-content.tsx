@@ -167,6 +167,8 @@ export function MealBuilderContent({
   const handleSelectSwap = (ingredientId: string, swap: IngredientSwapOption) => {
     setSelectedSwaps(prev => ({ ...prev, [ingredientId]: swap }))
     setExpandedIngredient(null)
+    // Toast-like feedback (could be extended to show actual toast)
+    console.log(`Swapped ingredient for ${ingredientId} to ${swap.name}`)
   }
 
   const handleClearSwap = (ingredientId: string) => {
@@ -673,6 +675,43 @@ export function MealBuilderContent({
             exit={{ opacity: 0, x: 20 }}
             className="p-4"
           >
+            {/* Swap Summary - show if there are active swaps */}
+            {Object.keys(selectedSwaps).length > 0 && (
+              <motion.div
+                initial={{ opacity: 0, y: -10 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="mb-4 p-3 bg-gradient-to-r from-primary/10 to-primary/5 border border-primary/30 rounded-lg"
+              >
+                <div className="flex items-start justify-between">
+                  <div>
+                    <p className="text-sm font-semibold text-primary mb-2">
+                      🔄 {Object.keys(selectedSwaps).length} ingredient swap{Object.keys(selectedSwaps).length > 1 ? 's' : ''} active
+                    </p>
+                    <div className="space-y-1">
+                      {Object.entries(selectedSwaps).map(([ingredId, swap]) => {
+                        const original = mainIngredients.find(i => i.id === ingredId)
+                        return (
+                          <div key={ingredId} className="text-xs text-muted-foreground">
+                            <span className="line-through">{original?.ingredient?.name_ar || original?.ingredient?.name}</span>
+                            <span className="mx-1">→</span>
+                            <span className="font-medium text-primary">{swap.name_ar || swap.name}</span>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  </div>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="h-8 text-xs px-2 hover:bg-destructive/20 text-destructive"
+                    onClick={() => setSelectedSwaps({})}
+                  >
+                    Clear All
+                  </Button>
+                </div>
+              </motion.div>
+            )}
+
             {/* Main Ingredients */}
             <div className="space-y-2">
               {mainIngredients.map((ingredient) => {
@@ -687,20 +726,30 @@ export function MealBuilderContent({
                         ingredient.ingredient_id 
                           ? "bg-muted/50 hover:bg-muted active:scale-[0.99]" 
                           : "bg-muted/30",
-                        isExpanded && "ring-2 ring-primary"
+                        isExpanded && "ring-2 ring-primary",
+                        swap && "bg-gradient-to-r from-primary/10 to-primary/5 border-l-2 border-primary"
                       )}
                       onClick={() => ingredient.ingredient_id && handleToggleSwaps(ingredient)}
                       disabled={!ingredient.ingredient_id}
                     >
                       <div className="flex-1 text-left">
                         {swap ? (
-                          <div className="flex items-center gap-2">
-                            <span className="font-arabic font-medium">
-                              {swap.name_ar || swap.name}
-                            </span>
-                            <Badge variant="secondary" className="text-[10px] px-1.5">
-                              swapped
-                            </Badge>
+                          <motion.div 
+                            className="flex items-center gap-2"
+                            initial={{ opacity: 0, x: -10 }}
+                            animate={{ opacity: 1, x: 0 }}
+                            transition={{ type: 'spring', stiffness: 200 }}
+                          >
+                            <div className="flex-1">
+                              <div className="flex items-center gap-2">
+                                <span className="font-arabic font-semibold text-primary">
+                                  ✓ {swap.name_ar || swap.name}
+                                </span>
+                              </div>
+                              <p className="text-xs text-muted-foreground mt-1">
+                                Replaces: {ingredient.ingredient?.name_ar || ingredient.ingredient?.name}
+                              </p>
+                            </div>
                             <div
                               onClick={(e) => {
                                 e.stopPropagation()
@@ -715,11 +764,12 @@ export function MealBuilderContent({
                                   handleClearSwap(ingredient.id)
                                 }
                               }}
-                              className="p-1 hover:bg-destructive/20 rounded-full cursor-pointer transition-colors"
+                              className="p-1.5 hover:bg-destructive/20 rounded-full cursor-pointer transition-colors flex-shrink-0"
+                              title="Remove this swap"
                             >
-                              <X className="w-3 h-3" />
+                              <X className="w-4 h-4 text-destructive" />
                             </div>
-                          </div>
+                          </motion.div>
                         ) : (
                           <span className={cn(
                             "font-arabic",
@@ -761,24 +811,72 @@ export function MealBuilderContent({
                                 <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
                               </div>
                             ) : swaps && swaps.length > 0 ? (
-                              <div className="space-y-1">
-                                <p className="text-xs text-muted-foreground mb-2 px-1">
-                                  Tap to swap with:
+                              <div className="space-y-2">
+                                <p className="text-xs text-muted-foreground mb-3 px-1 font-medium">
+                                  Available alternatives:
                                 </p>
-                                {swaps.slice(0, 6).map((s) => (
-                                  <button
-                                    key={s.id}
-                                    className="w-full flex items-center justify-between p-2.5 rounded-lg hover:bg-background transition-colors"
-                                    onClick={() => handleSelectSwap(ingredient.id, s)}
-                                  >
-                                    <span className="font-arabic text-sm">
-                                      {s.name_ar || s.name}
-                                    </span>
-                                    <span className="text-sm text-muted-foreground font-mono">
-                                      {s.suggested_amount}{s.serving_unit}
-                                    </span>
-                                  </button>
-                                ))}
+                                {swaps.slice(0, 6).map((s, idx) => {
+                                  const swapMacros = s.macros || { calories: 0, protein_g: 0, carbs_g: 0, fat_g: 0 }
+                                  const caloriesDiff = Math.round(swapMacros.calories ?? 0)
+                                  const proteinDiff = Math.round(((swapMacros.protein_g ?? 0)) * 10) / 10
+                                  const isHealthier = (swapMacros.calories ?? 0) < 100
+                                  const isHighProtein = (swapMacros.protein_g ?? 0) >= 15
+                                  
+                                  return (
+                                    <motion.button
+                                      key={s.id}
+                                      initial={{ opacity: 0, y: -5 }}
+                                      animate={{ opacity: 1, y: 0 }}
+                                      transition={{ delay: idx * 0.05 }}
+                                      className={cn(
+                                        "w-full flex items-start gap-3 p-3 rounded-lg transition-all active:scale-95",
+                                        "bg-background/60 hover:bg-background border border-border/50",
+                                        isHealthier && "border-green-400/40 hover:bg-green-500/5",
+                                        isHighProtein && !isHealthier && "border-blue-400/40 hover:bg-blue-500/5",
+                                      )}
+                                      onClick={() => handleSelectSwap(ingredient.id, s)}
+                                    >
+                                      <div className="flex-1 min-w-0">
+                                        <div className="flex items-center gap-2 mb-1">
+                                          <span className="font-arabic text-sm font-medium truncate">
+                                            {s.name_ar || s.name}
+                                          </span>
+                                          {isHealthier && (
+                                            <span className="text-[10px] font-semibold text-green-600 bg-green-100 px-1.5 py-0.5 rounded whitespace-nowrap">
+                                              💚 Low Cal
+                                            </span>
+                                          )}
+                                          {isHighProtein && !isHealthier && (
+                                            <span className="text-[10px] font-semibold text-blue-600 bg-blue-100 px-1.5 py-0.5 rounded whitespace-nowrap">
+                                              💪 High Protein
+                                            </span>
+                                          )}
+                                        </div>
+                                        <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                                          <span className="font-mono">{s.suggested_amount}{s.serving_unit}</span>
+                                          <span>•</span>
+                                          <span className={cn(
+                                            'font-medium',
+                                            isHealthier ? 'text-green-600' : isHighProtein ? 'text-blue-600' : 'text-foreground'
+                                          )}>
+                                            {caloriesDiff} kcal
+                                          </span>
+                                          {proteinDiff > 0 && (
+                                            <>
+                                              <span>•</span>
+                                              <span className="text-muted-foreground">
+                                                {proteinDiff}g protein
+                                              </span>
+                                            </>
+                                          )}
+                                        </div>
+                                      </div>
+                                      <div className="flex-shrink-0 text-muted-foreground/40">
+                                        <ChevronRight className="w-4 h-4" />
+                                      </div>
+                                    </motion.button>
+                                  )
+                                })}
                               </div>
                             ) : (
                               <p className="text-sm text-muted-foreground text-center py-4">

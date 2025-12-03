@@ -485,9 +485,15 @@ export function MealCard({ meal, isToday = true, onLogMeal, onUnlogMeal, onSwapM
                     {displayCalories} cal
                   </p>
                   {meal.planSlot?.swapped && meal.planSlot?.swapped_ingredients && Object.keys(meal.planSlot.swapped_ingredients).length > 0 && (
-                    <span className="text-[10px] px-1.5 py-0.5 bg-primary/10 text-primary rounded-full font-medium">
-                      {Object.keys(meal.planSlot.swapped_ingredients).length} swap{Object.keys(meal.planSlot.swapped_ingredients).length > 1 ? 's' : ''}
-                    </span>
+                    <motion.span 
+                      initial={{ scale: 0.8, opacity: 0 }}
+                      animate={{ scale: 1, opacity: 1 }}
+                      transition={{ type: 'spring', stiffness: 200 }}
+                      className="text-[10px] px-2 py-1 bg-gradient-to-r from-primary/20 to-primary/10 text-primary rounded-full font-semibold border border-primary/30 cursor-help"
+                      title="This meal has ingredient swaps"
+                    >
+                      🔄 {Object.keys(meal.planSlot.swapped_ingredients).length} swap{Object.keys(meal.planSlot.swapped_ingredients).length > 1 ? 's' : ''}
+                    </motion.span>
                   )}
                 </div>
               </div>
@@ -561,6 +567,23 @@ export function MealCard({ meal, isToday = true, onLogMeal, onUnlogMeal, onSwapM
                     <ArrowLeftRight className="h-3 w-3 mr-1" />
                     Swap
                   </Button>
+                )}
+
+                {/* Edit Swaps button - shows when ingredient swaps exist */}
+                {meal.planSlot?.swapped && meal.planSlot?.swapped_ingredients && Object.keys(meal.planSlot.swapped_ingredients).length > 0 && (
+                  <Link 
+                    href={`/meal-builder?meal=${meal.name}`}
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="h-7 text-xs px-2 border-primary/50 hover:bg-primary/5"
+                    >
+                      <Flame className="h-3 w-3 mr-1 text-primary" />
+                      Edit Swaps
+                    </Button>
+                  </Link>
                 )}
               </div>
             </div>
