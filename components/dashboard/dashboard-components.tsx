@@ -358,6 +358,8 @@ interface MealCardProps {
 export function MealCard({ meal, isToday = true, onLogMeal, onUnlogMeal, onSwapMeal, onAddFood, isLoading = false }: MealCardProps) {
   const [swipeX, setSwipeX] = useState(0)
   const [isDragging, setIsDragging] = useState(false)
+  const [justSwapped, setJustSwapped] = useState(false)
+  const [showHint, setShowHint] = useState(typeof window !== 'undefined' ? !sessionStorage.getItem(`swap-hint-${meal.name}`) : true)
   
   const progress = meal.isLogged ? 100 : 0
   const hasRecipe = !!meal.recipe
@@ -379,14 +381,22 @@ export function MealCard({ meal, isToday = true, onLogMeal, onUnlogMeal, onSwapM
   // Swipe gesture handlers
   const handleDragEnd = (_: unknown, info: { offset: { x: number }; velocity: { x: number } }) => {
     setIsDragging(false)
+    if (showHint) {
+      sessionStorage.setItem(`swap-hint-${meal.name}`, 'true')
+      setShowHint(false)
+    }
     if (!canSwipe) return
     
     const threshold = 100
     const velocity = 500
     
     if (info.offset.x > threshold || info.velocity.x > velocity) {
+      setJustSwapped(true)
+      setTimeout(() => setJustSwapped(false), 1500)
       onSwapMeal?.(meal.name, 'right')
     } else if (info.offset.x < -threshold || info.velocity.x < -velocity) {
+      setJustSwapped(true)
+      setTimeout(() => setJustSwapped(false), 1500)
       onSwapMeal?.(meal.name, 'left')
     }
     
@@ -400,25 +410,74 @@ export function MealCard({ meal, isToday = true, onLogMeal, onUnlogMeal, onSwapM
         "relative overflow-hidden rounded-xl",
         !isToday && "opacity-75"
       )}>
-        {/* Swipe indicator background - only show if can swap */}
-        {canSwipe && (
-          <div className="absolute inset-0 flex items-center justify-between px-4 pointer-events-none">
+        {/* Swipe hint - shows users how to swap recipes - TODO: enhance for better discoverability */}
+        {/* {canSwipe && swipeX === 0 && !isDragging && showHint && (
+          <motion.div
+            initial={{ opacity: 0, y: -10 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.3 }}
+            className="absolute top-1.5 left-0 right-0 flex justify-center pointer-events-none z-10"
+          >
+            <div className="inline-flex items-center gap-2">
+              <motion.span 
+                animate={{ x: [-2, 2, -2] }}
+                transition={{ duration: 1, repeat: Infinity }}
+                className="text-lg"
+              >
+                👆
+              </motion.span>
+              <motion.span 
+                animate={{ x: [2, -2, 2] }}
+                transition={{ duration: 1, repeat: Infinity, delay: 0.2 }}
+                className="text-lg"
+              >
+                👆
+              </motion.span>
+            </div>
+          </motion.div>
+        )} */}
+        
+        {/* Swipe indicator background - shows direction feedback */}
+        {canSwipe && (swipeX !== 0 || isDragging) && (
+          <div className="absolute inset-0 flex items-center justify-between px-4 pointer-events-none z-5">
             <div className={cn(
-              'flex items-center gap-1 text-sm font-medium transition-opacity',
-              swipeX > 30 ? 'opacity-100 text-primary' : 'opacity-30'
+              'flex flex-col items-center gap-1 text-sm font-semibold transition-all',
+              swipeX > 30 ? 'opacity-100 text-primary scale-110' : 'opacity-20'
             )}>
-              <ChevronLeft className="h-4 w-4" />
-              <span>Previous</span>
+              <ChevronLeft className="h-5 w-5" />
+              <span className="text-xs">Previous</span>
             </div>
             <div className={cn(
-              'flex items-center gap-1 text-sm font-medium transition-opacity',
-              swipeX < -30 ? 'opacity-100 text-primary' : 'opacity-30'
+              'flex flex-col items-center gap-1 text-sm font-semibold transition-all',
+              swipeX < -30 ? 'opacity-100 text-primary scale-110' : 'opacity-20'
             )}>
-              <span>Next</span>
-              <ChevronRight className="h-4 w-4" />
+              <ChevronRight className="h-5 w-5" />
+              <span className="text-xs">Next</span>
             </div>
           </div>
         )}
+
+        {/* Recipe Changed Notification */}
+        <AnimatePresence>
+          {justSwapped && (
+            <motion.div
+              initial={{ opacity: 0, y: -20, scale: 0.8 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: -20, scale: 0.8 }}
+              className="absolute inset-x-0 top-0 flex justify-center pt-2 pointer-events-none z-20"
+            >
+              <div className="inline-flex items-center gap-2 px-3 py-2 bg-gradient-to-r from-green-500 to-green-600 text-white rounded-lg shadow-lg font-semibold text-sm">
+                <motion.span
+                  animate={{ rotate: [0, 360] }}
+                  transition={{ duration: 1, repeat: 1 }}
+                >
+                  ✓
+                </motion.span>
+                Recipe Changed!
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
         
         <motion.div
           className={cn(
@@ -460,7 +519,7 @@ export function MealCard({ meal, isToday = true, onLogMeal, onUnlogMeal, onSwapM
             {/* Recipe info */}
             <div className="flex-1 p-3 flex flex-col justify-between">
               <div>
-                <div className="flex items-center justify-between">
+                <div className="flex items-center justify-between gap-2 mb-1">
                   {meal.recipe?.id ? (
                     <Link 
                       href={`/meal-builder?meal=${meal.name}`}
@@ -475,15 +534,48 @@ export function MealCard({ meal, isToday = true, onLogMeal, onUnlogMeal, onSwapM
                     </h3>
                   )}
                   {canSwipe && (
-                    <span className="text-[10px] text-muted-foreground ml-2 whitespace-nowrap">
+                    <motion.span 
+                      key={`count-${meal.currentIndex}`}
+                      initial={{ y: -10, opacity: 0 }}
+                      animate={{ y: 0, opacity: 1 }}
+                      className="text-[10px] text-primary font-semibold bg-primary/10 px-2 py-1 rounded-full whitespace-nowrap"
+                    >
                       {meal.currentIndex + 1}/{meal.recipeCount}
-                    </span>
+                    </motion.span>
                   )}
                 </div>
-                <div className="flex items-center gap-2 mt-0.5">
-                  <p className="text-xs text-muted-foreground">
+                
+                {/* Nutrition info with comparison */}
+                <div className="flex items-center gap-2 mt-0.5 flex-wrap">
+                  <motion.p 
+                    key={`cal-${meal.currentIndex}`}
+                    initial={{ scale: 1.1, color: 'rgb(34, 197, 94)' }}
+                    animate={{ scale: 1, color: 'currentColor' }}
+                    transition={{ duration: 0.4 }}
+                    className="text-xs text-muted-foreground font-mono"
+                  >
                     {displayCalories} cal
-                  </p>
+                  </motion.p>
+                  {meal.recipe?.nutrition_per_serving && (
+                    <motion.div
+                      key={`macros-${meal.currentIndex}`}
+                      initial={{ opacity: 0 }}
+                      animate={{ opacity: 1 }}
+                      transition={{ delay: 0.1 }}
+                      className="flex items-center gap-1 text-xs text-muted-foreground"
+                    >
+                      <span>•</span>
+                      <span className="font-medium text-orange-600">
+                        {Math.round((meal.recipe.nutrition_per_serving.protein_g || 0) * (meal.recipe.scale_factor || 1))}p
+                      </span>
+                      <span className="font-medium text-blue-600">
+                        {Math.round((meal.recipe.nutrition_per_serving.carbs_g || 0) * (meal.recipe.scale_factor || 1))}c
+                      </span>
+                      <span className="font-medium text-amber-600">
+                        {Math.round((meal.recipe.nutrition_per_serving.fat_g || 0) * (meal.recipe.scale_factor || 1))}f
+                      </span>
+                    </motion.div>
+                  )}
                   {meal.planSlot?.swapped && meal.planSlot?.swapped_ingredients && Object.keys(meal.planSlot.swapped_ingredients).length > 0 && (
                     <motion.span 
                       initial={{ scale: 0.8, opacity: 0 }}

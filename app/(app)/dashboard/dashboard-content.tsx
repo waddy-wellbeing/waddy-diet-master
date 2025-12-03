@@ -453,8 +453,8 @@ export function DashboardContent({
     }
   }
   
-  // Handler for swapping a meal - navigates to next/previous recipe
-  const handleSwapMeal = (mealName: string, direction: 'left' | 'right') => {
+  // Handler for swapping a meal - navigates to next/previous recipe and saves to plan
+  const handleSwapMeal = async (mealName: string, direction: 'left' | 'right') => {
     const mealType = mealName as MealName
     const recipes = recipesByMealType[mealType] || []
     if (recipes.length <= 1) return // Nothing to swap to
@@ -470,10 +470,44 @@ export function DashboardContent({
       newIdx = currentIdx === 0 ? recipes.length - 1 : currentIdx - 1
     }
     
+    // Update local UI
     setSelectedIndices(prev => ({
       ...prev,
       [mealType]: newIdx,
     }))
+    
+    // Save to daily plan if meal not logged yet and it's today
+    const todayDateStr = format(new Date(), 'yyyy-MM-dd')
+    const selectedDateStr = format(selectedDate, 'yyyy-MM-dd')
+    
+    if (todayDateStr === selectedDateStr) {
+      // Get the current meal from meals array
+      const mealData = meals.find(m => m.name === mealType)
+      const isMealLogged = mealData?.isLogged ?? false
+      
+      if (!isMealLogged) {
+        // Get the new recipe and save it
+        const newRecipe = recipes[newIdx]
+        if (newRecipe) {
+          setLoadingMeal(mealType)
+          try {
+            const { saveMealToPlan } = await import('@/lib/actions/daily-plans')
+            await saveMealToPlan({
+              date: todayDateStr,
+              mealType,
+              recipeId: newRecipe.id,
+              servings: newRecipe.scale_factor || 1,
+            })
+            // Refresh data to show the updated plan
+            await fetchWeekData(selectedDate)
+          } catch (error) {
+            console.error('Failed to save swapped meal:', error)
+          } finally {
+            setLoadingMeal(null)
+          }
+        }
+      }
+    }
   }
 
   // Calculate weekly average from weekData
@@ -492,10 +526,11 @@ export function DashboardContent({
             <p className="text-sm text-muted-foreground">{format(new Date(), 'EEEE, MMMM d')}</p>
           </div>
           <div className="flex items-center gap-2">
-            <Button variant="ghost" size="icon" className="relative">
+            {/* TODO: Implement notifications later */}
+            {/* <Button variant="ghost" size="icon" className="relative">
               <Bell className="h-5 w-5" />
               <span className="absolute top-1 right-1 w-2 h-2 bg-primary rounded-full" />
-            </Button>
+            </Button> */}
             
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
