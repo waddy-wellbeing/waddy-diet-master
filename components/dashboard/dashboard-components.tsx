@@ -338,6 +338,13 @@ interface MealCardProps {
     planSlot?: {
       recipe_id: string
       servings: number
+      swapped?: boolean
+      swapped_ingredients?: Record<string, {
+        ingredient_id: string
+        name: string
+        quantity: number
+        unit: string
+      }>
     } | null
   }
   isToday?: boolean
@@ -473,9 +480,16 @@ export function MealCard({ meal, isToday = true, onLogMeal, onUnlogMeal, onSwapM
                     </span>
                   )}
                 </div>
-                <p className="text-xs text-muted-foreground mt-0.5">
-                  {displayCalories} cal
-                </p>
+                <div className="flex items-center gap-2 mt-0.5">
+                  <p className="text-xs text-muted-foreground">
+                    {displayCalories} cal
+                  </p>
+                  {meal.planSlot?.swapped && meal.planSlot?.swapped_ingredients && Object.keys(meal.planSlot.swapped_ingredients).length > 0 && (
+                    <span className="text-[10px] px-1.5 py-0.5 bg-primary/10 text-primary rounded-full font-medium">
+                      {Object.keys(meal.planSlot.swapped_ingredients).length} swap{Object.keys(meal.planSlot.swapped_ingredients).length > 1 ? 's' : ''}
+                    </span>
+                  )}
+                </div>
               </div>
               
               {/* Action buttons - only for today */}

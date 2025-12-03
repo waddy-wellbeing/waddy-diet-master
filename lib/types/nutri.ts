@@ -197,6 +197,12 @@ export interface PlanMealSlot {
   servings: number
   swapped?: boolean
   original_recipe_id?: string
+  swapped_ingredients?: Record<string, {
+    ingredient_id: string
+    name: string
+    quantity: number
+    unit: string
+  }>
 }
 
 /** A snack item (can be recipe or ingredient) */

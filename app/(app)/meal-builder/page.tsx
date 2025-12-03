@@ -51,8 +51,9 @@ export default async function MealBuilderPage({ searchParams }: PageProps) {
     redirect('/login')
   }
 
-  // Fetch profile and recipes in parallel
-  const [{ data: profile }, { data: allRecipes }] = await Promise.all([
+  // Fetch profile, recipes, and today's plan in parallel
+  const todayStr = new Date().toISOString().split('T')[0]
+  const [{ data: profile }, { data: allRecipes }, { data: todaysPlan }] = await Promise.all([
     supabase
       .from('profiles')
       .select('*')
@@ -72,6 +73,12 @@ export default async function MealBuilderPage({ searchParams }: PageProps) {
       .eq('is_public', true)
       .not('nutrition_per_serving', 'is', null)
       .order('name'),
+    supabase
+      .from('daily_plans')
+      .select('plan')
+      .eq('user_id', user.id)
+      .eq('plan_date', todayStr)
+      .maybeSingle(),
   ])
 
   if (!profile?.onboarding_completed) {
@@ -209,6 +216,7 @@ export default async function MealBuilderPage({ searchParams }: PageProps) {
       recipesByMealType={recipesByMealType}
       userId={user.id}
       initialMeal={selectedMeal as 'breakfast' | 'lunch' | 'dinner' | 'snacks' | null}
+      todaysPlan={todaysPlan?.plan}
     />
   )
 }

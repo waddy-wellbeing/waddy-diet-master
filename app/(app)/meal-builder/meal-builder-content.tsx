@@ -1,7 +1,9 @@
 'use client'
 
 import { useState } from 'react'
+import { useRouter } from 'next/navigation'
 import Image from 'next/image'
+import { format } from 'date-fns'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   ChevronLeft,
@@ -17,11 +19,13 @@ import {
   Loader2,
   List,
   ShoppingBasket,
+  Check,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { cn } from '@/lib/utils'
 import { getUserIngredientSwaps, type IngredientSwapOption } from '@/lib/actions/recipes'
+import { saveMealToPlan } from '@/lib/actions/daily-plans'
 import type { ScaledRecipeWithIngredients } from './page'
 
 type MealType = 'breakfast' | 'lunch' | 'dinner' | 'snacks'
@@ -31,6 +35,7 @@ interface MealBuilderContentProps {
   recipesByMealType: Record<MealType, ScaledRecipeWithIngredients[]>
   userId: string
   initialMeal?: MealType | null
+  todaysPlan?: any
 }
 
 const mealLabels: Record<MealType, string> = {
@@ -44,7 +49,43 @@ export function MealBuilderContent({
   mealTargets,
   recipesByMealType,
   initialMeal = null,
+  todaysPlan,
 }: MealBuilderContentProps) {
+  const router = useRouter()
+  
+  // Initialize selectedSwaps from saved plan if available
+  const initializeSwapsFromPlan = () => {
+    const swapsMap: Record<string, IngredientSwapOption> = {}
+    
+    if (todaysPlan && initialMeal) {
+      const mealPlan = todaysPlan[initialMeal]
+      if (mealPlan?.swapped_ingredients) {
+        // Convert saved swaps to IngredientSwapOption format
+        Object.entries(mealPlan.swapped_ingredients).forEach(([originalId, swapData]: [string, any]) => {
+          swapsMap[originalId] = {
+            id: swapData.ingredient_id,
+            name: swapData.name,
+            name_ar: swapData.name, // We don't have name_ar in saved data, use name
+            food_group: null,
+            subgroup: null,
+            serving_size: swapData.quantity,
+            serving_unit: swapData.unit,
+            macros: {
+              calories: 0,
+              protein_g: 0,
+              carbs_g: 0,
+              fat_g: 0,
+            },
+            suggested_amount: swapData.quantity,
+            calorie_diff_percent: 0,
+          }
+        })
+      }
+    }
+    
+    return swapsMap
+  }
+  
   // State - initialize with initialMeal if provided
   const [selectedMeal, setSelectedMeal] = useState<MealType | null>(initialMeal)
   const [recipeIndices, setRecipeIndices] = useState<Record<MealType, number>>({
@@ -57,9 +98,10 @@ export function MealBuilderContent({
   const [expandedIngredient, setExpandedIngredient] = useState<string | null>(null)
   const [swaps, setSwaps] = useState<IngredientSwapOption[] | null>(null)
   const [loadingSwaps, setLoadingSwaps] = useState(false)
-  const [selectedSwaps, setSelectedSwaps] = useState<Record<string, IngredientSwapOption>>({})
+  const [selectedSwaps, setSelectedSwaps] = useState<Record<string, IngredientSwapOption>>(initializeSwapsFromPlan())
   const [swipeX, setSwipeX] = useState(0)
   const [showMacroLabels, setShowMacroLabels] = useState(false)
+  const [saving, setSaving] = useState(false)
   
   // Get current recipe for selected meal
   const currentRecipe = selectedMeal 
@@ -133,6 +175,50 @@ export function MealBuilderContent({
       delete updated[ingredientId]
       return updated
     })
+  }
+
+  const handleSaveMeal = async () => {
+    if (!selectedMeal || !currentRecipe) {
+      console.error('Missing meal or recipe:', { selectedMeal, hasRecipe: !!currentRecipe })
+      return
+    }
+    
+    console.log('Saving meal:', {
+      meal: selectedMeal,
+      recipeId: currentRecipe.id,
+      recipeName: currentRecipe.name,
+      servings: currentRecipe.scale_factor,
+    })
+    
+    setSaving(true)
+    
+    // Prepare swapped ingredients data
+    const swappedIngredients: Record<string, { ingredient_id: string; name: string; quantity: number; unit: string }> = {}
+    Object.entries(selectedSwaps).forEach(([ingredientId, swap]) => {
+      swappedIngredients[ingredientId] = {
+        ingredient_id: swap.id,
+        name: swap.name,
+        quantity: swap.suggested_amount,
+        unit: swap.serving_unit,
+      }
+    })
+    
+    const result = await saveMealToPlan({
+      date: format(new Date(), 'yyyy-MM-dd'),
+      mealType: selectedMeal,
+      recipeId: currentRecipe.id,
+      servings: currentRecipe.scale_factor,
+      swappedIngredients: Object.keys(swappedIngredients).length > 0 ? swappedIngredients : undefined,
+    })
+    
+    setSaving(false)
+    
+    if (result.success) {
+      // Redirect to dashboard to show the saved meal
+      router.push('/dashboard')
+    } else {
+      alert(result.error || "Failed to save meal. Please try again.")
+    }
   }
 
   // Meal Selection View
@@ -553,6 +639,28 @@ export function MealBuilderContent({
             Instructions
           </button>
         </div>
+      </div>
+
+      {/* Save to Plan Button */}
+      <div className="px-4 pt-4 pb-2">
+        <Button 
+          onClick={handleSaveMeal} 
+          disabled={saving}
+          className="w-full h-12 text-base font-semibold"
+          size="lg"
+        >
+          {saving ? (
+            <>
+              <Loader2 className="w-5 h-5 mr-2 animate-spin" />
+              Saving...
+            </>
+          ) : (
+            <>
+              <Check className="w-5 h-5 mr-2" />
+              Save to Today's Plan
+            </>
+          )}
+        </Button>
       </div>
 
       {/* Tab Content */}

@@ -19,6 +19,7 @@ import {
   QuickStats,
 } from '@/components/dashboard/dashboard-components'
 import { createClient } from '@/lib/supabase/client'
+import { saveFullDayPlan } from '@/lib/actions/daily-plans'
 import type { Profile, DailyLog, DailyPlan, DailyTotals, RecipeRecord } from '@/lib/types/nutri'
 
 type MealName = 'breakfast' | 'lunch' | 'dinner' | 'snacks'
@@ -150,6 +151,40 @@ export function DashboardContent({
       fetchWeekData(selectedDate)
     }
   }, [selectedDate, fetchDayData, fetchWeekData])
+
+  // Auto-save today's plan on mount if it doesn't exist
+  useEffect(() => {
+    const saveTodaysPlan = async () => {
+      // Only save if viewing today and no plan exists yet
+      if (!isDateToday(selectedDate) || initialDailyPlan) {
+        return
+      }
+
+      // Get the first recipe for each meal type
+      const breakfast = recipesByMealType.breakfast[0]
+      const lunch = recipesByMealType.lunch[0]
+      const dinner = recipesByMealType.dinner[0]
+      const snacks = recipesByMealType.snacks[0]
+
+      // Only save if we have recipes available
+      if (!breakfast && !lunch && !dinner && !snacks) {
+        return
+      }
+
+      console.log('Auto-saving today\'s plan...')
+      await saveFullDayPlan({
+        date: format(new Date(), 'yyyy-MM-dd'),
+        meals: {
+          breakfast: breakfast ? { recipeId: breakfast.id, servings: breakfast.scale_factor } : undefined,
+          lunch: lunch ? { recipeId: lunch.id, servings: lunch.scale_factor } : undefined,
+          dinner: dinner ? { recipeId: dinner.id, servings: dinner.scale_factor } : undefined,
+          snacks: snacks ? { recipeId: snacks.id, servings: snacks.scale_factor } : undefined,
+        },
+      })
+    }
+
+    saveTodaysPlan()
+  }, []) // Run only once on mount
 
   // Get current recipe for each meal type based on selected index
   const getCurrentRecipe = (mealType: MealName): ScaledRecipe | null => {
