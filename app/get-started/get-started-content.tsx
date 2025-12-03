@@ -130,7 +130,7 @@ export function GetStartedContent() {
             variants={itemVariants}
             className="text-sm text-muted-foreground mt-6"
           >
-            ⏱️ Takes about 3-5 minutes to set up
+            ⏱️ Takes about 30-60 seconds to set up
           </motion.p>
         </motion.div>
       </main>

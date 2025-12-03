@@ -97,7 +97,7 @@ export function WelcomeStep({ onContinue }: WelcomeStepProps) {
             variants={itemVariants}
             className="text-sm text-muted-foreground mb-6"
           >
-            ⏱️ Takes about 3-5 minutes to set up
+            ⏱️ Takes about 30-60 seconds to set up
           </motion.p>
 
           {/* CTA Button */}
