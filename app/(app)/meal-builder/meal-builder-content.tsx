@@ -102,6 +102,9 @@ export function MealBuilderContent({
   const [swipeX, setSwipeX] = useState(0)
   const [showMacroLabels, setShowMacroLabels] = useState(false)
   const [saving, setSaving] = useState(false)
+  const [swapPaginationPage, setSwapPaginationPage] = useState<Record<string, number>>({})
+  
+  const SWAPS_PER_PAGE = 5
   
   // Get current recipe for selected meal
   const currentRecipe = selectedMeal 
@@ -812,71 +815,143 @@ export function MealBuilderContent({
                               </div>
                             ) : swaps && swaps.length > 0 ? (
                               <div className="space-y-2">
-                                <p className="text-xs text-muted-foreground mb-3 px-1 font-medium">
-                                  Available alternatives:
-                                </p>
-                                {swaps.slice(0, 6).map((s, idx) => {
-                                  const swapMacros = s.macros || { calories: 0, protein_g: 0, carbs_g: 0, fat_g: 0 }
-                                  const caloriesDiff = Math.round(swapMacros.calories ?? 0)
-                                  const proteinDiff = Math.round(((swapMacros.protein_g ?? 0)) * 10) / 10
-                                  const isHealthier = (swapMacros.calories ?? 0) < 100
-                                  const isHighProtein = (swapMacros.protein_g ?? 0) >= 15
-                                  
+                                <div className="flex items-center justify-between mb-3 px-1">
+                                  <p className="text-xs text-muted-foreground font-medium">
+                                    Available alternatives: {swaps.length}
+                                  </p>
+                                  {swaps.length > SWAPS_PER_PAGE && (
+                                    <span className="text-xs text-muted-foreground">
+                                      {(swapPaginationPage[ingredient.id] || 0) * SWAPS_PER_PAGE + 1}–{Math.min((swapPaginationPage[ingredient.id] || 0) * SWAPS_PER_PAGE + SWAPS_PER_PAGE, swaps.length)} of {swaps.length}
+                                    </span>
+                                  )}
+                                </div>
+                                {(() => {
+                                  const page = swapPaginationPage[ingredient.id] || 0
+                                  const startIdx = page * SWAPS_PER_PAGE
+                                  const endIdx = startIdx + SWAPS_PER_PAGE
+                                  const paginatedSwaps = swaps.slice(startIdx, endIdx)
+                                  const totalPages = Math.ceil(swaps.length / SWAPS_PER_PAGE)
+
                                   return (
-                                    <motion.button
-                                      key={s.id}
-                                      initial={{ opacity: 0, y: -5 }}
-                                      animate={{ opacity: 1, y: 0 }}
-                                      transition={{ delay: idx * 0.05 }}
-                                      className={cn(
-                                        "w-full flex items-start gap-3 p-3 rounded-lg transition-all active:scale-95",
-                                        "bg-background/60 hover:bg-background border border-border/50",
-                                        isHealthier && "border-green-400/40 hover:bg-green-500/5",
-                                        isHighProtein && !isHealthier && "border-blue-400/40 hover:bg-blue-500/5",
+                                    <div className="space-y-2">
+                                      {paginatedSwaps.map((s, idx) => {
+                                        const swapMacros = s.macros || { calories: 0, protein_g: 0, carbs_g: 0, fat_g: 0 }
+                                        const caloriesDiff = Math.round(swapMacros.calories ?? 0)
+                                        const proteinDiff = Math.round(((swapMacros.protein_g ?? 0)) * 10) / 10
+                                        const isHealthier = (swapMacros.calories ?? 0) < 100
+                                        const isHighProtein = (swapMacros.protein_g ?? 0) >= 15
+                                        
+                                        return (
+                                          <motion.button
+                                            key={s.id}
+                                            initial={{ opacity: 0, y: -5 }}
+                                            animate={{ opacity: 1, y: 0 }}
+                                            transition={{ delay: idx * 0.05 }}
+                                            className={cn(
+                                              "w-full flex items-start gap-3 p-3 rounded-lg transition-all active:scale-95",
+                                              "bg-background/60 hover:bg-background border border-border/50",
+                                              isHealthier && "border-green-400/40 hover:bg-green-500/5",
+                                              isHighProtein && !isHealthier && "border-blue-400/40 hover:bg-blue-500/5",
+                                            )}
+                                            onClick={() => handleSelectSwap(ingredient.id, s)}
+                                          >
+                                            <div className="flex-1 min-w-0">
+                                              <div className="flex items-center gap-2 mb-1">
+                                                <span className="font-arabic text-sm font-medium truncate">
+                                                  {s.name_ar || s.name}
+                                                </span>
+                                                {isHealthier && (
+                                                  <span className="text-[10px] font-semibold text-green-600 bg-green-100 px-1.5 py-0.5 rounded whitespace-nowrap">
+                                                    💚 Low Cal
+                                                  </span>
+                                                )}
+                                                {isHighProtein && !isHealthier && (
+                                                  <span className="text-[10px] font-semibold text-blue-600 bg-blue-100 px-1.5 py-0.5 rounded whitespace-nowrap">
+                                                    💪 High Protein
+                                                  </span>
+                                                )}
+                                              </div>
+                                              <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                                                <span className="font-mono">{s.suggested_amount}{s.serving_unit}</span>
+                                                <span>•</span>
+                                                <span className={cn(
+                                                  'font-medium',
+                                                  isHealthier ? 'text-green-600' : isHighProtein ? 'text-blue-600' : 'text-foreground'
+                                                )}>
+                                                  {caloriesDiff} kcal
+                                                </span>
+                                                {proteinDiff > 0 && (
+                                                  <>
+                                                    <span>•</span>
+                                                    <span className="text-muted-foreground">
+                                                      {proteinDiff}g protein
+                                                    </span>
+                                                  </>
+                                                )}
+                                              </div>
+                                            </div>
+                                            <div className="flex-shrink-0 text-muted-foreground/40">
+                                              <ChevronRight className="w-4 h-4" />
+                                            </div>
+                                          </motion.button>
+                                        )
+                                      })}
+                                      
+                                      {/* Pagination Controls */}
+                                      {totalPages > 1 && (
+                                        <div className="flex items-center justify-between gap-2 mt-3 pt-2 border-t border-border/30">
+                                          <Button
+                                            size="sm"
+                                            variant="ghost"
+                                            className="h-7 px-2 text-xs"
+                                            disabled={page === 0}
+                                            onClick={() => setSwapPaginationPage(prev => ({
+                                              ...prev,
+                                              [ingredient.id]: Math.max(0, (prev[ingredient.id] || 0) - 1)
+                                            }))}
+                                          >
+                                            <ChevronLeft className="w-3 h-3 mr-1" />
+                                            Prev
+                                          </Button>
+                                          
+                                          <div className="flex items-center gap-1">
+                                            {Array.from({ length: totalPages }, (_, i) => (
+                                              <button
+                                                key={i}
+                                                onClick={() => setSwapPaginationPage(prev => ({
+                                                  ...prev,
+                                                  [ingredient.id]: i
+                                                }))}
+                                                className={cn(
+                                                  "w-6 h-6 rounded text-[10px] font-medium transition-colors",
+                                                  page === i
+                                                    ? "bg-primary text-primary-foreground"
+                                                    : "bg-muted hover:bg-muted/80 text-muted-foreground"
+                                                )}
+                                              >
+                                                {i + 1}
+                                              </button>
+                                            ))}
+                                          </div>
+                                          
+                                          <Button
+                                            size="sm"
+                                            variant="ghost"
+                                            className="h-7 px-2 text-xs"
+                                            disabled={page === totalPages - 1}
+                                            onClick={() => setSwapPaginationPage(prev => ({
+                                              ...prev,
+                                              [ingredient.id]: Math.min(totalPages - 1, (prev[ingredient.id] || 0) + 1)
+                                            }))}
+                                          >
+                                            Next
+                                            <ChevronRight className="w-3 h-3 ml-1" />
+                                          </Button>
+                                        </div>
                                       )}
-                                      onClick={() => handleSelectSwap(ingredient.id, s)}
-                                    >
-                                      <div className="flex-1 min-w-0">
-                                        <div className="flex items-center gap-2 mb-1">
-                                          <span className="font-arabic text-sm font-medium truncate">
-                                            {s.name_ar || s.name}
-                                          </span>
-                                          {isHealthier && (
-                                            <span className="text-[10px] font-semibold text-green-600 bg-green-100 px-1.5 py-0.5 rounded whitespace-nowrap">
-                                              💚 Low Cal
-                                            </span>
-                                          )}
-                                          {isHighProtein && !isHealthier && (
-                                            <span className="text-[10px] font-semibold text-blue-600 bg-blue-100 px-1.5 py-0.5 rounded whitespace-nowrap">
-                                              💪 High Protein
-                                            </span>
-                                          )}
-                                        </div>
-                                        <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                                          <span className="font-mono">{s.suggested_amount}{s.serving_unit}</span>
-                                          <span>•</span>
-                                          <span className={cn(
-                                            'font-medium',
-                                            isHealthier ? 'text-green-600' : isHighProtein ? 'text-blue-600' : 'text-foreground'
-                                          )}>
-                                            {caloriesDiff} kcal
-                                          </span>
-                                          {proteinDiff > 0 && (
-                                            <>
-                                              <span>•</span>
-                                              <span className="text-muted-foreground">
-                                                {proteinDiff}g protein
-                                              </span>
-                                            </>
-                                          )}
-                                        </div>
-                                      </div>
-                                      <div className="flex-shrink-0 text-muted-foreground/40">
-                                        <ChevronRight className="w-4 h-4" />
-                                      </div>
-                                    </motion.button>
+                                    </div>
                                   )
-                                })}
+                                })()}
                               </div>
                             ) : (
                               <p className="text-sm text-muted-foreground text-center py-4">
