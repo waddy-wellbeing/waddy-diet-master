@@ -721,26 +721,6 @@ export function MealBuilderContent({
           </motion.div>
         )}
       </AnimatePresence>
-
-      {/* Dietary Badges - Fixed at bottom */}
-      {(currentRecipe.is_vegetarian || currentRecipe.is_vegan || currentRecipe.is_gluten_free || currentRecipe.is_dairy_free) && (
-        <div className="fixed bottom-20 left-0 right-0 px-4 py-2 bg-background/80 backdrop-blur-sm border-t border-border">
-          <div className="flex justify-center gap-2">
-            {currentRecipe.is_vegetarian && (
-              <Badge variant="outline" className="text-xs">🥬 Vegetarian</Badge>
-            )}
-            {currentRecipe.is_vegan && (
-              <Badge variant="outline" className="text-xs">🌱 Vegan</Badge>
-            )}
-            {currentRecipe.is_gluten_free && (
-              <Badge variant="outline" className="text-xs">🌾 GF</Badge>
-            )}
-            {currentRecipe.is_dairy_free && (
-              <Badge variant="outline" className="text-xs">🥛 DF</Badge>
-            )}
-          </div>
-        </div>
-      )}
     </div>
   )
 }

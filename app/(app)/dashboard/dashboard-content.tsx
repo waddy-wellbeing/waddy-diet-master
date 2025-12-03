@@ -506,7 +506,7 @@ export function DashboardContent({
               {isSelectedToday ? "Today's Meals" : format(selectedDate, 'EEEE\'s Meals')}
             </h2>
             <Button variant="ghost" size="sm" className="text-primary" asChild>
-              <Link href="/plans">View Plan</Link>
+              <Link href="/profile">View Plan</Link>
             </Button>
           </div>
           

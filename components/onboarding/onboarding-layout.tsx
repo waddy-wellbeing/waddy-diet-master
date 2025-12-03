@@ -61,8 +61,8 @@ export function OnboardingLayout({
         </div>
       </header>
 
-      {/* Content */}
-      <main className={cn('flex-1 px-4 py-6 overflow-y-auto', className)}>
+      {/* Content - with padding at bottom for fixed footer */}
+      <main className={cn('flex-1 px-4 py-6 pb-24 overflow-y-auto', className)}>
         <AnimatePresence mode="wait">
           <motion.div
             key={currentStep}
@@ -88,9 +88,9 @@ export function OnboardingLayout({
         </AnimatePresence>
       </main>
 
-      {/* Footer with CTA */}
-      <footer className="sticky bottom-0 bg-background border-t border-border p-4 safe-area-bottom">
-        <div className="max-w-md mx-auto">
+      {/* Footer with CTA - Fixed at bottom for visibility */}
+      <footer className="fixed bottom-0 left-0 right-0 bg-background border-t border-border p-4 z-20">
+        <div className="max-w-md mx-auto safe-area-bottom">
           <Button
             onClick={onNext}
             disabled={isNextDisabled || isLoading}
