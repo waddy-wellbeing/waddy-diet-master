@@ -3,6 +3,7 @@ import { Geist, Geist_Mono, Noto_Sans_Arabic } from "next/font/google";
 import { Toaster } from "sonner";
 import { AnalyticsProvider } from "@/components/analytics/analytics-provider";
 import { AnalyticsErrorBoundary } from "@/components/analytics/error-boundary";
+import { FloatingWidget } from "@/components/floating-widget";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -40,6 +41,7 @@ export default function RootLayout({
           <AnalyticsProvider>
             {children}
             <Toaster richColors position="top-right" />
+            <FloatingWidget />
           </AnalyticsProvider>
         </AnalyticsErrorBoundary>
       </body>
