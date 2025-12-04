@@ -1,6 +1,7 @@
 import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import { BottomNav } from '@/components/app/navigation/bottom-nav'
+import { RouteTrackerComponent } from '@/components/analytics/route-tracker'
 // import { PushNotificationPrompt } from '@/components/push-notification-prompt'
 
 export default async function AppLayout({
@@ -28,6 +29,7 @@ export default async function AppLayout({
 
   return (
     <div className="min-h-screen bg-background flex flex-col">
+      <RouteTrackerComponent />
       <main className="flex-1 pb-20 md:pb-0">
         {children}
       </main>

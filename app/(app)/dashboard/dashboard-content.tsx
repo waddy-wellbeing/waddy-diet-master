@@ -18,6 +18,8 @@ import {
   MealCard,
   QuickStats,
 } from '@/components/dashboard/dashboard-components'
+import { useAnalytics } from '@/components/analytics/analytics-provider'
+import { buildFeatureUseEvent, buildButtonClickEvent, buildMealLogError, getCurrentPagePath } from '@/lib/utils/analytics'
 import { createClient } from '@/lib/supabase/client'
 import { saveFullDayPlan } from '@/lib/actions/daily-plans'
 import type { Profile, DailyLog, DailyPlan, DailyTotals, RecipeRecord } from '@/lib/types/nutri'
@@ -287,6 +289,8 @@ export function DashboardContent({
 
   // Handler for logging a meal
   const handleLogMeal = async (mealName: string) => {
+    const { trackEvent, captureError } = useAnalytics()
+    
     if (loadingMeal) return // Prevent double-click
     setLoadingMeal(mealName)
     
@@ -378,6 +382,20 @@ export function DashboardContent({
       // Refresh the data
       fetchDayData(selectedDate)
       fetchWeekData(selectedDate)
+      
+      // Track meal logging event
+      trackEvent(buildButtonClickEvent('dashboard', 'log_meal', getCurrentPagePath(), {
+        meal_type: mealName,
+        recipe_id: meal.recipe.id,
+        recipe_name: meal.recipe.name,
+        calories: Math.round(updatedTotals.calories),
+        date: dateStr,
+      }))
+    } catch (error) {
+      captureError(buildMealLogError(
+        mealName,
+        error instanceof Error ? error.message : 'Unknown error'
+      ))
     } finally {
       setLoadingMeal(null)
     }
@@ -385,6 +403,8 @@ export function DashboardContent({
   
   // Handler for unlogging a meal
   const handleUnlogMeal = async (mealName: string) => {
+    const { trackEvent, captureError } = useAnalytics()
+    
     if (loadingMeal) return // Prevent double-click
     setLoadingMeal(mealName)
     
@@ -448,6 +468,18 @@ export function DashboardContent({
       // Refresh the data
       fetchDayData(selectedDate)
       fetchWeekData(selectedDate)
+      
+      // Track meal unlogging event
+      trackEvent(buildButtonClickEvent('dashboard', 'unlog_meal', getCurrentPagePath(), {
+        meal_type: mealName,
+        removed_calories: Math.round(updatedTotals.calories),
+        date: dateStr,
+      }))
+    } catch (error) {
+      captureError(buildMealLogError(
+        mealName,
+        error instanceof Error ? error.message : 'Unknown error'
+      ))
     } finally {
       setLoadingMeal(null)
     }
@@ -455,6 +487,8 @@ export function DashboardContent({
   
   // Handler for swapping a meal - navigates to next/previous recipe and saves to plan
   const handleSwapMeal = async (mealName: string, direction: 'left' | 'right') => {
+    const { trackEvent, captureError } = useAnalytics()
+    
     const mealType = mealName as MealName
     const recipes = recipesByMealType[mealType] || []
     if (recipes.length <= 1) return // Nothing to swap to
@@ -500,8 +534,20 @@ export function DashboardContent({
             })
             // Refresh data to show the updated plan
             await fetchWeekData(selectedDate)
+            
+            // Track recipe swap event
+            trackEvent(buildButtonClickEvent('meal_builder', 'swap_recipe', getCurrentPagePath(), {
+              meal_type: mealType,
+              recipe_id: newRecipe.id,
+              recipe_name: newRecipe.name,
+              direction,
+              calories: newRecipe.scaled_calories || newRecipe.original_calories,
+            }))
           } catch (error) {
-            console.error('Failed to save swapped meal:', error)
+            captureError(buildMealLogError(
+              mealType,
+              error instanceof Error ? error.message : 'Unknown error'
+            ))
           } finally {
             setLoadingMeal(null)
           }

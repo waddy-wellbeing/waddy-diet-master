@@ -4,6 +4,8 @@ import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { motion, AnimatePresence } from 'framer-motion'
 import { OnboardingLayout } from '@/components/onboarding/onboarding-layout'
+import { useAnalytics } from '@/components/analytics/analytics-provider'
+import { buildFeatureUseEvent, getCurrentPagePath } from '@/lib/utils/analytics'
 import {
   WelcomeStep,
   BasicInfoStep,
@@ -56,6 +58,7 @@ const slideVariants = {
 
 export function GuestOnboardingFlow() {
   const router = useRouter()
+  const { trackEvent } = useAnalytics()
   const [isLoading, setIsLoading] = useState(false)
   const [currentStep, setCurrentStep] = useState(0)
   const [direction, setDirection] = useState(1)
@@ -128,6 +131,13 @@ export function GuestOnboardingFlow() {
     if (currentStep < TOTAL_STEPS - 1) {
       setDirection(1)
       setCurrentStep((prev) => prev + 1)
+      
+      // Track step progression for guest onboarding
+      trackEvent(buildFeatureUseEvent('onboarding', 'guest_onboarding_step_progress', getCurrentPagePath(), {
+        from_step: stepConfig[currentStep]?.id,
+        to_step: stepConfig[currentStep + 1]?.id,
+        step_index: currentStep,
+      }))
     }
   }
 
@@ -135,6 +145,13 @@ export function GuestOnboardingFlow() {
     if (currentStep > 0) {
       setDirection(-1)
       setCurrentStep((prev) => prev - 1)
+      
+      // Track step regression for guest onboarding
+      trackEvent(buildFeatureUseEvent('onboarding', 'guest_onboarding_step_back', getCurrentPagePath(), {
+        from_step: stepConfig[currentStep]?.id,
+        to_step: stepConfig[currentStep - 1]?.id,
+        step_index: currentStep,
+      }))
     }
   }
 
@@ -180,6 +197,17 @@ export function GuestOnboardingFlow() {
       completedAt: new Date().toISOString(),
     }
     saveGuestOnboardingData(data)
+    
+    // Track guest onboarding completion
+    trackEvent(buildFeatureUseEvent('onboarding', 'guest_onboarding_complete', getCurrentPagePath(), {
+      steps_completed: TOTAL_STEPS,
+      diet_type: dietaryPreferences.dietType,
+      goal_type: goals.goalType,
+      meals_per_day: mealsPerDay,
+      cooking_skill: lifestyle.cookingSkill,
+      activity_level: activityLevel,
+      user_type: 'guest',
+    }))
     
     toast.success('Your plan is ready! ⚡')
     toast.info('Sign in to save your progress and access all features')

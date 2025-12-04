@@ -24,6 +24,7 @@ import {
 /**
  * Initialize a new analytics session
  * Called once per user visit/page load
+ * Uses upsert to handle duplicate session IDs gracefully
  */
 export async function trackSession(input: CreateSessionInput): Promise<AnalyticsSession> {
   const supabase = await createClient()
@@ -48,9 +49,10 @@ export async function trackSession(input: CreateSessionInput): Promise<Analytics
     last_activity_at: new Date().toISOString(),
   }
 
+  // Try to upsert - if session already exists, just update last_activity_at
   const { data, error } = await supabase
     .from('analytics_sessions')
-    .insert(sessionData)
+    .upsert(sessionData, { onConflict: 'session_id' })
     .select()
     .single()
 
@@ -348,49 +350,4 @@ function categorizePagePath(path: string): 'onboarding' | 'dashboard' | 'meal_bu
   if (path.includes('settings')) return 'settings'
   if (path.includes('auth') || path.includes('login') || path.includes('signup')) return 'auth'
   return 'general'
-}
-
-/**
- * Get current device type from user agent
- */
-export function detectDeviceType(userAgent: string): 'mobile' | 'tablet' | 'desktop' {
-  if (/mobile|android|iphone|ipod|blackberry|iemobile|opera mini/i.test(userAgent.toLowerCase())) {
-    return 'mobile'
-  }
-  if (/tablet|ipad|playbook|silk|(android(?!.*mobi))/i.test(userAgent.toLowerCase())) {
-    return 'tablet'
-  }
-  return 'desktop'
-}
-
-/**
- * Extract browser info from user agent
- */
-export function extractBrowserInfo(userAgent: string): { browser: string; os: string } {
-  let browser = 'Unknown'
-  let os = 'Unknown'
-
-  // Browser detection
-  if (/edg/i.test(userAgent)) browser = 'Edge'
-  else if (/chrome/i.test(userAgent)) browser = 'Chrome'
-  else if (/firefox/i.test(userAgent)) browser = 'Firefox'
-  else if (/safari/i.test(userAgent)) browser = 'Safari'
-  else if (/opr/i.test(userAgent)) browser = 'Opera'
-
-  // OS detection
-  if (/windows/i.test(userAgent)) os = 'Windows'
-  else if (/mac/i.test(userAgent)) os = 'macOS'
-  else if (/iphone|ios/i.test(userAgent)) os = 'iOS'
-  else if (/android/i.test(userAgent)) os = 'Android'
-  else if (/linux/i.test(userAgent)) os = 'Linux'
-  else if (/x11/i.test(userAgent)) os = 'Unix'
-
-  return { browser, os }
-}
-
-/**
- * Generate unique session ID
- */
-export function generateSessionId(): string {
-  return `session_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`
 }

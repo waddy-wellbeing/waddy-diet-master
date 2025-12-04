@@ -50,6 +50,10 @@ export function getTimeSinceSessionStart(): number {
  * Generate unique session ID
  */
 function generateSessionId(): string {
+  // Use crypto.randomUUID if available (modern browsers), fallback to timestamp + random
+  if (typeof window !== 'undefined' && window.crypto?.randomUUID) {
+    return `session_${window.crypto.randomUUID()}`
+  }
   return `session_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`
 }
 

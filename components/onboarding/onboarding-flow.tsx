@@ -4,6 +4,8 @@ import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { motion, AnimatePresence } from 'framer-motion'
 import { OnboardingLayout } from '@/components/onboarding/onboarding-layout'
+import { useAnalytics } from '@/components/analytics/analytics-provider'
+import { buildFeatureUseEvent, buildFormSubmitEvent, buildFormErrorEvent, getCurrentPagePath } from '@/lib/utils/analytics'
 import {
   WelcomeStep,
   BasicInfoStep,
@@ -67,6 +69,7 @@ interface OnboardingFlowProps {
 
 export function OnboardingFlow({ initialData, onComplete }: OnboardingFlowProps) {
   const router = useRouter()
+  const { trackEvent, captureError } = useAnalytics()
   const [isSubmitting, setIsSubmitting] = useState(false)
   // If we have completed guest data, skip to the preview step (last step, index 6)
   const [currentStep, setCurrentStep] = useState(initialData?.completedAt ? TOTAL_STEPS - 1 : 0)
@@ -123,6 +126,13 @@ export function OnboardingFlow({ initialData, onComplete }: OnboardingFlowProps)
     if (currentStep < TOTAL_STEPS - 1) {
       setDirection(1)
       setCurrentStep((prev) => prev + 1)
+      
+      // Track step progression
+      trackEvent(buildFeatureUseEvent('onboarding', 'onboarding_step_progress', getCurrentPagePath(), {
+        from_step: stepConfig[currentStep]?.id,
+        to_step: stepConfig[currentStep + 1]?.id,
+        step_index: currentStep,
+      }))
     }
   }
 
@@ -130,6 +140,13 @@ export function OnboardingFlow({ initialData, onComplete }: OnboardingFlowProps)
     if (currentStep > 0) {
       setDirection(-1)
       setCurrentStep((prev) => prev - 1)
+      
+      // Track step regression
+      trackEvent(buildFeatureUseEvent('onboarding', 'onboarding_step_back', getCurrentPagePath(), {
+        from_step: stepConfig[currentStep]?.id,
+        to_step: stepConfig[currentStep - 1]?.id,
+        step_index: currentStep,
+      }))
     }
   }
 
@@ -177,6 +194,16 @@ export function OnboardingFlow({ initialData, onComplete }: OnboardingFlowProps)
       console.log('Onboarding save result:', result)
       
       if (result.success) {
+        // Track successful onboarding completion
+        trackEvent(buildFormSubmitEvent('onboarding', 'onboarding_complete', getCurrentPagePath(), true, {
+          steps_completed: TOTAL_STEPS,
+          diet_type: dietaryPreferences.dietType,
+          goal_type: goals.goalType,
+          meals_per_day: mealsPerDay,
+          cooking_skill: lifestyle.cookingSkill,
+          activity_level: activityLevel,
+        }))
+        
         // Clear guest data if callback provided
         onComplete?.()
         toast.success('Welcome to Waddy! ⚡')
@@ -184,11 +211,19 @@ export function OnboardingFlow({ initialData, onComplete }: OnboardingFlowProps)
         router.replace('/dashboard')
       } else {
         console.error('Failed to save onboarding data:', result.error)
+        
+        // Track form submission error
+        trackEvent(buildFormErrorEvent('onboarding', 'onboarding_save', getCurrentPagePath(), 'save', result.error || 'Unknown error'))
+        
         toast.error(result.error || 'Something went wrong. Please try again.')
         setIsSubmitting(false)
       }
     } catch (error) {
       console.error('Error saving onboarding:', error)
+      
+      // Track unexpected error
+      trackEvent(buildFormErrorEvent('onboarding', 'onboarding_save', getCurrentPagePath(), 'save', error instanceof Error ? error.message : 'Unknown error'))
+      
       toast.error('Something went wrong. Please try again.')
       setIsSubmitting(false)
     }

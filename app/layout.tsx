@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono, Noto_Sans_Arabic } from "next/font/google";
 import { Toaster } from "sonner";
+import { AnalyticsProvider } from "@/components/analytics/analytics-provider";
+import { AnalyticsErrorBoundary } from "@/components/analytics/error-boundary";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -34,8 +36,12 @@ export default function RootLayout({
       <body
         className={`${geistSans.variable} ${geistMono.variable} ${notoArabic.variable} antialiased`}
       >
-        {children}
-        <Toaster richColors position="top-right" />
+        <AnalyticsErrorBoundary>
+          <AnalyticsProvider>
+            {children}
+            <Toaster richColors position="top-right" />
+          </AnalyticsProvider>
+        </AnalyticsErrorBoundary>
       </body>
     </html>
   );
