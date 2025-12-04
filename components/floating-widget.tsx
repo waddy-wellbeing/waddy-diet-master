@@ -23,6 +23,7 @@ export function FloatingWidget() {
   const [isVisible, setIsVisible] = useState(false)
   const startPositionRef = useRef<Position>({ x: 0, y: 0 })
   const dragThreshold = 10 // pixels - minimum distance to consider it a drag
+  const [showConfirm, setShowConfirm] = useState(false)
 
   // Initialize position on mount
   useEffect(() => {
@@ -31,24 +32,23 @@ export function FloatingWidget() {
     setPosition({ x: window.innerWidth - 80, y: window.innerHeight - 100 })
   }, [])
 
-  const handleMouseDown = (e: React.MouseEvent) => {
-    // Don't prevent default - let click events bubble
+  const startDrag = (clientX: number, clientY: number) => {
     setIsDragging(true)
-    startPositionRef.current = { x: e.clientX, y: e.clientY }
+    startPositionRef.current = { x: clientX, y: clientY }
     const rect = widgetRef.current?.getBoundingClientRect()
     if (rect) {
       setDragOffset({
-        x: e.clientX - rect.left,
-        y: e.clientY - rect.top,
+        x: clientX - rect.left,
+        y: clientY - rect.top,
       })
     }
   }
 
-  const handleMouseMove = (e: MouseEvent) => {
+  const moveDrag = (clientX: number, clientY: number) => {
     if (!isDragging) return
 
-    let newX = e.clientX - dragOffset.x
-    let newY = e.clientY - dragOffset.y
+    let newX = clientX - dragOffset.x
+    let newY = clientY - dragOffset.y
 
     // Keep within viewport bounds
     newX = Math.max(0, Math.min(newX, window.innerWidth - 60))
@@ -57,32 +57,76 @@ export function FloatingWidget() {
     setPosition({ x: newX, y: newY })
   }
 
-  const handleMouseUp = () => {
+  const endDrag = () => {
     setIsDragging(false)
   }
 
+  // Mouse events
+  const handleMouseDown = (e: React.MouseEvent) => {
+    startDrag(e.clientX, e.clientY)
+  }
+
+  const handleMouseMove = (e: MouseEvent) => {
+    moveDrag(e.clientX, e.clientY)
+  }
+
+  const handleMouseUp = () => {
+    endDrag()
+  }
+
+  // Touch events
+  const handleTouchStart = (e: React.TouchEvent) => {
+    const touch = e.touches[0]
+    if (touch) {
+      startDrag(touch.clientX, touch.clientY)
+    }
+  }
+
+  const handleTouchMove = (e: React.TouchEvent) => {
+    const touch = e.touches[0]
+    if (touch) {
+      moveDrag(touch.clientX, touch.clientY)
+    }
+  }
+
+  const handleTouchEnd = () => {
+    endDrag()
+  }
+
   const handleButtonClick = (e: React.MouseEvent) => {
+    e.stopPropagation()
+    
     // Calculate distance moved from start position
     const distanceMoved = Math.sqrt(
       Math.pow(e.clientX - startPositionRef.current.x, 2) +
       Math.pow(e.clientY - startPositionRef.current.y, 2)
     )
 
-    // Only redirect if user didn't drag significantly
-    if (distanceMoved < dragThreshold) {
+    // If user dragged, don't redirect
+    if (distanceMoved > dragThreshold) {
+      return
+    }
+
+    // Show confirmation on mobile
+    if (window.innerWidth < 768) {
+      setShowConfirm(true)
+    } else {
+      // Desktop - redirect directly
       window.open('https://beacons.ai/moustafaabbas', '_blank')
     }
   }
 
   useEffect(() => {
-    if (isDragging) {
-      window.addEventListener('mousemove', handleMouseMove)
-      window.addEventListener('mouseup', handleMouseUp)
+    window.addEventListener('mousemove', handleMouseMove)
+    window.addEventListener('mouseup', handleMouseUp)
+    window.addEventListener('touchmove', handleTouchMove as any)
+    window.addEventListener('touchend', handleTouchEnd)
 
-      return () => {
-        window.removeEventListener('mousemove', handleMouseMove)
-        window.removeEventListener('mouseup', handleMouseUp)
-      }
+    return () => {
+      window.removeEventListener('mousemove', handleMouseMove)
+      window.removeEventListener('mouseup', handleMouseUp)
+      window.removeEventListener('touchmove', handleTouchMove as any)
+      window.removeEventListener('touchend', handleTouchEnd)
     }
   }, [isDragging, dragOffset])
 
@@ -125,6 +169,7 @@ export function FloatingWidget() {
           <button
             onClick={handleButtonClick}
             onMouseDown={handleMouseDown}
+            onTouchStart={handleTouchStart}
             className={`
               relative w-14 h-14 rounded-full
               bg-gradient-to-br from-lime-400 to-lime-500
@@ -180,6 +225,55 @@ export function FloatingWidget() {
         )}
       </div>
 
+      {/* Confirmation Modal for Mobile */}
+      {showConfirm && (
+        <>
+          {/* Backdrop */}
+          <div
+            className="fixed inset-0 bg-black/40 z-40 backdrop-blur-sm"
+            onClick={() => setShowConfirm(false)}
+          />
+
+          {/* Modal */}
+          <div className="fixed inset-0 z-50 flex items-end md:items-center justify-center pointer-events-none">
+            <div
+              className="bg-white rounded-t-2xl md:rounded-2xl shadow-2xl p-6 w-full md:max-w-sm pointer-events-auto mx-4 md:mx-0"
+              style={{ animation: 'slideUp 0.3s ease-out' }}
+            >
+              <div className="text-center">
+                <div className="mb-4">
+                  <div className="w-12 h-12 rounded-full bg-gradient-to-br from-lime-400 to-lime-500 mx-auto flex items-center justify-center">
+                    <ChevronRight className="w-6 h-6 text-white" />
+                  </div>
+                </div>
+                <h3 className="text-lg font-bold text-gray-900 mb-2">Connect With Us</h3>
+                <p className="text-sm text-gray-600 mb-6">
+                  You'll be redirected to our social and external links
+                </p>
+
+                <div className="flex gap-3">
+                  <button
+                    onClick={() => setShowConfirm(false)}
+                    className="flex-1 px-4 py-2.5 rounded-lg bg-gray-100 text-gray-900 font-medium transition-colors hover:bg-gray-200 active:bg-gray-300"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={() => {
+                      setShowConfirm(false)
+                      window.open('https://beacons.ai/moustafaabbas', '_blank')
+                    }}
+                    className="flex-1 px-4 py-2.5 rounded-lg bg-gradient-to-br from-lime-400 to-lime-500 text-white font-medium transition-all hover:shadow-lg active:scale-95"
+                  >
+                    Continue
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </>
+      )}
+
       {/* Animations */}
       <style>{`
         @keyframes fadeIn {
@@ -199,6 +293,17 @@ export function FloatingWidget() {
           to {
             opacity: 1;
             transform: translateX(0);
+          }
+        }
+
+        @keyframes slideUp {
+          from {
+            opacity: 0;
+            transform: translateY(100%);
+          }
+          to {
+            opacity: 1;
+            transform: translateY(0);
           }
         }
 
