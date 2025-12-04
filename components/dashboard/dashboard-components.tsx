@@ -545,7 +545,7 @@ export function MealCard({ meal, isToday = true, onLogMeal, onUnlogMeal, onSwapM
                   )}
                 </div>
                 
-                {/* Nutrition info with comparison */}
+                {/* Nutrition info */}
                 <div className="flex items-center gap-2 mt-0.5 flex-wrap">
                   <motion.p 
                     key={`cal-${meal.currentIndex}`}
@@ -556,26 +556,6 @@ export function MealCard({ meal, isToday = true, onLogMeal, onUnlogMeal, onSwapM
                   >
                     {displayCalories} cal
                   </motion.p>
-                  {meal.recipe?.nutrition_per_serving && (
-                    <motion.div
-                      key={`macros-${meal.currentIndex}`}
-                      initial={{ opacity: 0 }}
-                      animate={{ opacity: 1 }}
-                      transition={{ delay: 0.1 }}
-                      className="flex items-center gap-1 text-xs text-muted-foreground"
-                    >
-                      <span>•</span>
-                      <span className="font-medium text-orange-600">
-                        {Math.round((meal.recipe.nutrition_per_serving.protein_g || 0) * (meal.recipe.scale_factor || 1))}p
-                      </span>
-                      <span className="font-medium text-blue-600">
-                        {Math.round((meal.recipe.nutrition_per_serving.carbs_g || 0) * (meal.recipe.scale_factor || 1))}c
-                      </span>
-                      <span className="font-medium text-amber-600">
-                        {Math.round((meal.recipe.nutrition_per_serving.fat_g || 0) * (meal.recipe.scale_factor || 1))}f
-                      </span>
-                    </motion.div>
-                  )}
                   {meal.planSlot?.swapped && meal.planSlot?.swapped_ingredients && Object.keys(meal.planSlot.swapped_ingredients).length > 0 && (
                     <motion.span 
                       initial={{ scale: 0.8, opacity: 0 }}
