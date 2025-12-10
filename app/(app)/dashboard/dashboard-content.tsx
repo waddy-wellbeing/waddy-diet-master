@@ -55,6 +55,7 @@ export function DashboardContent({
   mealTargets,
 }: DashboardContentProps) {
   const router = useRouter()
+  const { trackEvent, captureError } = useAnalytics() // Call hook at component level
   const [selectedDate, setSelectedDate] = useState(new Date())
   const [dailyLog, setDailyLog] = useState(initialDailyLog)
   const [dailyPlan, setDailyPlan] = useState(initialDailyPlan)
@@ -289,7 +290,7 @@ export function DashboardContent({
 
   // Handler for logging a meal
   const handleLogMeal = async (mealName: string) => {
-    const { trackEvent, captureError } = useAnalytics()
+    // trackEvent and captureError are already available from component-level hook call
     
     if (loadingMeal) return // Prevent double-click
     setLoadingMeal(mealName)
@@ -403,7 +404,7 @@ export function DashboardContent({
   
   // Handler for unlogging a meal
   const handleUnlogMeal = async (mealName: string) => {
-    const { trackEvent, captureError } = useAnalytics()
+    // trackEvent and captureError are already available from component-level hook call
     
     if (loadingMeal) return // Prevent double-click
     setLoadingMeal(mealName)
@@ -487,7 +488,7 @@ export function DashboardContent({
   
   // Handler for swapping a meal - navigates to next/previous recipe and saves to plan
   const handleSwapMeal = async (mealName: string, direction: 'left' | 'right') => {
-    const { trackEvent, captureError } = useAnalytics()
+    // trackEvent and captureError are already available from component-level hook call
     
     const mealType = mealName as MealName
     const recipes = recipesByMealType[mealType] || []

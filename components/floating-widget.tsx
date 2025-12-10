@@ -6,7 +6,7 @@
  * Non-intrusive, easily movable, with subtle animations
  */
 
-import { useState, useRef, useEffect } from 'react'
+import { useState, useRef, useEffect, useCallback } from 'react'
 import { ChevronRight } from 'lucide-react'
 
 interface Position {
@@ -17,83 +17,96 @@ interface Position {
 export function FloatingWidget() {
   const [position, setPosition] = useState<Position>({ x: 0, y: 0 })
   const [isDragging, setIsDragging] = useState(false)
-  const [dragOffset, setDragOffset] = useState<Position>({ x: 0, y: 0 })
   const [isHovered, setIsHovered] = useState(false)
-  const widgetRef = useRef<HTMLDivElement>(null)
-  const [isVisible, setIsVisible] = useState(false)
-  const startPositionRef = useRef<Position>({ x: 0, y: 0 })
-  const dragThreshold = 10 // pixels - minimum distance to consider it a drag
   const [showConfirm, setShowConfirm] = useState(false)
+  const [isVisible, setIsVisible] = useState(false)
+  
+  const widgetRef = useRef<HTMLDivElement>(null)
+  const startPositionRef = useRef<Position>({ x: 0, y: 0 })
+  const dragOffsetRef = useRef<Position>({ x: 0, y: 0 })
+  const dragThreshold = 10 // pixels - minimum distance to consider it a drag
+  const isMountedRef = useRef(true)
 
   // Initialize position on mount
   useEffect(() => {
-    setIsVisible(true)
-    // Start in bottom-right corner
-    setPosition({ x: window.innerWidth - 80, y: window.innerHeight - 100 })
+    if (typeof window !== 'undefined') {
+      setIsVisible(true)
+      setPosition({ x: window.innerWidth - 80, y: window.innerHeight - 100 })
+    }
+
+    return () => {
+      isMountedRef.current = false
+    }
   }, [])
 
-  const startDrag = (clientX: number, clientY: number) => {
-    setIsDragging(true)
-    startPositionRef.current = { x: clientX, y: clientY }
-    const rect = widgetRef.current?.getBoundingClientRect()
-    if (rect) {
-      setDragOffset({
-        x: clientX - rect.left,
-        y: clientY - rect.top,
-      })
-    }
-  }
+  const moveDrag = useCallback((clientX: number, clientY: number) => {
+    if (!isDragging || !isMountedRef.current) return
 
-  const moveDrag = (clientX: number, clientY: number) => {
-    if (!isDragging) return
-
-    let newX = clientX - dragOffset.x
-    let newY = clientY - dragOffset.y
+    let newX = clientX - dragOffsetRef.current.x
+    let newY = clientY - dragOffsetRef.current.y
 
     // Keep within viewport bounds
     newX = Math.max(0, Math.min(newX, window.innerWidth - 60))
     newY = Math.max(0, Math.min(newY, window.innerHeight - 60))
 
     setPosition({ x: newX, y: newY })
-  }
+  }, [isDragging])
 
-  const endDrag = () => {
-    setIsDragging(false)
-  }
+  const handleMouseDown = useCallback((e: React.MouseEvent) => {
+    startPositionRef.current = { x: e.clientX, y: e.clientY }
+    const rect = widgetRef.current?.getBoundingClientRect()
+    if (rect) {
+      dragOffsetRef.current = {
+        x: e.clientX - rect.left,
+        y: e.clientY - rect.top,
+      }
+    }
+    if (isMountedRef.current) {
+      setIsDragging(true)
+    }
+  }, [])
 
-  // Mouse events
-  const handleMouseDown = (e: React.MouseEvent) => {
-    startDrag(e.clientX, e.clientY)
-  }
-
-  const handleMouseMove = (e: MouseEvent) => {
+  const handleMouseMove = useCallback((e: MouseEvent) => {
     moveDrag(e.clientX, e.clientY)
-  }
+  }, [moveDrag])
 
-  const handleMouseUp = () => {
-    endDrag()
-  }
+  const handleMouseUp = useCallback(() => {
+    if (isMountedRef.current) {
+      setIsDragging(false)
+    }
+  }, [])
 
-  // Touch events
-  const handleTouchStart = (e: React.TouchEvent) => {
+  const handleTouchStart = useCallback((e: React.TouchEvent) => {
     const touch = e.touches[0]
     if (touch) {
-      startDrag(touch.clientX, touch.clientY)
+      startPositionRef.current = { x: touch.clientX, y: touch.clientY }
+      const rect = widgetRef.current?.getBoundingClientRect()
+      if (rect) {
+        dragOffsetRef.current = {
+          x: touch.clientX - rect.left,
+          y: touch.clientY - rect.top,
+        }
+      }
+      if (isMountedRef.current) {
+        setIsDragging(true)
+      }
     }
-  }
+  }, [])
 
-  const handleTouchMove = (e: React.TouchEvent) => {
+  const handleTouchMove = useCallback((e: TouchEvent) => {
     const touch = e.touches[0]
     if (touch) {
       moveDrag(touch.clientX, touch.clientY)
     }
-  }
+  }, [moveDrag])
 
-  const handleTouchEnd = () => {
-    endDrag()
-  }
+  const handleTouchEnd = useCallback(() => {
+    if (isMountedRef.current) {
+      setIsDragging(false)
+    }
+  }, [])
 
-  const handleButtonClick = (e: React.MouseEvent) => {
+  const handleButtonClick = useCallback((e: React.MouseEvent) => {
     e.stopPropagation()
     
     // Calculate distance moved from start position
@@ -108,27 +121,39 @@ export function FloatingWidget() {
     }
 
     // Show confirmation on mobile
-    if (window.innerWidth < 768) {
-      setShowConfirm(true)
+    if (typeof window !== 'undefined' && window.innerWidth < 768) {
+      if (isMountedRef.current) {
+        setShowConfirm(true)
+      }
     } else {
       // Desktop - redirect directly
       window.open('https://beacons.ai/moustafaabbas', '_blank')
     }
-  }
+  }, [])
 
   useEffect(() => {
+    if (!isDragging) return
+
+    const handleMove = (e: MouseEvent | TouchEvent) => {
+      if (e instanceof MouseEvent) {
+        handleMouseMove(e)
+      } else if (e instanceof TouchEvent) {
+        handleTouchMove(e)
+      }
+    }
+
     window.addEventListener('mousemove', handleMouseMove)
     window.addEventListener('mouseup', handleMouseUp)
-    window.addEventListener('touchmove', handleTouchMove as any)
+    window.addEventListener('touchmove', handleTouchMove)
     window.addEventListener('touchend', handleTouchEnd)
 
     return () => {
       window.removeEventListener('mousemove', handleMouseMove)
       window.removeEventListener('mouseup', handleMouseUp)
-      window.removeEventListener('touchmove', handleTouchMove as any)
+      window.removeEventListener('touchmove', handleTouchMove)
       window.removeEventListener('touchend', handleTouchEnd)
     }
-  }, [isDragging, dragOffset])
+  }, [isDragging, handleMouseMove, handleMouseUp, handleTouchMove, handleTouchEnd])
 
   if (!isVisible) return null
 
