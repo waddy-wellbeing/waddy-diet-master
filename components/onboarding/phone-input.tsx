@@ -120,7 +120,7 @@ export function PhoneInput({
 
             {/* Dropdown */}
             {isDropdownOpen && (
-              <div className="absolute top-full left-0 mt-1 w-64 max-h-96 overflow-y-auto bg-background border border-border rounded-lg shadow-lg z-50">
+              <div className="absolute top-full left-0 mt-1 w-full sm:w-64 max-h-96 overflow-y-auto bg-background border border-border rounded-lg shadow-lg z-50">
                 {/* Top countries */}
                 <div className="border-b border-border/30 p-2 bg-muted/30">
                   <p className="text-xs font-semibold text-muted-foreground px-2 py-1 uppercase tracking-wide">

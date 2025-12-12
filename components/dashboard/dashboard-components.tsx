@@ -35,8 +35,10 @@ function WeekDayCard({ date, isSelected, onClick, consumed, target }: WeekDayCar
   const dayName = format(date, 'EEE')
   const dayNum = format(date, 'd')
   
-  // Calculate stroke dash for circular progress
-  const radius = 22
+  // Calculate stroke dash for circular progress (responsive radius)
+  // Mobile: 18, Desktop: 22
+  const isMobile = typeof window !== 'undefined' && window.innerWidth < 640
+  const radius = isMobile ? 18 : 22
   const circumference = 2 * Math.PI * radius
   const dashOffset = circumference - (progress / 100) * circumference
 
@@ -44,7 +46,7 @@ function WeekDayCard({ date, isSelected, onClick, consumed, target }: WeekDayCar
     <button
       onClick={onClick}
       className={cn(
-        'flex flex-col items-center p-2 rounded-xl touch-manipulation min-w-[52px]',
+        'flex flex-col items-center p-1.5 sm:p-2 rounded-xl touch-manipulation flex-1 min-w-0',
         'border-2 active:scale-95 transition-transform duration-75',
         isSelected
           ? 'border-primary bg-primary/5 shadow-sm'
@@ -53,15 +55,15 @@ function WeekDayCard({ date, isSelected, onClick, consumed, target }: WeekDayCar
       )}
     >
       <span className={cn(
-        'text-xs font-medium mb-1',
+        'text-[10px] sm:text-xs font-medium mb-0.5 sm:mb-1 leading-tight',
         isSelected ? 'text-primary' : 'text-muted-foreground'
       )}>
         {dayName}
       </span>
       
       {/* Circular progress */}
-      <div className="relative w-11 h-11 mb-1">
-        <svg className="w-full h-full transform -rotate-90">
+      <div className="relative w-9 sm:w-11 h-9 sm:h-11 mb-0.5 sm:mb-1">
+        <svg className="w-full h-full transform -rotate-90" viewBox="0 0 44 44">
           {/* Background circle */}
           <circle
             cx="22"
@@ -89,7 +91,7 @@ function WeekDayCard({ date, isSelected, onClick, consumed, target }: WeekDayCar
           />
         </svg>
         <span className={cn(
-          'absolute inset-0 flex items-center justify-center text-sm font-semibold',
+          'absolute inset-0 flex items-center justify-center text-xs sm:text-sm font-semibold leading-tight',
           isSelected ? 'text-primary' : 'text-foreground'
         )}>
           {dayNum}
@@ -157,7 +159,7 @@ export function WeekSelector({ selectedDate, onDateSelect, weekData, dailyTarget
       </div>
       
       {/* Week days */}
-      <div className="flex justify-between">
+      <div className="flex justify-between gap-1">
         {weekDays.map((date) => {
           const dateKey = format(date, 'yyyy-MM-dd')
           const dayData = weekData[dateKey] || { consumed: 0 }
