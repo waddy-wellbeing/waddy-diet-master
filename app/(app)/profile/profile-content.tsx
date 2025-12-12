@@ -505,7 +505,7 @@ export function ProfileContent({ profile, userEmail }: ProfileContentProps) {
               age: parseInt(basicInfo.age) || undefined,
               height_cm: parseFloat(basicInfo.height_cm) || undefined,
               weight_kg: parseFloat(basicInfo.weight_kg) || undefined,
-              sex: basicInfo.sex as 'male' | 'female' | 'other',
+              sex: basicInfo.sex as 'male' | 'female',
             },
             mobile: basicInfo.mobile || undefined,
           }

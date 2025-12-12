@@ -39,7 +39,7 @@ export function BasicInfoEditor({ user, onUpdate }: BasicInfoEditorProps) {
       age: age ? parseInt(age) : undefined,
       height_cm: heightCm ? parseFloat(heightCm) : undefined,
       weight_kg: weightKg ? parseFloat(weightKg) : undefined,
-      sex: (sex || undefined) as 'male' | 'female' | 'other' | undefined,
+      sex: (sex || undefined) as 'male' | 'female' | undefined,
       activity_level: (activityLevel || undefined) as 'sedentary' | 'light' | 'moderate' | 'active' | 'very_active' | undefined,
     }
 
@@ -138,7 +138,6 @@ export function BasicInfoEditor({ user, onUpdate }: BasicInfoEditorProps) {
               <SelectContent>
                 <SelectItem value="male">Male</SelectItem>
                 <SelectItem value="female">Female</SelectItem>
-                <SelectItem value="other">Other</SelectItem>
               </SelectContent>
             </Select>
           </div>

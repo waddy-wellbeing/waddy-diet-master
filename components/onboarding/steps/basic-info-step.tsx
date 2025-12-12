@@ -10,7 +10,7 @@ import { PhoneInput } from '../phone-input'
 export interface BasicInfoData {
   name: string
   age: string
-  sex: 'male' | 'female' | 'other' | ''
+  sex: 'male' | 'female' | ''
   height: string
   heightUnit: 'cm' | 'ft'
   weight: string
@@ -26,7 +26,6 @@ interface BasicInfoStepProps {
 const sexOptions = [
   { value: 'male', label: 'Male', emoji: '👨' },
   { value: 'female', label: 'Female', emoji: '👩' },
-  { value: 'other', label: 'Other', emoji: '🧑' },
 ]
 
 export function BasicInfoStep({ data, onChange }: BasicInfoStepProps) {

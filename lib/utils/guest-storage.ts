@@ -9,7 +9,7 @@ export interface GuestOnboardingData {
   basicInfo: {
     name: string
     age: string
-    sex: 'male' | 'female' | 'other' | ''
+    sex: 'male' | 'female' | ''
     height: string
     heightUnit: 'cm' | 'ft'
     weight: string
