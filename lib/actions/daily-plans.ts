@@ -2,7 +2,7 @@
 
 import { revalidatePath } from 'next/cache'
 import { createClient } from '@/lib/supabase/server'
-import type { DailyPlan, DailyTotals } from '@/lib/types/nutri'
+import type { DailyPlan, DailyTotals, PlanMealSlot, PlanSnackItem, RecipeNutrition } from '@/lib/types/nutri'
 
 interface SaveMealToPlanParams {
   date: string // YYYY-MM-DD format
@@ -43,12 +43,16 @@ export async function saveMealToPlan(params: SaveMealToPlanParams): Promise<Save
       .maybeSingle()
 
     // Build the meal object matching PlanMealSlot type
-    const meal: any = {
+    const hasSwaps = !!swappedIngredients && Object.keys(swappedIngredients).length > 0
+
+    const meal: PlanMealSlot = {
       recipe_id: recipeId,
       servings,
-      swapped: swappedIngredients && Object.keys(swappedIngredients).length > 0,
-      swapped_ingredients: swappedIngredients || undefined,
+      swapped: hasSwaps || undefined,
+      swapped_ingredients: hasSwaps ? swappedIngredients : undefined,
     }
+
+    type SnackRecipeItem = PlanSnackItem & Pick<PlanMealSlot, 'swapped' | 'swapped_ingredients'>
 
     let updatedPlan: DailyPlan
     let updatedTotals: DailyTotals
@@ -56,16 +60,43 @@ export async function saveMealToPlan(params: SaveMealToPlanParams): Promise<Save
     if (existingPlan) {
       // Update existing plan
       const plan = existingPlan.plan as DailyPlan
-      plan[mealType] = meal
+
+      if (mealType === 'snacks') {
+        // Keep snacks stored as an array (schema convention). Update the first snack slot.
+        const nextSnacks: SnackRecipeItem[] = Array.isArray(plan.snacks) ? [...(plan.snacks as SnackRecipeItem[])] : []
+        nextSnacks[0] = {
+          ...(nextSnacks[0] || {}),
+          recipe_id: meal.recipe_id,
+          servings: meal.servings,
+          swapped: meal.swapped,
+          swapped_ingredients: meal.swapped_ingredients,
+        }
+        plan.snacks = nextSnacks
+      } else {
+        plan[mealType] = meal
+      }
 
       // Recalculate totals
       updatedTotals = await calculateDailyTotals(plan)
       updatedPlan = plan
     } else {
       // Create new plan
-      updatedPlan = {
-        [mealType]: meal,
-      } as DailyPlan
+      if (mealType === 'snacks') {
+        updatedPlan = {
+          snacks: [
+            {
+              recipe_id: meal.recipe_id,
+              servings: meal.servings,
+              swapped: meal.swapped,
+              swapped_ingredients: meal.swapped_ingredients,
+            } as SnackRecipeItem,
+          ],
+        } as DailyPlan
+      } else {
+        updatedPlan = {
+          [mealType]: meal,
+        } as DailyPlan
+      }
 
       updatedTotals = await calculateDailyTotals(updatedPlan)
     }
@@ -122,7 +153,7 @@ async function calculateDailyTotals(plan: DailyPlan): Promise<DailyTotals> {
         .single()
 
       if (recipe && recipe.nutrition_per_serving) {
-        const nutrition = recipe.nutrition_per_serving as any
+        const nutrition = recipe.nutrition_per_serving as unknown as RecipeNutrition
         totalCalories += Math.round((nutrition.calories || 0) * meal.servings)
         totalProtein += Math.round((nutrition.protein_g || 0) * meal.servings)
         totalCarbs += Math.round((nutrition.carbs_g || 0) * meal.servings)
@@ -142,7 +173,7 @@ async function calculateDailyTotals(plan: DailyPlan): Promise<DailyTotals> {
           .single()
 
         if (recipe && recipe.nutrition_per_serving) {
-          const nutrition = recipe.nutrition_per_serving as any
+          const nutrition = recipe.nutrition_per_serving as unknown as RecipeNutrition
           const servings = snack.servings || 1
           totalCalories += Math.round((nutrition.calories || 0) * servings)
           totalProtein += Math.round((nutrition.protein_g || 0) * servings)

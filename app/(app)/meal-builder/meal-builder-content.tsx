@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Image from 'next/image'
 import { format } from 'date-fns'
@@ -20,12 +20,17 @@ import {
   List,
   ShoppingBasket,
   Check,
+  Search,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
+import { Input } from '@/components/ui/input'
+import { ScrollArea } from '@/components/ui/scroll-area'
+import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from '@/components/ui/sheet'
 import { cn } from '@/lib/utils'
 import { getUserIngredientSwaps, type IngredientSwapOption } from '@/lib/actions/recipes'
 import { saveMealToPlan } from '@/lib/actions/daily-plans'
+import type { DailyPlan, PlanMealSlot, PlanSnackItem } from '@/lib/types/nutri'
 import type { ScaledRecipeWithIngredients } from './page'
 
 type MealType = 'breakfast' | 'lunch' | 'dinner' | 'snacks'
@@ -35,7 +40,7 @@ interface MealBuilderContentProps {
   recipesByMealType: Record<MealType, ScaledRecipeWithIngredients[]>
   userId: string
   initialMeal?: MealType | null
-  todaysPlan?: any
+  todaysPlan?: DailyPlan | null
 }
 
 const mealLabels: Record<MealType, string> = {
@@ -52,57 +57,173 @@ export function MealBuilderContent({
   todaysPlan,
 }: MealBuilderContentProps) {
   const router = useRouter()
-  
-  // Initialize selectedSwaps from saved plan if available
-  const initializeSwapsFromPlan = () => {
-    const swapsMap: Record<string, IngredientSwapOption> = {}
-    
-    if (todaysPlan && initialMeal) {
-      const mealPlan = todaysPlan[initialMeal]
-      if (mealPlan?.swapped_ingredients) {
-        // Convert saved swaps to IngredientSwapOption format
-        Object.entries(mealPlan.swapped_ingredients).forEach(([originalId, swapData]: [string, any]) => {
-          swapsMap[originalId] = {
-            id: swapData.ingredient_id,
-            name: swapData.name || swapData.name_ar,
-            name_ar: swapData.name_ar || swapData.name,
-            food_group: null,
-            subgroup: null,
-            serving_size: swapData.quantity,
-            serving_unit: swapData.unit,
-            macros: {
-              calories: 0,
-              protein_g: 0,
-              carbs_g: 0,
-              fat_g: 0,
-            },
-            suggested_amount: swapData.quantity,
-            calorie_diff_percent: 0,
-          }
-        })
-      }
+
+  type PlanMealSlotLike = PlanMealSlot & {
+    swapped_ingredients?: PlanMealSlot['swapped_ingredients']
+  }
+
+  const getPlanMealSlot = (meal: MealType): (PlanMealSlotLike | PlanSnackItem) | null => {
+    if (!todaysPlan) return null
+
+    if (meal === 'snacks') {
+      const snacks = todaysPlan.snacks
+      if (Array.isArray(snacks) && snacks.length > 0) return snacks[0] || null
+      return null
     }
-    
+
+    return (todaysPlan[meal] as PlanMealSlotLike | undefined) || null
+  }
+
+  const getPlanRecipeId = (meal: MealType): string | null => {
+    const slot = getPlanMealSlot(meal)
+    return slot?.recipe_id || null
+  }
+
+  const getSwapsFromPlan = (meal: MealType): Record<string, IngredientSwapOption> => {
+    const swapsMap: Record<string, IngredientSwapOption> = {}
+    const slot = getPlanMealSlot(meal)
+
+    if (slot && 'swapped_ingredients' in slot && slot.swapped_ingredients) {
+      type SwappedIngredient = NonNullable<PlanMealSlot['swapped_ingredients']>[string]
+
+      Object.entries(slot.swapped_ingredients).forEach(([originalId, swapData]) => {
+        const s = swapData as SwappedIngredient
+
+        swapsMap[originalId] = {
+          id: s.ingredient_id,
+          name: s.name,
+          name_ar: undefined,
+          food_group: null,
+          subgroup: null,
+          serving_size: s.quantity,
+          serving_unit: s.unit,
+          macros: {
+            calories: 0,
+            protein_g: 0,
+            carbs_g: 0,
+            fat_g: 0,
+          },
+          suggested_amount: s.quantity,
+          calorie_diff_percent: 0,
+        }
+      })
+    }
+
     return swapsMap
   }
-  
+
+  const getIndexForRecipeId = (meal: MealType, recipeId: string | null) => {
+    if (!recipeId) return 0
+    const idx = recipesByMealType[meal]?.findIndex(r => r.id === recipeId) ?? -1
+    return idx >= 0 ? idx : 0
+  }
+
   // State - initialize with initialMeal if provided
   const [selectedMeal, setSelectedMeal] = useState<MealType | null>(initialMeal)
-  const [recipeIndices, setRecipeIndices] = useState<Record<MealType, number>>({
-    breakfast: 0,
-    lunch: 0,
-    dinner: 0,
-    snacks: 0,
+  const [recipeIndices, setRecipeIndices] = useState<Record<MealType, number>>(() => {
+    return {
+      breakfast: getIndexForRecipeId('breakfast', getPlanRecipeId('breakfast')),
+      lunch: getIndexForRecipeId('lunch', getPlanRecipeId('lunch')),
+      dinner: getIndexForRecipeId('dinner', getPlanRecipeId('dinner')),
+      snacks: getIndexForRecipeId('snacks', getPlanRecipeId('snacks')),
+    }
   })
   const [activeTab, setActiveTab] = useState<'ingredients' | 'instructions'>('ingredients')
   const [expandedIngredient, setExpandedIngredient] = useState<string | null>(null)
   const [swaps, setSwaps] = useState<IngredientSwapOption[] | null>(null)
   const [loadingSwaps, setLoadingSwaps] = useState(false)
-  const [selectedSwaps, setSelectedSwaps] = useState<Record<string, IngredientSwapOption>>(initializeSwapsFromPlan())
+  const [selectedSwaps, setSelectedSwaps] = useState<Record<string, IngredientSwapOption>>(
+    initialMeal ? getSwapsFromPlan(initialMeal) : {}
+  )
   const [swipeX, setSwipeX] = useState(0)
   const [showMacroLabels, setShowMacroLabels] = useState(false)
   const [saving, setSaving] = useState(false)
   const [swapPaginationPage, setSwapPaginationPage] = useState<Record<string, number>>({})
+
+  // Search
+  const [searchOpen, setSearchOpen] = useState(false)
+  const [searchQuery, setSearchQuery] = useState('')
+  const [debouncedQuery, setDebouncedQuery] = useState('')
+  const searchInputRef = useRef<HTMLInputElement>(null)
+
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedQuery(searchQuery.trim()), 150)
+    return () => clearTimeout(t)
+  }, [searchQuery])
+
+  useEffect(() => {
+    if (!searchOpen) return
+    const t = setTimeout(() => searchInputRef.current?.focus(), 60)
+    return () => clearTimeout(t)
+  }, [searchOpen])
+
+  const searchResults = useMemo(() => {
+    if (!selectedMeal) return []
+
+    const all = recipesByMealType[selectedMeal] || []
+    const q = debouncedQuery.toLowerCase()
+
+    if (!q) return all.slice(0, 20)
+
+    const score = (recipe: ScaledRecipeWithIngredients) => {
+      let s = 0
+      const name = recipe.name?.toLowerCase() || ''
+      if (name === q) s += 50
+      if (name.startsWith(q)) s += 25
+      if (name.includes(q)) s += 15
+
+      const tags = (recipe.tags || []).join(' ').toLowerCase()
+      if (tags.includes(q)) s += 6
+
+      const cuisine = (recipe.cuisine || '').toLowerCase()
+      if (cuisine.includes(q)) s += 4
+
+      const ingredientsText = (recipe.recipe_ingredients || [])
+        .map(i => `${i.raw_name} ${i.ingredient?.name || ''} ${i.ingredient?.name_ar || ''}`)
+        .join(' ')
+        .toLowerCase()
+      if (ingredientsText.includes(q)) s += 3
+
+      return s
+    }
+
+    return all
+      .map(r => ({ r, s: score(r) }))
+      .filter(x => x.s > 0)
+      .sort((a, b) => b.s - a.s)
+      .slice(0, 50)
+      .map(x => x.r)
+  }, [debouncedQuery, recipesByMealType, selectedMeal])
+
+  const renderHighlighted = (text: string, query: string) => {
+    if (!query) return text
+    const lower = text.toLowerCase()
+    const q = query.toLowerCase()
+    const idx = lower.indexOf(q)
+    if (idx < 0) return text
+
+    const before = text.slice(0, idx)
+    const match = text.slice(idx, idx + query.length)
+    const after = text.slice(idx + query.length)
+
+    return (
+      <>
+        {before}
+        <span className="rounded bg-primary/15 px-1 text-primary">{match}</span>
+        {after}
+      </>
+    )
+  }
+
+  const jumpToRecipe = (meal: MealType, recipeId: string) => {
+    const idx = recipesByMealType[meal]?.findIndex(r => r.id === recipeId) ?? -1
+    if (idx < 0) return
+
+    setRecipeIndices(prev => ({ ...prev, [meal]: idx }))
+    setExpandedIngredient(null)
+    setActiveTab('ingredients')
+    setSelectedSwaps({})
+  }
   
   const SWAPS_PER_PAGE = 5
   
@@ -117,13 +238,19 @@ export function MealBuilderContent({
     setSelectedMeal(meal)
     setActiveTab('ingredients')
     setExpandedIngredient(null)
-    setSelectedSwaps({})
+
+    // If this meal is already in today's plan, restore its swaps when opening it.
+    // If the user later switches recipes, we clear swaps.
+    setSelectedSwaps(getSwapsFromPlan(meal))
   }
 
   const handleBack = () => {
     setSelectedMeal(null)
     setExpandedIngredient(null)
     setSelectedSwaps({})
+    setSearchOpen(false)
+    setSearchQuery('')
+    setDebouncedQuery('')
   }
 
   const handleNextRecipe = () => {
@@ -441,6 +568,126 @@ export function MealBuilderContent({
 
   return (
     <div className="min-h-screen bg-background pb-24">
+      {/* Search Sheet */}
+      <Sheet open={searchOpen} onOpenChange={setSearchOpen}>
+        <SheetContent side="bottom" className="h-[88vh] p-0">
+          <SheetHeader className="border-b">
+            <SheetTitle>Find a recipe</SheetTitle>
+            <SheetDescription>
+              Search by recipe name, ingredients, tags, or cuisine.
+            </SheetDescription>
+            <div className="pt-2">
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
+                <Input
+                  ref={searchInputRef}
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  placeholder={`Search ${selectedMeal ? mealLabels[selectedMeal].toLowerCase() : 'recipes'}...`}
+                  className="h-11 pl-9"
+                  autoComplete="off"
+                />
+              </div>
+              <div className="mt-2 text-xs text-muted-foreground">
+                {debouncedQuery ? (
+                  <span>
+                    {searchResults.length} result{searchResults.length === 1 ? '' : 's'}
+                  </span>
+                ) : (
+                  <span>Showing top picks</span>
+                )}
+              </div>
+            </div>
+          </SheetHeader>
+
+          <ScrollArea className="flex-1">
+            <div className="p-4 space-y-2">
+              {selectedMeal && searchResults.length === 0 ? (
+                <div className="text-center py-12">
+                  <ChefHat className="w-12 h-12 mx-auto text-muted-foreground/50 mb-3" />
+                  <p className="text-sm font-medium">No matches</p>
+                  <p className="text-xs text-muted-foreground mt-1">Try a different keyword.</p>
+                </div>
+              ) : (
+                searchResults.map((r) => {
+                  const currentId = selectedMeal ? recipesByMealType[selectedMeal][recipeIndices[selectedMeal]]?.id : null
+                  const isCurrent = !!currentId && currentId === r.id
+
+                  const protein = Math.round((r.nutrition_per_serving?.protein_g || 0) * r.scale_factor)
+                  const carbs = Math.round((r.nutrition_per_serving?.carbs_g || 0) * r.scale_factor)
+                  const fat = Math.round((r.nutrition_per_serving?.fat_g || 0) * r.scale_factor)
+
+                  return (
+                    <button
+                      key={r.id}
+                      className={cn(
+                        'w-full flex items-center gap-3 rounded-xl border p-3 text-left transition-colors active:scale-[0.99]',
+                        'hover:bg-muted/40',
+                        isCurrent && 'border-primary bg-primary/5'
+                      )}
+                      onClick={() => {
+                        if (!selectedMeal) return
+                        jumpToRecipe(selectedMeal, r.id)
+                        setSearchOpen(false)
+                      }}
+                    >
+                      <div className="relative w-14 h-14 rounded-lg overflow-hidden bg-muted flex-shrink-0">
+                        {r.image_url ? (
+                          <Image
+                            src={r.image_url}
+                            alt={r.name}
+                            fill
+                            sizes="56px"
+                            className="object-cover"
+                          />
+                        ) : (
+                          <div className="w-full h-full grid place-items-center">
+                            <ChefHat className="w-6 h-6 text-muted-foreground/60" />
+                          </div>
+                        )}
+                      </div>
+
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center justify-between gap-2">
+                          <div className="font-medium truncate">
+                            {renderHighlighted(r.name, debouncedQuery)}
+                          </div>
+                          {isCurrent && (
+                            <span className="text-[10px] font-semibold text-primary bg-primary/10 px-2 py-1 rounded-full shrink-0">
+                              Current
+                            </span>
+                          )}
+                        </div>
+                        <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
+                          <span className="inline-flex items-center gap-1">
+                            <Flame className="w-3 h-3" />
+                            {r.scaled_calories} cal
+                          </span>
+                          <span className="inline-flex items-center gap-1">
+                            <Beef className="w-3 h-3" />
+                            {protein}g
+                          </span>
+                          <span className="inline-flex items-center gap-1">
+                            <Wheat className="w-3 h-3" />
+                            {carbs}g
+                          </span>
+                          <span className="inline-flex items-center gap-1">
+                            <Droplet className="w-3 h-3" />
+                            {fat}g
+                          </span>
+                        </div>
+                      </div>
+
+                      <ChevronRight className="w-4 h-4 text-muted-foreground flex-shrink-0" />
+                    </button>
+                  )
+                })
+              )}
+            </div>
+          </ScrollArea>
+        </SheetContent>
+      </Sheet>
+
       {/* Hero Section with Recipe Image - Swipeable */}
       <motion.div 
         className="relative w-full bg-gradient-to-br from-muted to-muted/50 cursor-grab active:cursor-grabbing touch-pan-y overflow-hidden"
@@ -513,14 +760,33 @@ export function MealBuilderContent({
           <ChevronLeft className="w-5 h-5" />
         </motion.button>
 
-        {/* Recipe counter - Enhanced styling */}
-        <motion.div 
-          initial={{ opacity: 0, scale: 0.8 }}
-          animate={{ opacity: 1, scale: 1 }}
-          className="absolute top-4 right-4 px-3 py-1.5 rounded-full bg-background/85 backdrop-blur-md text-sm font-semibold border border-border/40 shadow-lg"
-        >
-          {recipeIndices[selectedMeal] + 1} / {totalRecipes}
-        </motion.div>
+        {/* Recipe counter + search - Enhanced styling */}
+        <div className="absolute top-4 right-4 flex items-center gap-2 z-10">
+          <motion.button
+            type="button"
+            initial={{ opacity: 0, scale: 0.8 }}
+            animate={{ opacity: 1, scale: 1 }}
+            whileHover={{ scale: 1.08 }}
+            whileTap={{ scale: 0.95 }}
+            onClick={() => {
+              setSearchOpen(true)
+              setSearchQuery('')
+              setDebouncedQuery('')
+            }}
+            className="w-11 h-11 rounded-full bg-background/85 backdrop-blur-md hover:bg-background flex items-center justify-center border border-border/40 shadow-lg"
+            aria-label="Search recipes"
+          >
+            <Search className="w-5 h-5" />
+          </motion.button>
+
+          <motion.div 
+            initial={{ opacity: 0, scale: 0.8 }}
+            animate={{ opacity: 1, scale: 1 }}
+            className="px-3 py-1.5 rounded-full bg-background/85 backdrop-blur-md text-sm font-semibold border border-border/40 shadow-lg"
+          >
+            {recipeIndices[selectedMeal] + 1} / {totalRecipes}
+          </motion.div>
+        </div>
 
         {/* Recipe info overlay - Better positioning and styling */}
         <div className="absolute bottom-0 left-0 right-0 p-5 pointer-events-none">
@@ -699,7 +965,7 @@ export function MealBuilderContent({
           ) : (
             <>
               <Check className="w-5 h-5 mr-2" />
-              Save to Today's Plan
+              Save to Today&apos;s Plan
             </>
           )}
         </Button>
