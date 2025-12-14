@@ -92,7 +92,7 @@ export function MealBuilderContent({
         swapsMap[originalId] = {
           id: s.ingredient_id,
           name: s.name,
-          name_ar: undefined,
+          name_ar: null,
           food_group: null,
           subgroup: null,
           serving_size: s.quantity,
