@@ -755,9 +755,9 @@ export function MealBuilderContent({
           onClick={handleBack}
           whileHover={{ scale: 1.1 }}
           whileTap={{ scale: 0.95 }}
-          className="absolute top-4 left-4 w-11 h-11 rounded-full bg-background/85 backdrop-blur-md hover:bg-background flex items-center justify-center z-10 border border-border/40 shadow-lg"
+          className="absolute top-4 left-4 w-11 h-11 rounded-full bg-white dark:bg-background backdrop-blur-md hover:bg-gray-100 dark:hover:bg-background/90 flex items-center justify-center z-10 border-2 border-gray-200 dark:border-border/40 shadow-lg"
         >
-          <ChevronLeft className="w-5 h-5" />
+          <ChevronLeft className="w-5 h-5 text-gray-700 dark:text-foreground" />
         </motion.button>
 
         {/* Recipe counter + search - Enhanced styling */}
@@ -773,16 +773,16 @@ export function MealBuilderContent({
               setSearchQuery('')
               setDebouncedQuery('')
             }}
-            className="w-11 h-11 rounded-full bg-background/85 backdrop-blur-md hover:bg-background flex items-center justify-center border border-border/40 shadow-lg"
+            className="w-11 h-11 rounded-full bg-white dark:bg-background backdrop-blur-md hover:bg-gray-100 dark:hover:bg-background/90 flex items-center justify-center border-2 border-gray-200 dark:border-border/40 shadow-lg"
             aria-label="Search recipes"
           >
-            <Search className="w-5 h-5" />
+            <Search className="w-5 h-5 text-gray-700 dark:text-foreground" />
           </motion.button>
 
           <motion.div 
             initial={{ opacity: 0, scale: 0.8 }}
             animate={{ opacity: 1, scale: 1 }}
-            className="px-3 py-1.5 rounded-full bg-background/85 backdrop-blur-md text-sm font-semibold border border-border/40 shadow-lg"
+            className="px-3 py-1.5 rounded-full bg-white dark:bg-background/85 backdrop-blur-md text-sm font-semibold border-2 border-gray-200 dark:border-border/40 shadow-lg"
           >
             {recipeIndices[selectedMeal] + 1} / {totalRecipes}
           </motion.div>
