@@ -161,28 +161,74 @@ export function MealBuilderContent({
     if (!selectedMeal) return []
 
     const all = recipesByMealType[selectedMeal] || []
-    const q = debouncedQuery.toLowerCase()
+    const q = debouncedQuery.trim()
 
     if (!q) return all.slice(0, 20)
 
+    // Normalize text for better matching (remove diacritics, handle both Arabic and English)
+    const normalize = (text: string): string => {
+      if (!text) return ''
+      // Remove Arabic diacritics
+      return text
+        .replace(/ً|ٌ|ٍ|َ|ُ|ِ|ّ|ْ/g, '') // Remove Arabic diacritics
+        .toLowerCase()
+        .trim()
+    }
+
+    // Check if text contains Arabic characters
+    const hasArabic = (text: string): boolean => /[\u0600-\u06FF]/.test(text)
+
     const score = (recipe: ScaledRecipeWithIngredients) => {
       let s = 0
-      const name = recipe.name?.toLowerCase() || ''
-      if (name === q) s += 50
-      if (name.startsWith(q)) s += 25
-      if (name.includes(q)) s += 15
+      const qNorm = normalize(q)
+      const qLower = q.toLowerCase()
 
+      // Score recipe name (English)
+      const recipeName = recipe.name?.toLowerCase() || ''
+      const recipeNameNorm = normalize(recipe.name || '')
+      if (recipeName === qLower) s += 50
+      if (recipeNameNorm === qNorm) s += 50
+      if (recipeName.startsWith(qLower)) s += 25
+      if (recipeNameNorm.startsWith(qNorm)) s += 25
+      if (recipeName.includes(qLower)) s += 15
+      if (recipeNameNorm.includes(qNorm)) s += 15
+
+      // Score tags
       const tags = (recipe.tags || []).join(' ').toLowerCase()
-      if (tags.includes(q)) s += 6
+      const tagsNorm = normalize(tags)
+      if (tags.includes(qLower)) s += 6
+      if (tagsNorm.includes(qNorm)) s += 6
 
+      // Score cuisine
       const cuisine = (recipe.cuisine || '').toLowerCase()
-      if (cuisine.includes(q)) s += 4
+      const cuisineNorm = normalize(cuisine)
+      if (cuisine.includes(qLower)) s += 4
+      if (cuisineNorm.includes(qNorm)) s += 4
 
-      const ingredientsText = (recipe.recipe_ingredients || [])
-        .map(i => `${i.raw_name} ${i.ingredient?.name || ''} ${i.ingredient?.name_ar || ''}`)
-        .join(' ')
-        .toLowerCase()
-      if (ingredientsText.includes(q)) s += 3
+      // Score ingredients (highest priority after recipe name)
+      const ingredientMatches = (recipe.recipe_ingredients || []).filter(i => {
+        const rawName = i.raw_name?.toLowerCase() || ''
+        const rawNameNorm = normalize(i.raw_name || '')
+        const ingredientName = i.ingredient?.name?.toLowerCase() || ''
+        const ingredientNameNorm = normalize(i.ingredient?.name || '')
+        const ingredientNameAr = i.ingredient?.name_ar?.toLowerCase() || ''
+        const ingredientNameArNorm = normalize(i.ingredient?.name_ar || '')
+
+        // Check for exact or partial matches in ingredient names (English and Arabic)
+        return (
+          rawName.includes(qLower) ||
+          rawNameNorm.includes(qNorm) ||
+          ingredientName.includes(qLower) ||
+          ingredientNameNorm.includes(qNorm) ||
+          ingredientNameAr.includes(qLower) ||
+          ingredientNameArNorm.includes(qNorm)
+        )
+      })
+
+      // Boost score based on number of matching ingredients
+      if (ingredientMatches.length > 0) {
+        s += ingredientMatches.length * 5 // 5 points per matching ingredient
+      }
 
       return s
     }
@@ -196,10 +242,34 @@ export function MealBuilderContent({
   }, [debouncedQuery, recipesByMealType, selectedMeal])
 
   const renderHighlighted = (text: string, query: string) => {
-    if (!query) return text
+    if (!query || !text) return text
+
+    // Normalize text for matching (remove diacritics)
+    const normalize = (str: string): string => {
+      return str
+        .replace(/ً|ٌ|ٍ|َ|ُ|ِ|ّ|ْ/g, '') // Remove Arabic diacritics
+        .toLowerCase()
+        .trim()
+    }
+
     const lower = text.toLowerCase()
     const q = query.toLowerCase()
-    const idx = lower.indexOf(q)
+    const qNorm = normalize(query)
+    const textNorm = normalize(text)
+
+    // Try exact match first
+    let idx = lower.indexOf(q)
+
+    // If no match, try with normalized text (handles Arabic diacritics)
+    if (idx < 0 && (textNorm !== lower || qNorm !== q)) {
+      const normIdx = textNorm.indexOf(qNorm)
+      // If normalized match found, highlight the corresponding part in original text
+      // This is approximate - we highlight based on character position
+      if (normIdx >= 0) {
+        idx = Math.min(normIdx, text.length - query.length)
+      }
+    }
+
     if (idx < 0) return text
 
     const before = text.slice(0, idx)
@@ -209,7 +279,7 @@ export function MealBuilderContent({
     return (
       <>
         {before}
-        <span className="rounded bg-primary/15 px-1 text-primary">{match}</span>
+        <span className="rounded bg-primary/15 px-1 text-primary font-medium">{match}</span>
         {after}
       </>
     )
