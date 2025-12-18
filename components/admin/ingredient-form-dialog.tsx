@@ -25,13 +25,18 @@ import {
 } from '@/components/ui/select'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Separator } from '@/components/ui/separator'
+import { Combobox, type ComboboxOption } from '@/components/ui/combobox'
 import {
   ingredientSchema,
   type IngredientFormData,
-  FOOD_GROUPS,
   SERVING_UNITS,
 } from '@/lib/validators/ingredients'
-import { createIngredient, updateIngredient } from '@/lib/actions/ingredients'
+import {
+  createIngredient,
+  updateIngredient,
+  getFoodGroups,
+  getFoodGroupsWithSubgroups,
+} from '@/lib/actions/ingredients'
 import type { IngredientMacros, IngredientMicros } from '@/lib/types/nutri'
 
 interface Ingredient {
@@ -66,6 +71,9 @@ export function IngredientFormDialog({
 }: IngredientFormDialogProps) {
   const router = useRouter()
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [foodGroupOptions, setFoodGroupOptions] = useState<ComboboxOption[]>([])
+  const [subgroupsByFoodGroup, setSubgroupsByFoodGroup] = useState<Record<string, string[]>>({})
+  const [isLoadingOptions, setIsLoadingOptions] = useState(false)
 
   const {
     register,
@@ -92,6 +100,27 @@ export function IngredientFormDialog({
       source: null,
     },
   })
+
+  // Load food groups and subgroups mapping from database when dialog opens
+  useEffect(() => {
+    if (open && foodGroupOptions.length === 0 && Object.keys(subgroupsByFoodGroup).length === 0) {
+      setIsLoadingOptions(true)
+      Promise.all([getFoodGroups(), getFoodGroupsWithSubgroups()])
+        .then(([foodGroups, subgroupsMap]) => {
+          setFoodGroupOptions(
+            foodGroups.map((group) => ({ value: group, label: group }))
+          )
+          setSubgroupsByFoodGroup(subgroupsMap)
+        })
+        .catch((error) => {
+          console.error('Failed to load options:', error)
+          toast.error('Failed to load food groups and subgroups')
+        })
+        .finally(() => {
+          setIsLoadingOptions(false)
+        })
+    }
+  }, [open, foodGroupOptions.length, subgroupsByFoodGroup])
 
   // Reset form when ingredient changes (for edit mode)
   useEffect(() => {
@@ -132,6 +161,22 @@ export function IngredientFormDialog({
 
   const servingUnit = watch('serving_unit')
   const foodGroup = watch('food_group')
+  const subgroup = watch('subgroup')
+
+  // Get filtered subgroups based on selected food group
+  const availableSubgroups = foodGroup && subgroupsByFoodGroup[foodGroup]
+    ? subgroupsByFoodGroup[foodGroup].map((sg) => ({ value: sg, label: sg }))
+    : []
+
+  // Clear subgroup when food group changes (if the subgroup is not valid for the new food group)
+  useEffect(() => {
+    if (foodGroup && subgroup) {
+      const isValidSubgroup = subgroupsByFoodGroup[foodGroup]?.includes(subgroup)
+      if (!isValidSubgroup) {
+        setValue('subgroup', null)
+      }
+    }
+  }, [foodGroup, subgroup, subgroupsByFoodGroup, setValue])
 
   async function onSubmit(data: IngredientFormData) {
     setIsSubmitting(true)
@@ -218,39 +263,42 @@ export function IngredientFormDialog({
               <div className="grid gap-4 sm:grid-cols-2">
                 <div className="space-y-2">
                   <Label htmlFor="food_group">Food Group</Label>
-                  <Select
-                    value={foodGroup ?? ''}
-                    onValueChange={(value) => setValue('food_group', value || null)}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select food group" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {FOOD_GROUPS.map((group) => (
-                        <SelectItem key={group} value={group}>
-                          {group}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  <Combobox
+                    options={foodGroupOptions}
+                    value={foodGroup ?? null}
+                    onValueChange={(value) => setValue('food_group', value)}
+                    placeholder="Select food group"
+                    searchPlaceholder="Search food groups..."
+                    emptyText="No food group found."
+                    disabled={isLoadingOptions}
+                  />
                 </div>
 
                 <div className="space-y-2">
-                  <Label htmlFor="category">Category</Label>
-                  <Input
-                    id="category"
-                    placeholder="e.g., Poultry"
-                    {...register('category')}
+                  <Label htmlFor="subgroup">Subgroup</Label>
+                  <Combobox
+                    options={availableSubgroups}
+                    value={subgroup ?? null}
+                    onValueChange={(value) => setValue('subgroup', value)}
+                    placeholder={foodGroup ? "Select subgroup" : "Select food group first"}
+                    searchPlaceholder="Search subgroups..."
+                    emptyText={foodGroup ? "No subgroup found for this food group." : "Select a food group first."}
+                    disabled={isLoadingOptions || !foodGroup}
                   />
+                  {foodGroup && availableSubgroups.length === 0 && (
+                    <p className="text-xs text-muted-foreground">
+                      No subgroups available for this food group.
+                    </p>
+                  )}
                 </div>
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="subgroup">Subgroup</Label>
+                <Label htmlFor="category">Category</Label>
                 <Input
-                  id="subgroup"
-                  placeholder="e.g., Lean meats"
-                  {...register('subgroup')}
+                  id="category"
+                  placeholder="e.g., Poultry"
+                  {...register('category')}
                 />
               </div>
 

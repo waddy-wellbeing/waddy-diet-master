@@ -220,3 +220,62 @@ export async function getFoodGroups() {
   const uniqueGroups = [...new Set(data.map((d) => d.food_group).filter(Boolean))]
   return uniqueGroups as string[]
 }
+
+/**
+ * Get unique subgroups for dropdown
+ */
+export async function getSubgroups() {
+  const supabase = await createClient()
+  
+  const { data, error } = await supabase
+    .from('ingredients')
+    .select('subgroup')
+    .not('subgroup', 'is', null)
+    .order('subgroup')
+
+  if (error) {
+    return []
+  }
+
+  // Get unique values
+  const uniqueSubgroups = [...new Set(data.map((d) => d.subgroup).filter(Boolean))]
+  return uniqueSubgroups as string[]
+}
+
+/**
+ * Get food groups with their associated subgroups
+ * Returns a map of food_group -> subgroup[]
+ */
+export async function getFoodGroupsWithSubgroups() {
+  const supabase = await createClient()
+  
+  const { data, error } = await supabase
+    .from('ingredients')
+    .select('food_group, subgroup')
+    .not('food_group', 'is', null)
+    .not('subgroup', 'is', null)
+    .order('food_group')
+    .order('subgroup')
+
+  if (error) {
+    return {}
+  }
+
+  // Group subgroups by food_group
+  const groupMap: Record<string, string[]> = {}
+  
+  for (const item of data) {
+    if (!item.food_group || !item.subgroup) continue
+    
+    if (!groupMap[item.food_group]) {
+      groupMap[item.food_group] = []
+    }
+    
+    // Add subgroup if not already present
+    if (!groupMap[item.food_group].includes(item.subgroup)) {
+      groupMap[item.food_group].push(item.subgroup)
+    }
+  }
+
+  return groupMap
+}
