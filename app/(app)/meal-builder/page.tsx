@@ -121,9 +121,9 @@ export default async function MealBuilderPage({ searchParams }: PageProps) {
   // Meal type mapping
   const mealTypeMapping: Record<string, string[]> = {
     breakfast: ['breakfast', 'smoothies'],
-    lunch: ['lunch', 'one pot'],
-    dinner: ['lunch', 'one pot', 'breakfast'],
-    snacks: ['snacks & sweetes', 'smoothies'],
+    lunch: ['lunch', 'one pot', 'dinner', 'side dishes'],
+    dinner: ['dinner', 'lunch', 'one pot', 'side dishes', 'breakfast'],
+    snacks: ['snack', 'snacks & sweetes', 'smoothies'],
   }
 
   const minScale = 0.5

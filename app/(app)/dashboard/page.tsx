@@ -122,12 +122,12 @@ export default async function DashboardPage() {
   }
   
   // Meal type mapping (same as test console)
-  // Database meal_types: breakfast, lunch, snacks & sweetes, smoothies, one pot, side dishes
+  // Database meal_types: breakfast, lunch, dinner, snacks & sweetes, snack, smoothies, one pot, side dishes
   const mealTypeMapping: Record<string, string[]> = {
     breakfast: ['breakfast', 'smoothies'],
-    lunch: ['lunch', 'one pot'],
-    dinner: ['lunch', 'one pot', 'breakfast'],  // Dinner reuses lunch/one pot/breakfast recipes
-    snacks: ['snacks & sweetes', 'smoothies'],
+    lunch: ['lunch', 'one pot', 'dinner', 'side dishes'],  // Lunch includes one pot, dinner recipes, and sides
+    dinner: ['dinner', 'lunch', 'one pot', 'side dishes', 'breakfast'],  // Dinner uses dinner recipes first, then lunch/one pot
+    snacks: ['snack', 'snacks & sweetes', 'smoothies'],  // Include both singular and plural forms
   }
   
   // Get scaling limits from system settings or use defaults

@@ -124,17 +124,17 @@ export async function getRecipesForMeal(options: {
   const { mealType, targetCalories, deviationTolerance = 0.25, dietaryFilters, limit = 20 } = options
 
   // Map meal slot names to recipe meal_type values in the database
-  // Database meal_types: breakfast, lunch, snacks & sweetes, smoothies, one pot, side dishes
+  // Database meal_types: breakfast, lunch, dinner, snacks & sweetes, snack, smoothies, one pot, side dishes
   // User-facing meal slots: breakfast, lunch, dinner, snacks
   // ORDER MATTERS: First meal type in array gets priority in sorting
   const mealTypeMapping: Record<string, string[]> = {
     breakfast: ['breakfast', 'smoothies'],           // Breakfast first, then smoothies
-    lunch: ['lunch', 'one pot'],
-    dinner: ['lunch', 'one pot', 'breakfast'],       // Dinner can use lunch, one pot, and breakfast recipes
-    snack: ['snacks & sweetes', 'smoothies'],
-    snack_1: ['snacks & sweetes', 'smoothies'],
-    snack_2: ['snacks & sweetes', 'smoothies'],
-    snack_3: ['snacks & sweetes', 'smoothies'],
+    lunch: ['lunch', 'one pot', 'dinner', 'side dishes'],  // Lunch includes one pot, dinner recipes, and sides
+    dinner: ['dinner', 'lunch', 'one pot', 'side dishes', 'breakfast'],  // Dinner uses dinner recipes first, then lunch/one pot
+    snack: ['snack', 'snacks & sweetes', 'smoothies'],  // Include both singular and plural forms
+    snack_1: ['snack', 'snacks & sweetes', 'smoothies'],
+    snack_2: ['snack', 'snacks & sweetes', 'smoothies'],
+    snack_3: ['snack', 'snacks & sweetes', 'smoothies'],
   }
 
   const targetMealTypes = mealTypeMapping[mealType] || [mealType]
