@@ -112,13 +112,24 @@ export default async function DashboardPage() {
     }
   }
   
-  // Get user's daily calorie target and calculate meal targets
+  // Get user's daily targets and calculate meal targets
   const dailyCalories = profile.targets?.daily_calories || 2000
+  const dailyProtein = profile.targets?.protein_g || 150
+  const dailyCarbs = profile.targets?.carbs_g || 250
+  const dailyFat = profile.targets?.fat_g || 65
+  
   const mealTargets = {
     breakfast: Math.round(dailyCalories * 0.25),
     lunch: Math.round(dailyCalories * 0.35),
     dinner: Math.round(dailyCalories * 0.30),
     snacks: Math.round(dailyCalories * 0.10),
+  }
+  
+  // Calculate target macro percentages for filtering recipes
+  const targetMacroPercentages = {
+    protein_pct: Math.round((dailyProtein * 4 / dailyCalories) * 100),
+    carbs_pct: Math.round((dailyCarbs * 4 / dailyCalories) * 100),
+    fat_pct: Math.round((dailyFat * 9 / dailyCalories) * 100),
   }
   
   // Meal type mapping (same as test console)
@@ -139,6 +150,7 @@ export default async function DashboardPage() {
     scale_factor: number
     scaled_calories: number
     original_calories: number
+    macro_similarity_score?: number // Score 0-100 indicating how well recipe matches target macros
   }
   
   const recipesByMealType: Record<string, ScaledRecipe[]> = {
@@ -173,16 +185,46 @@ export default async function DashboardPage() {
         // Check if scaling is within acceptable limits
         if (scaleFactor < minScale || scaleFactor > maxScale) continue
         
+        // Calculate recipe's macro percentages
+        const recipeProtein = recipe.nutrition_per_serving?.protein_g || 0
+        const recipeCarbs = recipe.nutrition_per_serving?.carbs_g || 0
+        const recipeFat = recipe.nutrition_per_serving?.fat_g || 0
+        const recipeMacroPercentages = {
+          protein_pct: Math.round((recipeProtein * 4 / baseCalories) * 100),
+          carbs_pct: Math.round((recipeCarbs * 4 / baseCalories) * 100),
+          fat_pct: Math.round((recipeFat * 9 / baseCalories) * 100),
+        }
+        
+        // Calculate macro similarity score (0-100, higher is better)
+        // Prioritize protein (50%), then carbs (30%), then fat (20%)
+        const proteinDiff = Math.abs(targetMacroPercentages.protein_pct - recipeMacroPercentages.protein_pct)
+        const carbsDiff = Math.abs(targetMacroPercentages.carbs_pct - recipeMacroPercentages.carbs_pct)
+        const fatDiff = Math.abs(targetMacroPercentages.fat_pct - recipeMacroPercentages.fat_pct)
+        
+        const proteinScore = Math.max(0, 100 - (proteinDiff * 1.5))
+        const carbsScore = Math.max(0, 100 - (carbsDiff * 1.5))
+        const fatScore = Math.max(0, 100 - (fatDiff * 1.5))
+        
+        const macroSimilarityScore = Math.round(
+          (proteinScore * 0.5) + (carbsScore * 0.3) + (fatScore * 0.2)
+        )
+        
         suitableRecipes.push({
           ...(recipe as RecipeRecord),
           scale_factor: Math.round(scaleFactor * 100) / 100,
           scaled_calories: targetCalories, // Always equals target after scaling
           original_calories: baseCalories,
+          macro_similarity_score: macroSimilarityScore, // Add score for sorting
         })
       }
       
-      // Sort by: 1) Primary meal type first, 2) Scale factor closest to 1.0
+      // Sort by: 1) Macro similarity (descending), 2) Primary meal type, 3) Scale factor closest to 1.0
       suitableRecipes.sort((a, b) => {
+        // First priority: Macro similarity (higher is better)
+        const macroScoreDiff = (b.macro_similarity_score || 0) - (a.macro_similarity_score || 0)
+        if (Math.abs(macroScoreDiff) > 5) return macroScoreDiff // Only prioritize if difference > 5 points
+        
+        // Second priority: Primary meal type
         const aPrimary = a.meal_type?.some(t => t.toLowerCase() === primaryMealType) ? 1 : 0
         const bPrimary = b.meal_type?.some(t => t.toLowerCase() === primaryMealType) ? 1 : 0
         if (bPrimary !== aPrimary) return bPrimary - aPrimary

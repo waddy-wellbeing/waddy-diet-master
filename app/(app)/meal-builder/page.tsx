@@ -14,6 +14,7 @@ export interface ScaledRecipeWithIngredients extends RecipeRecord {
   scale_factor: number
   scaled_calories: number
   original_calories: number
+  macro_similarity_score?: number
   recipe_ingredients: {
     id: string
     ingredient_id: string | null
@@ -129,6 +130,13 @@ export default async function MealBuilderPage({ searchParams }: PageProps) {
   const minScale = 0.5
   const maxScale = 2.0
 
+  // Calculate target macro percentages for filtering recipes
+  const targetMacroPercentages = {
+    protein_pct: Math.round((dailyProtein * 4 / dailyCalories) * 100),
+    carbs_pct: Math.round((dailyCarbs * 4 / dailyCalories) * 100),
+    fat_pct: Math.round((dailyFat * 9 / dailyCalories) * 100),
+  }
+
   // Process recipes for each meal type
   const recipesByMealType: Record<string, ScaledRecipeWithIngredients[]> = {
     breakfast: [],
@@ -159,6 +167,29 @@ export default async function MealBuilderPage({ searchParams }: PageProps) {
         const scaleFactor = targetCalories / baseCalories
         if (scaleFactor < minScale || scaleFactor > maxScale) continue
 
+        // Calculate recipe's macro percentages
+        const recipeProtein = recipe.nutrition_per_serving?.protein_g || 0
+        const recipeCarbs = recipe.nutrition_per_serving?.carbs_g || 0
+        const recipeFat = recipe.nutrition_per_serving?.fat_g || 0
+        const recipeMacroPercentages = {
+          protein_pct: Math.round((recipeProtein * 4 / baseCalories) * 100),
+          carbs_pct: Math.round((recipeCarbs * 4 / baseCalories) * 100),
+          fat_pct: Math.round((recipeFat * 9 / baseCalories) * 100),
+        }
+        
+        // Calculate macro similarity score (0-100, higher is better)
+        const proteinDiff = Math.abs(targetMacroPercentages.protein_pct - recipeMacroPercentages.protein_pct)
+        const carbsDiff = Math.abs(targetMacroPercentages.carbs_pct - recipeMacroPercentages.carbs_pct)
+        const fatDiff = Math.abs(targetMacroPercentages.fat_pct - recipeMacroPercentages.fat_pct)
+        
+        const proteinScore = Math.max(0, 100 - (proteinDiff * 1.5))
+        const carbsScore = Math.max(0, 100 - (carbsDiff * 1.5))
+        const fatScore = Math.max(0, 100 - (fatDiff * 1.5))
+        
+        const macroSimilarityScore = Math.round(
+          (proteinScore * 0.5) + (carbsScore * 0.3) + (fatScore * 0.2)
+        )
+
         // Scale ingredients
         const scaledIngredients = (recipe.recipe_ingredients || []).map((ri: any) => ({
           id: ri.id,
@@ -186,17 +217,24 @@ export default async function MealBuilderPage({ searchParams }: PageProps) {
           scale_factor: Math.round(scaleFactor * 100) / 100,
           scaled_calories: targetCalories,
           original_calories: baseCalories,
+          macro_similarity_score: macroSimilarityScore,
           recipe_ingredients: scaledIngredients,
           parsed_instructions: parsedInstructions,
         })
       }
 
-      // Sort by scale factor closest to 1.0
+      // Sort by: 1) Macro similarity (descending), 2) Primary meal type, 3) Scale factor closest to 1.0
       suitableRecipes.sort((a, b) => {
+        // First priority: Macro similarity (higher is better)
+        const macroScoreDiff = (b.macro_similarity_score || 0) - (a.macro_similarity_score || 0)
+        if (Math.abs(macroScoreDiff) > 5) return macroScoreDiff
+        
+        // Second priority: Primary meal type
         const aPrimary = a.meal_type?.some(t => t.toLowerCase() === primaryMealType) ? 1 : 0
         const bPrimary = b.meal_type?.some(t => t.toLowerCase() === primaryMealType) ? 1 : 0
         if (bPrimary !== aPrimary) return bPrimary - aPrimary
 
+        // Third priority: Scale factor closest to 1.0
         const aDistFromOne = Math.abs(a.scale_factor - 1)
         const bDistFromOne = Math.abs(b.scale_factor - 1)
         return aDistFromOne - bDistFromOne

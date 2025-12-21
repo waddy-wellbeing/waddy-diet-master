@@ -4,7 +4,9 @@ import { useState, useEffect, useCallback } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { format, startOfWeek, endOfWeek, isToday as isDateToday } from 'date-fns'
-import { Settings, Bell, LogOut, User } from 'lucide-react'
+import { Settings, Bell, LogOut, User, Loader2 } from 'lucide-react'
+import { toast } from 'sonner'
+import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import {
   DropdownMenu,
@@ -18,7 +20,6 @@ import {
   MealCard,
   QuickStats,
 } from '@/components/dashboard/dashboard-components'
-import { toast } from 'sonner'
 import { useAnalytics } from '@/components/analytics/analytics-provider'
 import { buildFeatureUseEvent, buildButtonClickEvent, buildMealLogError, getCurrentPagePath } from '@/lib/utils/analytics'
 import { createClient } from '@/lib/supabase/client'
@@ -32,6 +33,7 @@ interface ScaledRecipe extends RecipeRecord {
   scale_factor: number
   scaled_calories: number
   original_calories: number
+  macro_similarity_score?: number
 }
 
 interface DashboardContentProps {
@@ -617,6 +619,72 @@ export function DashboardContent({
     }
   }
 
+  // Shuffle all meals to find better macro matches (Admin only)
+  const handleShuffleMeals = async () => {
+    if (!isSelectedToday) return
+    
+    setLoadingMeal('shuffle')
+    try {
+      const { saveMealToPlan } = await import('@/lib/actions/daily-plans')
+      const dateStr = format(selectedDate, 'yyyy-MM-dd')
+      
+      // For each meal type, try to find the next available recipe with better macro match
+      const updates = []
+      for (const mealType of ['breakfast', 'lunch', 'dinner', 'snacks'] as const) {
+        const recipes = recipesByMealType[mealType] || []
+        if (recipes.length === 0) continue
+        
+        const currentIndex = selectedIndices[mealType] || 0
+        // Try the next recipe, or wrap around to start
+        const nextIndex = (currentIndex + 1) % recipes.length
+        const nextRecipe = recipes[nextIndex]
+        
+        if (nextRecipe) {
+          updates.push(
+            saveMealToPlan({
+              date: dateStr,
+              mealType,
+              recipeId: nextRecipe.id,
+              servings: nextRecipe.scale_factor || 1,
+            })
+          )
+          
+          // Update the selected index
+          setSelectedIndices(prev => ({
+            ...prev,
+            [mealType]: nextIndex,
+          }))
+        }
+      }
+      
+      // Execute all updates in parallel
+      await Promise.all(updates)
+      
+      // Refresh data
+      await fetchDayData(selectedDate)
+      await fetchWeekData(selectedDate)
+      
+      // Track shuffle event
+      trackEvent(buildButtonClickEvent('dashboard', 'shuffle_meals', getCurrentPagePath(), {
+        date: dateStr,
+      }))
+      
+      toast.success('Meals shuffled! Check the new suggestions.', {
+        description: 'Selected recipes with better macro matches',
+      })
+    } catch (error) {
+      captureError(buildMealLogError(
+        'shuffle',
+        error instanceof Error ? error.message : 'Unknown error'
+      ))
+      toast.error('Failed to shuffle meals', {
+        description: 'Please try again',
+      })
+    } finally {
+      setLoadingMeal(null)
+    }
+  }
+
   // Calculate weekly average from weekData
   const weekDaysWithData = Object.values(weekData).filter(d => d.consumed > 0)
   const weeklyAverage = weekDaysWithData.length > 0
@@ -675,6 +743,132 @@ export function DashboardContent({
           dailyTarget={dailyCalories}
           showDayProgress={true}
         />
+
+        {/* Debug Panel - Admin/Moderator Only */}
+        {(profile.role === 'admin' || profile.role === 'moderator') && (() => {
+          // Calculate macro quality for each meal
+          const getMacroQuality = (recipe: ScaledRecipe | null) => {
+            if (!recipe?.macro_similarity_score) return { quality: 'unknown', score: 0, color: 'text-muted-foreground' }
+            const score = recipe.macro_similarity_score
+            if (score >= 80) return { quality: '✨ Excellent', score, color: 'text-green-600' }
+            if (score >= 60) return { quality: '✅ Good', score, color: 'text-blue-600' }
+            if (score >= 40) return { quality: '⚠️ Acceptable', score, color: 'text-amber-600' }
+            return { quality: '❌ Poor', score, color: 'text-red-600' }
+          }
+
+          const breakfastQuality = getMacroQuality(meals.find(m => m.name === 'breakfast')?.recipe || null)
+          const lunchQuality = getMacroQuality(meals.find(m => m.name === 'lunch')?.recipe || null)
+          const dinnerQuality = getMacroQuality(meals.find(m => m.name === 'dinner')?.recipe || null)
+          const snacksQuality = getMacroQuality(meals.find(m => m.name === 'snacks')?.recipe || null)
+
+          const averageScore = Math.round(
+            (breakfastQuality.score + lunchQuality.score + dinnerQuality.score + snacksQuality.score) / 4
+          )
+
+          return (
+            <div className="bg-muted/50 border border-border rounded-lg p-4 text-xs space-y-3">
+              <div className="flex items-center justify-between">
+                <div className="font-semibold text-sm flex items-center gap-2">
+                  🐛 Debug Info
+                </div>
+                {isSelectedToday && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={handleShuffleMeals}
+                    disabled={loadingMeal === 'shuffle'}
+                    className="h-7 text-xs"
+                  >
+                    {loadingMeal === 'shuffle' ? (
+                      <>
+                        <Loader2 className="h-3 w-3 mr-1 animate-spin" />
+                        Shuffling...
+                      </>
+                    ) : (
+                      <>
+                        🔀 Shuffle Meals
+                      </>
+                    )}
+                  </Button>
+                )}
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <div className="text-muted-foreground">Consumed (from DB):</div>
+                  <div className="font-mono">
+                    {todayConsumed} cal | {loggedTotals.protein_g || 0}g P | {loggedTotals.carbs_g || 0}g C | {loggedTotals.fat_g || 0}g F
+                  </div>
+                </div>
+                <div>
+                  <div className="text-muted-foreground">Daily Target:</div>
+                  <div className="font-mono">
+                    {dailyCalories} cal | {targets.protein_g || 0}g P | {targets.carbs_g || 0}g C | {targets.fat_g || 0}g F
+                  </div>
+                </div>
+                <div>
+                  <div className="text-muted-foreground">Meals Logged:</div>
+                  <div className="font-mono">{meals.filter(m => m.isLogged).length} / 4</div>
+                </div>
+                <div>
+                  <div className="text-muted-foreground">Calorie Status:</div>
+                  <div className="font-mono">
+                    {Math.abs(todayConsumed - dailyCalories) <= dailyCalories * 0.05 
+                      ? '✅ On Track' 
+                      : `${todayConsumed < dailyCalories ? '⚠️ Under' : '⚠️ Over'} (${Math.round((todayConsumed / dailyCalories) * 100)}%)`
+                    }
+                  </div>
+                </div>
+              </div>
+              
+              {/* Macro Quality Rating */}
+              <div className="pt-2 border-t border-border space-y-1">
+                <div className="text-muted-foreground font-semibold mb-1">Macro Match Quality:</div>
+                <div className="grid grid-cols-2 gap-x-3 gap-y-1 text-[10px]">
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Breakfast:</span>
+                    <span className={cn("font-semibold", breakfastQuality.color)}>
+                      {breakfastQuality.quality} ({breakfastQuality.score})
+                    </span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Lunch:</span>
+                    <span className={cn("font-semibold", lunchQuality.color)}>
+                      {lunchQuality.quality} ({lunchQuality.score})
+                    </span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Dinner:</span>
+                    <span className={cn("font-semibold", dinnerQuality.color)}>
+                      {dinnerQuality.quality} ({dinnerQuality.score})
+                    </span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Snacks:</span>
+                    <span className={cn("font-semibold", snacksQuality.color)}>
+                      {snacksQuality.quality} ({snacksQuality.score})
+                    </span>
+                  </div>
+                  <div className="flex justify-between col-span-2 pt-1 border-t border-border/50">
+                    <span className="text-muted-foreground font-semibold">Average:</span>
+                    <span className={cn(
+                      "font-semibold",
+                      averageScore >= 80 ? "text-green-600" : averageScore >= 60 ? "text-blue-600" : averageScore >= 40 ? "text-amber-600" : "text-red-600"
+                    )}>
+                      {averageScore >= 80 ? '✨ Excellent' : averageScore >= 60 ? '✅ Good' : averageScore >= 40 ? '⚠️ Acceptable' : '❌ Poor'} ({averageScore})
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              <div className="text-[10px] text-muted-foreground pt-2 border-t border-border">
+                Logged Calories: Breakfast {meals.find(m => m.name === 'breakfast')?.consumedCalories || 0} | 
+                Lunch {meals.find(m => m.name === 'lunch')?.consumedCalories || 0} | 
+                Dinner {meals.find(m => m.name === 'dinner')?.consumedCalories || 0} | 
+                Snacks {meals.find(m => m.name === 'snacks')?.consumedCalories || 0}
+              </div>
+            </div>
+          )
+        })()}
 
         {/* Meals Section */}
         <section>

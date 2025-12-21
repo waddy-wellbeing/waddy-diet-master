@@ -1001,6 +1001,16 @@ export function MealBuilderContent({
             const carbsOnTrack = Math.abs(carbsDiff) <= 10
             const allOnTrack = proteinOnTrack && carbsOnTrack
             
+            // Calculate macro quality rating
+            const macroScore = currentRecipe.macro_similarity_score || 0
+            const macroQuality = macroScore >= 80 
+              ? { label: '✨ Excellent', color: 'text-green-600' }
+              : macroScore >= 60 
+                ? { label: '✅ Good', color: 'text-blue-600' }
+                : macroScore >= 40 
+                  ? { label: '⚠️ Acceptable', color: 'text-amber-600' }
+                  : { label: '❌ Poor', color: 'text-red-600' }
+            
             return (
               <motion.div
                 initial={{ opacity: 0, y: 10 }}
@@ -1008,8 +1018,23 @@ export function MealBuilderContent({
                 transition={{ delay: 0.2 }}
                 className="mt-2 p-3 rounded-lg bg-red-500/10 border border-red-500/30"
               >
-                <div className="text-xs space-y-1">
+                <div className="text-xs space-y-2">
                   <div className="font-semibold text-red-600 mb-2">🐛 Debug Info (Admin Only)</div>
+                  
+                  {/* Macro Match Quality */}
+                  <div className="pb-2 border-b border-red-500/30">
+                    <div className="flex items-center justify-between text-[11px]">
+                      <span className="text-muted-foreground font-semibold">Macro Match Quality:</span>
+                      <span className={cn("font-semibold", macroQuality.color)}>
+                        {macroQuality.label} ({macroScore})
+                      </span>
+                    </div>
+                    <div className="text-[9px] text-muted-foreground mt-0.5">
+                      How well this recipe's macros match your daily targets
+                    </div>
+                  </div>
+                  
+                  {/* Target Details */}
                   <div className="grid grid-cols-2 gap-2 text-[10px]">
                     <div>
                       <div className="text-muted-foreground">Target Calories:</div>
@@ -1028,12 +1053,12 @@ export function MealBuilderContent({
                       <div className="font-semibold">{target.fat}g</div>
                     </div>
                     <div className="col-span-2">
-                      <div className="text-muted-foreground">Status:</div>
+                      <div className="text-muted-foreground">Macro Tolerance Status:</div>
                       <div className={cn(
                         "font-semibold",
                         allOnTrack ? "text-green-600" : "text-amber-600"
                       )}>
-                        {allOnTrack ? '✓ On Track' : '⚠ Off Track'}
+                        {allOnTrack ? '✓ Within Tolerance' : '⚠ Outside Tolerance'} (±5g P, ±10g C)
                       </div>
                     </div>
                   </div>
