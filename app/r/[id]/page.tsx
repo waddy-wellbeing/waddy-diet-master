@@ -8,6 +8,7 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { ShareRecipeButton } from '@/components/recipes/share-recipe-button'
+import { getSiteUrl, toAbsoluteUrl } from '@/lib/utils/site-url'
 import type { RecipeRecord } from '@/lib/types/nutri'
 
 type PublicRecipe = RecipeRecord & {
@@ -101,13 +102,35 @@ export async function generateMetadata(props: {
   const title = `${recipe.name} | Waddy Diet Master`
   const description = recipe.description || 'View this recipe and start your personalized nutrition plan.'
 
+  const url = new URL(`/r/${id}`, getSiteUrl()).toString()
+
+  const image = recipe.image_url ? toAbsoluteUrl(recipe.image_url) : null
+
   return {
     title,
     description,
+    alternates: {
+      canonical: url,
+    },
     openGraph: {
+      type: 'website',
+      url,
       title,
       description,
-      images: recipe.image_url ? [{ url: recipe.image_url }] : [],
+      images: image
+        ? [
+            {
+              url: image,
+              alt: recipe.name,
+            },
+          ]
+        : [],
+    },
+    twitter: {
+      card: image ? 'summary_large_image' : 'summary',
+      title,
+      description,
+      images: image ? [image] : [],
     },
   }
 }

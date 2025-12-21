@@ -4,6 +4,7 @@ import { Toaster } from "sonner";
 import { AnalyticsProvider } from "@/components/analytics/analytics-provider";
 import { AnalyticsErrorBoundary } from "@/components/analytics/error-boundary";
 import { FloatingWidget } from "@/components/floating-widget";
+import { getSiteUrl } from "@/lib/utils/site-url";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -23,6 +24,7 @@ const notoArabic = Noto_Sans_Arabic({
 });
 
 export const metadata: Metadata = {
+  metadataBase: new URL(getSiteUrl()),
   title: "Waddy Diet Master - Your Nutrition Coach",
   description: "Master your diet with personalized meal plans and nutrition tracking",
 };
