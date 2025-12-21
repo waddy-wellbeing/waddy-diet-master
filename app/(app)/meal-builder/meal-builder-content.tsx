@@ -27,6 +27,7 @@ import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from '@/components/ui/sheet'
+import { ShareRecipeButton } from '@/components/recipes/share-recipe-button'
 import { cn } from '@/lib/utils'
 import { getUserIngredientSwaps, type IngredientSwapOption } from '@/lib/actions/recipes'
 import { saveMealToPlan } from '@/lib/actions/daily-plans'
@@ -177,9 +178,6 @@ export function MealBuilderContent({
         .toLowerCase()
         .trim()
     }
-
-    // Check if text contains Arabic characters
-    const hasArabic = (text: string): boolean => /[\u0600-\u06FF]/.test(text)
 
     const score = (recipe: ScaledRecipeWithIngredients) => {
       let s = 0
@@ -833,8 +831,16 @@ export function MealBuilderContent({
           <ChevronLeft className="w-5 h-5 text-gray-700 dark:text-foreground" />
         </motion.button>
 
-        {/* Recipe counter + search - Enhanced styling */}
+        {/* Recipe counter + search + share - Enhanced styling */}
         <div className="absolute top-4 right-4 flex items-center gap-2 z-10">
+          <ShareRecipeButton
+            recipeId={currentRecipe.id}
+            recipeName={currentRecipe.name}
+            variant="secondary"
+            size="icon"
+            className="w-11 h-11 rounded-full bg-white dark:bg-background backdrop-blur-md hover:bg-gray-100 dark:hover:bg-background/90 flex items-center justify-center border-2 border-gray-200 dark:border-border/40 shadow-lg"
+          />
+
           <motion.button
             type="button"
             initial={{ opacity: 0, scale: 0.8 }}
@@ -1030,7 +1036,7 @@ export function MealBuilderContent({
                       </span>
                     </div>
                     <div className="text-[9px] text-muted-foreground mt-0.5">
-                      How well this recipe's macros match your daily targets
+                      How well this recipe&apos;s macros match your daily targets
                     </div>
                   </div>
                   

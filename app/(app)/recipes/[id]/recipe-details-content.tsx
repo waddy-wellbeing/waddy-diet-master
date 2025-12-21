@@ -22,6 +22,7 @@ import {
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
+import { ShareRecipeButton } from '@/components/recipes/share-recipe-button'
 import { 
   getUserIngredientSwaps, 
   type UserRecipeDetails, 
@@ -112,15 +113,21 @@ export function RecipeDetailsContent({ recipe, mealType }: RecipeDetailsContentP
           <ArrowLeft className="w-5 h-5" />
         </Link>
 
-        {/* Meal type badge */}
-        {mealType && (
-          <Badge 
-            variant="secondary" 
-            className="absolute top-4 right-4 bg-background/80 backdrop-blur-sm"
-          >
-            {mealType}
-          </Badge>
-        )}
+        {/* Top-right actions */}
+        <div className="absolute top-4 right-4 flex items-center gap-2">
+          {mealType && (
+            <Badge variant="secondary" className="bg-background/80 backdrop-blur-sm">
+              {mealType}
+            </Badge>
+          )}
+          <ShareRecipeButton
+            recipeId={recipe.id}
+            recipeName={recipe.name}
+            variant="secondary"
+            size="icon"
+            className="bg-background/80 backdrop-blur-sm"
+          />
+        </div>
       </div>
 
       {/* Content */}
