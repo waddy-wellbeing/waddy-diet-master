@@ -215,6 +215,7 @@ export default async function MealBuilderPage({ searchParams }: PageProps) {
       mealTargets={mealTargets}
       recipesByMealType={recipesByMealType}
       userId={user.id}
+      userRole={profile?.role || 'user'}
       initialMeal={selectedMeal as 'breakfast' | 'lunch' | 'dinner' | 'snacks' | null}
       todaysPlan={todaysPlan?.plan}
     />

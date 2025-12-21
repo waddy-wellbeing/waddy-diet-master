@@ -39,6 +39,7 @@ interface MealBuilderContentProps {
   mealTargets: Record<MealType, { calories: number; protein: number; carbs: number; fat: number }>
   recipesByMealType: Record<MealType, ScaledRecipeWithIngredients[]>
   userId: string
+  userRole?: string
   initialMeal?: MealType | null
   todaysPlan?: DailyPlan | null
 }
@@ -55,6 +56,7 @@ export function MealBuilderContent({
   recipesByMealType,
   initialMeal = null,
   todaysPlan,
+  userRole = 'user',
 }: MealBuilderContentProps) {
   const router = useRouter()
 
@@ -137,6 +139,7 @@ export function MealBuilderContent({
   )
   const [swipeX, setSwipeX] = useState(0)
   const [showMacroLabels, setShowMacroLabels] = useState(false)
+  const [showDebugInfo, setShowDebugInfo] = useState(false)
   const [saving, setSaving] = useState(false)
   const [swapPaginationPage, setSwapPaginationPage] = useState<Record<string, number>>({})
 
@@ -974,7 +977,70 @@ export function MealBuilderContent({
             >
               <Info className="w-4 h-4 text-muted-foreground" />
             </motion.button>
+            
+            {/* Admin Debug Button */}
+            {(userRole === 'admin' || userRole === 'moderator') && (
+              <motion.button
+                whileHover={{ scale: 1.1 }}
+                whileTap={{ scale: 0.95 }}
+                onClick={() => setShowDebugInfo(!showDebugInfo)}
+                className="ml-2 p-2 rounded-full bg-background/70 backdrop-blur-md hover:bg-background border border-border/30 transition-colors shrink-0"
+                title="Toggle Debug Info"
+              >
+                <span className="text-xs">🐛</span>
+              </motion.button>
+            )}
           </motion.div>
+          
+          {/* Debug Info (Admin Only) */}
+          {showDebugInfo && (userRole === 'admin' || userRole === 'moderator') && (() => {
+            const target = mealTargets[selectedMeal]
+            const proteinDiff = scaledProtein - target.protein
+            const carbsDiff = scaledCarbs - target.carbs
+            const proteinOnTrack = Math.abs(proteinDiff) <= 5
+            const carbsOnTrack = Math.abs(carbsDiff) <= 10
+            const allOnTrack = proteinOnTrack && carbsOnTrack
+            
+            return (
+              <motion.div
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.2 }}
+                className="mt-2 p-3 rounded-lg bg-red-500/10 border border-red-500/30"
+              >
+                <div className="text-xs space-y-1">
+                  <div className="font-semibold text-red-600 mb-2">🐛 Debug Info (Admin Only)</div>
+                  <div className="grid grid-cols-2 gap-2 text-[10px]">
+                    <div>
+                      <div className="text-muted-foreground">Target Calories:</div>
+                      <div className="font-semibold">{target.calories} kcal</div>
+                    </div>
+                    <div>
+                      <div className="text-muted-foreground">Target Protein:</div>
+                      <div className="font-semibold">{target.protein}g ({proteinOnTrack ? '✓' : proteinDiff > 0 ? '+' + proteinDiff : proteinDiff}g)</div>
+                    </div>
+                    <div>
+                      <div className="text-muted-foreground">Target Carbs:</div>
+                      <div className="font-semibold">{target.carbs}g ({carbsOnTrack ? '✓' : carbsDiff > 0 ? '+' + carbsDiff : carbsDiff}g)</div>
+                    </div>
+                    <div>
+                      <div className="text-muted-foreground">Target Fat:</div>
+                      <div className="font-semibold">{target.fat}g</div>
+                    </div>
+                    <div className="col-span-2">
+                      <div className="text-muted-foreground">Status:</div>
+                      <div className={cn(
+                        "font-semibold",
+                        allOnTrack ? "text-green-600" : "text-amber-600"
+                      )}>
+                        {allOnTrack ? '✓ On Track' : '⚠ Off Track'}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </motion.div>
+            )
+          })()}
         </div>
       </motion.div>
 
@@ -1209,10 +1275,13 @@ export function MealBuilderContent({
                                     <div className="space-y-2">
                                       {paginatedSwaps.map((s, idx) => {
                                         const swapMacros = s.macros || { calories: 0, protein_g: 0, carbs_g: 0, fat_g: 0 }
+                                        
+                                        const swapProtein = Math.round((swapMacros.protein_g ?? 0) * 10) / 10
+                                        const proteinSimilar = swapProtein >= 10 // High protein if >= 10g
+                                        
                                         const caloriesDiff = Math.round(swapMacros.calories ?? 0)
-                                        const proteinDiff = Math.round(((swapMacros.protein_g ?? 0)) * 10) / 10
                                         const isHealthier = (swapMacros.calories ?? 0) < 100
-                                        const isHighProtein = (swapMacros.protein_g ?? 0) >= 15
+                                        const isHighProtein = swapProtein >= 15
                                         
                                         return (
                                           <motion.button
@@ -1223,8 +1292,9 @@ export function MealBuilderContent({
                                             className={cn(
                                               "w-full flex items-start gap-3 p-3 rounded-lg transition-all active:scale-95",
                                               "bg-background/60 hover:bg-background border border-border/50",
-                                              isHealthier && "border-green-400/40 hover:bg-green-500/5",
-                                              isHighProtein && !isHealthier && "border-blue-400/40 hover:bg-blue-500/5",
+                                              proteinSimilar && "border-primary/40 hover:bg-primary/5 ring-1 ring-primary/20",
+                                              isHealthier && !proteinSimilar && "border-green-400/40 hover:bg-green-500/5",
+                                              isHighProtein && !isHealthier && !proteinSimilar && "border-blue-400/40 hover:bg-blue-500/5",
                                             )}
                                             onClick={() => handleSelectSwap(ingredient.id, s)}
                                           >
@@ -1233,12 +1303,17 @@ export function MealBuilderContent({
                                                 <span className="font-arabic text-sm font-medium truncate">
                                                   {s.name_ar || s.name}
                                                 </span>
-                                                {isHealthier && (
+                                                {proteinSimilar && (
+                                                  <span className="text-[10px] font-semibold text-primary bg-primary/10 px-1.5 py-0.5 rounded whitespace-nowrap">
+                                                    ⚡ Similar Protein
+                                                  </span>
+                                                )}
+                                                {isHealthier && !proteinSimilar && (
                                                   <span className="text-[10px] font-semibold text-green-600 bg-green-100 px-1.5 py-0.5 rounded whitespace-nowrap">
                                                     💚 Low Cal
                                                   </span>
                                                 )}
-                                                {isHighProtein && !isHealthier && (
+                                                {isHighProtein && !isHealthier && !proteinSimilar && (
                                                   <span className="text-[10px] font-semibold text-blue-600 bg-blue-100 px-1.5 py-0.5 rounded whitespace-nowrap">
                                                     💪 High Protein
                                                   </span>
@@ -1253,11 +1328,14 @@ export function MealBuilderContent({
                                                 )}>
                                                   {caloriesDiff} kcal
                                                 </span>
-                                                {proteinDiff > 0 && (
+                                                {swapProtein > 0 && (
                                                   <>
                                                     <span>•</span>
-                                                    <span className="text-muted-foreground">
-                                                      {proteinDiff}g protein
+                                                    <span className={cn(
+                                                      'font-medium',
+                                                      isHighProtein ? 'text-blue-600' : proteinSimilar ? 'text-primary' : 'text-muted-foreground'
+                                                    )}>
+                                                      P: {swapProtein}g
                                                     </span>
                                                   </>
                                                 )}

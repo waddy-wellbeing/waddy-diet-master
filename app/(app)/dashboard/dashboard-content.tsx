@@ -18,6 +18,7 @@ import {
   MealCard,
   QuickStats,
 } from '@/components/dashboard/dashboard-components'
+import { toast } from 'sonner'
 import { useAnalytics } from '@/components/analytics/analytics-provider'
 import { buildFeatureUseEvent, buildButtonClickEvent, buildMealLogError, getCurrentPagePath } from '@/lib/utils/analytics'
 import { createClient } from '@/lib/supabase/client'
@@ -216,13 +217,31 @@ export function DashboardContent({
     return firstItem?.recipe_name || null
   }
   
+  // Helper to get actual calories from logged meal using the recipe
+  const getLoggedCalories = (mealName: string): number => {
+    const mealLog = log?.[mealName as keyof DailyLog]
+    if (!mealLog?.items?.length) return 0
+    
+    // Get the recipe for this meal to calculate actual calories
+    const recipes = recipesByMealType[mealName as MealName] || []
+    return mealLog.items.reduce((sum, item) => {
+      // Find the recipe by ID
+      const recipe = recipes.find(r => r.id === item.recipe_id)
+      if (!recipe) return sum
+      
+      // Use scaled_calories which already accounts for scale_factor
+      const calories = recipe.scaled_calories || (recipe.nutrition_per_serving?.calories || 0)
+      
+      return sum + (calories * (item.servings || 1))
+    }, 0)
+  }
+
   const meals = [
     {
       name: 'breakfast' as const,
       label: 'Breakfast',
       targetCalories: mealTargets.breakfast,
-      consumedCalories: log?.breakfast?.items?.length ? 
-        log.breakfast.items.reduce((sum, item) => sum + (item.servings || 1) * 100, 0) : 0,
+      consumedCalories: getLoggedCalories('breakfast'),
       isLogged: !!log?.breakfast?.items?.length,
       loggedRecipeName: getLoggedRecipeName(log?.breakfast),
       recipe: getCurrentRecipe('breakfast'),
@@ -234,8 +253,7 @@ export function DashboardContent({
       name: 'lunch' as const,
       label: 'Lunch',
       targetCalories: mealTargets.lunch,
-      consumedCalories: log?.lunch?.items?.length ?
-        log.lunch.items.reduce((sum, item) => sum + (item.servings || 1) * 100, 0) : 0,
+      consumedCalories: getLoggedCalories('lunch'),
       isLogged: !!log?.lunch?.items?.length,
       loggedRecipeName: getLoggedRecipeName(log?.lunch),
       recipe: getCurrentRecipe('lunch'),
@@ -247,8 +265,7 @@ export function DashboardContent({
       name: 'dinner' as const,
       label: 'Dinner',
       targetCalories: mealTargets.dinner,
-      consumedCalories: log?.dinner?.items?.length ?
-        log.dinner.items.reduce((sum, item) => sum + (item.servings || 1) * 100, 0) : 0,
+      consumedCalories: getLoggedCalories('dinner'),
       isLogged: !!log?.dinner?.items?.length,
       loggedRecipeName: getLoggedRecipeName(log?.dinner),
       recipe: getCurrentRecipe('dinner'),
@@ -260,8 +277,7 @@ export function DashboardContent({
       name: 'snacks' as const,
       label: 'Snacks',
       targetCalories: mealTargets.snacks,
-      consumedCalories: log?.snacks?.items?.length ?
-        log.snacks.items.reduce((sum, item) => sum + (item.servings || 1) * 100, 0) : 0,
+      consumedCalories: getLoggedCalories('snacks'),
       isLogged: !!log?.snacks?.items?.length,
       loggedRecipeName: getLoggedRecipeName(log?.snacks),
       recipe: getCurrentRecipe('snacks'),
@@ -503,6 +519,46 @@ export function DashboardContent({
     } else {
       // Previous recipe (wrap around)
       newIdx = currentIdx === 0 ? recipes.length - 1 : currentIdx - 1
+    }
+    
+    // Get old and new recipes for comparison
+    const oldRecipe = recipes[currentIdx]
+    const newRecipe = recipes[newIdx]
+    
+    // Show macro comparison toast
+    if (oldRecipe && newRecipe) {
+      const oldNutrition = oldRecipe.nutrition_per_serving
+      const newNutrition = newRecipe.nutrition_per_serving
+      
+      if (oldNutrition && newNutrition) {
+        const oldProtein = Math.round((oldNutrition.protein_g || 0) * (oldRecipe.scale_factor || 1))
+        const newProtein = Math.round((newNutrition.protein_g || 0) * (newRecipe.scale_factor || 1))
+        const oldCarbs = Math.round((oldNutrition.carbs_g || 0) * (oldRecipe.scale_factor || 1))
+        const newCarbs = Math.round((newNutrition.carbs_g || 0) * (newRecipe.scale_factor || 1))
+        const proteinDiff = newProtein - oldProtein
+        const carbsDiff = newCarbs - oldCarbs
+        
+        const getChangeEmoji = (diff: number) => {
+          if (Math.abs(diff) <= 3) return '✓'
+          return diff > 0 ? '↑' : '↓'
+        }
+        
+        toast.success(
+          <div className="space-y-1">
+            <p className="font-semibold">Recipe Swapped!</p>
+            <p className="text-xs text-muted-foreground">{newRecipe.name}</p>
+            <div className="flex gap-3 text-xs pt-1">
+              <span className={Math.abs(proteinDiff) <= 3 ? 'text-green-600' : ''}>
+                P: {newProtein}g {getChangeEmoji(proteinDiff)}
+              </span>
+              <span className={Math.abs(carbsDiff) <= 3 ? 'text-green-600' : ''}>
+                C: {newCarbs}g {getChangeEmoji(carbsDiff)}
+              </span>
+            </div>
+          </div>,
+          { duration: 3000 }
+        )
+      }
     }
     
     // Update local UI
