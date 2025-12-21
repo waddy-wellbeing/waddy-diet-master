@@ -33,6 +33,7 @@ import {
   Percent,
   Calculator,
   Scale,
+  Target,
 } from 'lucide-react'
 import { updateSystemSetting, createSystemSetting, deleteSystemSetting } from '@/lib/actions/settings'
 import type { SystemSettingRecord } from '@/lib/types/nutri'
@@ -46,7 +47,7 @@ interface SettingsManagerProps {
 const settingMeta: Record<string, { 
   label: string
   icon: React.ElementType
-  category: 'distribution' | 'limits' | 'defaults'
+  category: 'distribution' | 'limits' | 'defaults' | 'macro'
   inputType: 'json' | 'number' | 'percent'
 }> = {
   meal_distribution: {
@@ -90,6 +91,18 @@ const settingMeta: Record<string, {
     icon: Scale,
     category: 'limits',
     inputType: 'json',
+  },
+  macro_similarity_weights: {
+    label: 'Macro Similarity Weights',
+    icon: Target,
+    category: 'macro',
+    inputType: 'json',
+  },
+  min_macro_similarity_threshold: {
+    label: 'Min Macro Similarity',
+    icon: Target,
+    category: 'macro',
+    inputType: 'number',
   },
 }
 
@@ -139,6 +152,7 @@ export function SettingsManager({ initialSettings }: SettingsManagerProps) {
   const distributionSettings = settings.filter(s => settingMeta[s.key]?.category === 'distribution')
   const limitSettings = settings.filter(s => settingMeta[s.key]?.category === 'limits')
   const defaultSettings = settings.filter(s => settingMeta[s.key]?.category === 'defaults')
+  const macroSettings = settings.filter(s => settingMeta[s.key]?.category === 'macro')
   const otherSettings = settings.filter(s => !settingMeta[s.key])
 
   function handleEdit(setting: SystemSettingRecord) {
@@ -423,6 +437,22 @@ export function SettingsManager({ initialSettings }: SettingsManagerProps) {
           </h2>
           <div className="grid gap-4 md:grid-cols-2">
             {defaultSettings.map(renderSettingCard)}
+          </div>
+        </section>
+      )}
+
+      {/* Macro Similarity Settings */}
+      {macroSettings.length > 0 && (
+        <section>
+          <h2 className="text-lg font-semibold mb-3 flex items-center gap-2">
+            <Target className="h-5 w-5" />
+            Macro Comparison
+          </h2>
+          <p className="text-sm text-muted-foreground mb-3">
+            Configure how recipe and ingredient alternatives are scored based on macronutrient similarity
+          </p>
+          <div className="grid gap-4 md:grid-cols-2">
+            {macroSettings.map(renderSettingCard)}
           </div>
         </section>
       )}

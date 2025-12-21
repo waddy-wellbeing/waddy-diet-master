@@ -15,6 +15,9 @@ import {
   Leaf,
   Wheat,
   Milk,
+  TrendingUp,
+  Target,
+  Award,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -27,6 +30,7 @@ interface RecipeOption {
   id: string
   name: string
   meal_type: string[]
+  cuisine?: string | null
   nutrition_per_serving?: { calories?: number }
 }
 
@@ -40,6 +44,8 @@ export default function AlternativesPage() {
   const [alternatives, setAlternatives] = useState<RecipeForMealPlan[] | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [searchQuery, setSearchQuery] = useState('')
+  const [filterMealType, setFilterMealType] = useState<string>('')
+  const [filterCuisine, setFilterCuisine] = useState<string>('')
 
   // Load recipes on mount
   useEffect(() => {
@@ -47,7 +53,7 @@ export default function AlternativesPage() {
       const supabase = createClient()
       const { data } = await supabase
         .from('recipes')
-        .select('id, name, meal_type, nutrition_per_serving')
+        .select('id, name, meal_type, cuisine, nutrition_per_serving')
         .order('name')
         .limit(100)
 
@@ -82,9 +88,16 @@ export default function AlternativesPage() {
     setIsLoading(false)
   }
 
-  const filteredRecipes = recipes.filter(r => 
-    r.name.toLowerCase().includes(searchQuery.toLowerCase())
-  )
+  // Get unique meal types and cuisines for filters
+  const mealTypes = Array.from(new Set(recipes.flatMap(r => r.meal_type || []))).sort()
+  const cuisines = Array.from(new Set(recipes.map(r => r.cuisine).filter(Boolean))).sort() as string[]
+
+  const filteredRecipes = recipes.filter(r => {
+    const matchesSearch = r.name.toLowerCase().includes(searchQuery.toLowerCase())
+    const matchesMealType = !filterMealType || r.meal_type?.includes(filterMealType)
+    const matchesCuisine = !filterCuisine || r.cuisine === filterCuisine
+    return matchesSearch && matchesMealType && matchesCuisine
+  })
 
   const getDietaryBadges = (recipe: RecipeForMealPlan) => {
     const badges = []
@@ -137,6 +150,34 @@ export default function AlternativesPage() {
                   className="pl-9"
                 />
               </div>
+            </div>
+
+            <div className="space-y-2">
+              <Label>Meal Type Filter</Label>
+              <select
+                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                value={filterMealType}
+                onChange={(e) => setFilterMealType(e.target.value)}
+              >
+                <option value="">All Meal Types</option>
+                {mealTypes.map(type => (
+                  <option key={type} value={type}>{type}</option>
+                ))}
+              </select>
+            </div>
+
+            <div className="space-y-2">
+              <Label>Cuisine Filter</Label>
+              <select
+                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                value={filterCuisine}
+                onChange={(e) => setFilterCuisine(e.target.value)}
+              >
+                <option value="">All Cuisines</option>
+                {cuisines.map(cuisine => (
+                  <option key={cuisine} value={cuisine}>{cuisine}</option>
+                ))}
+              </select>
             </div>
 
             <div className="space-y-2">
@@ -264,6 +305,30 @@ export default function AlternativesPage() {
                         </span>
                       ))}
                     </div>
+                    {/* Original Recipe Macros */}
+                    {originalRecipe.macro_profile && (
+                      <div className="flex items-center gap-3 mt-3 pt-3 border-t">
+                        <span className="text-xs text-muted-foreground font-medium">Macros:</span>
+                        <div className="flex gap-3 text-xs">
+                          <span className="text-blue-600 font-medium">
+                            P: {originalRecipe.macro_profile.protein_pct.toFixed(0)}%
+                          </span>
+                          <span className="text-amber-600 font-medium">
+                            C: {originalRecipe.macro_profile.carbs_pct.toFixed(0)}%
+                          </span>
+                          <span className="text-rose-600 font-medium">
+                            F: {originalRecipe.macro_profile.fat_pct.toFixed(0)}%
+                          </span>
+                        </div>
+                        {originalRecipe.nutrition_per_serving && (
+                          <span className="text-xs text-muted-foreground ml-auto">
+                            ({originalRecipe.nutrition_per_serving.protein_g?.toFixed(0) || 0}g / 
+                            {originalRecipe.nutrition_per_serving.carbs_g?.toFixed(0) || 0}g / 
+                            {originalRecipe.nutrition_per_serving.fat_g?.toFixed(0) || 0}g)
+                          </span>
+                        )}
+                      </div>
+                    )}
                   </div>
                 </div>
               </CardContent>
@@ -285,58 +350,122 @@ export default function AlternativesPage() {
               </div>
 
               <div className="grid gap-3 sm:grid-cols-2">
-                {alternatives.map(recipe => (
-                  <Card key={recipe.id} className="overflow-hidden">
-                    <CardContent className="p-4">
-                      <div className="flex gap-3">
-                        <div className="w-16 h-16 rounded-lg bg-muted flex-shrink-0 overflow-hidden">
-                          {recipe.image_url ? (
-                            <Image
-                              src={recipe.image_url}
-                              alt={recipe.name}
-                              width={64}
-                              height={64}
-                              className="w-full h-full object-cover"
-                            />
-                          ) : (
-                            <div className="w-full h-full flex items-center justify-center">
-                              <UtensilsCrossed className="h-6 w-6 text-muted-foreground" />
-                            </div>
-                          )}
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <div className="font-medium text-sm truncate font-arabic">{recipe.name}</div>
-                          <div className="flex items-center gap-2 text-xs text-muted-foreground mt-1">
-                            {(recipe.prep_time_minutes || recipe.cook_time_minutes) && (
-                              <span className="flex items-center gap-0.5">
-                                <Clock className="h-3 w-3" />
-                                {(recipe.prep_time_minutes || 0) + (recipe.cook_time_minutes || 0)}m
-                              </span>
+                {alternatives.map(recipe => {
+                  // Determine swap quality badge color
+                  const swapQualityColors = {
+                    excellent: 'bg-green-100 text-green-700 border-green-300',
+                    good: 'bg-blue-100 text-blue-700 border-blue-300',
+                    acceptable: 'bg-amber-100 text-amber-700 border-amber-300',
+                    poor: 'bg-rose-100 text-rose-700 border-rose-300',
+                  }
+                  
+                  return (
+                    <Card key={recipe.id} className="overflow-hidden">
+                      <CardContent className="p-4">
+                        <div className="flex gap-3">
+                          <div className="w-16 h-16 rounded-lg bg-muted flex-shrink-0 overflow-hidden">
+                            {recipe.image_url ? (
+                              <Image
+                                src={recipe.image_url}
+                                alt={recipe.name}
+                                width={64}
+                                height={64}
+                                className="w-full h-full object-cover"
+                              />
+                            ) : (
+                              <div className="w-full h-full flex items-center justify-center">
+                                <UtensilsCrossed className="h-6 w-6 text-muted-foreground" />
+                              </div>
                             )}
-                            {recipe.cuisine && <span>{recipe.cuisine}</span>}
                           </div>
-                          <div className="flex items-center gap-2 mt-2">
-                            <span className="flex items-center gap-1 text-xs font-medium text-primary">
-                              <Scale className="h-3 w-3" />
-                              {recipe.scale_factor}x
-                            </span>
-                            <span className="text-sm font-bold">
-                              {recipe.scaled_calories} kcal
-                            </span>
-                          </div>
-                          <div className="flex gap-1 mt-1">
-                            {getDietaryBadges(recipe).slice(0, 2).map(badge => (
-                              <span key={badge.label} className={`flex items-center gap-0.5 text-[10px] ${badge.color}`}>
-                                <badge.icon className="h-2.5 w-2.5" />
-                                {badge.label}
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-start justify-between gap-2">
+                              <div className="font-medium text-sm truncate font-arabic">{recipe.name}</div>
+                              {recipe.swap_quality && (
+                                <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium border ${swapQualityColors[recipe.swap_quality]}`}>
+                                  {recipe.swap_quality}
+                                </span>
+                              )}
+                            </div>
+                            <div className="flex items-center gap-2 text-xs text-muted-foreground mt-1">
+                              {(recipe.prep_time_minutes || recipe.cook_time_minutes) && (
+                                <span className="flex items-center gap-0.5">
+                                  <Clock className="h-3 w-3" />
+                                  {(recipe.prep_time_minutes || 0) + (recipe.cook_time_minutes || 0)}m
+                                </span>
+                              )}
+                              {recipe.cuisine && <span>{recipe.cuisine}</span>}
+                            </div>
+                            <div className="flex items-center gap-2 mt-2">
+                              <span className="flex items-center gap-1 text-xs font-medium text-primary">
+                                <Scale className="h-3 w-3" />
+                                {recipe.scale_factor}x
                               </span>
-                            ))}
+                              <span className="text-sm font-bold">
+                                {recipe.scaled_calories} kcal
+                              </span>
+                            </div>
+                            <div className="flex gap-1 mt-1">
+                              {getDietaryBadges(recipe).slice(0, 2).map(badge => (
+                                <span key={badge.label} className={`flex items-center gap-0.5 text-[10px] ${badge.color}`}>
+                                  <badge.icon className="h-2.5 w-2.5" />
+                                  {badge.label}
+                                </span>
+                              ))}
+                            </div>
                           </div>
                         </div>
-                      </div>
-                    </CardContent>
-                  </Card>
-                ))}
+                        
+                        {/* Macro Comparison Section */}
+                        {recipe.macro_profile && (
+                          <div className="mt-3 pt-3 border-t space-y-2">
+                            {/* Macro Similarity Score */}
+                            {recipe.macro_similarity_score !== undefined && (
+                              <div className="flex items-center justify-between">
+                                <span className="text-xs text-muted-foreground flex items-center gap-1">
+                                  <Target className="h-3 w-3" />
+                                  Macro Match
+                                </span>
+                                <span className="text-xs font-bold text-primary">
+                                  {recipe.macro_similarity_score.toFixed(0)}/100
+                                </span>
+                              </div>
+                            )}
+                            
+                            {/* Macro Percentages */}
+                            <div className="flex items-center gap-2">
+                              <span className="text-[10px] text-muted-foreground">Macros:</span>
+                              <div className="flex gap-2 text-[10px]">
+                                <span className="text-blue-600 font-medium">
+                                  P: {recipe.macro_profile.protein_pct.toFixed(0)}%
+                                </span>
+                                <span className="text-amber-600 font-medium">
+                                  C: {recipe.macro_profile.carbs_pct.toFixed(0)}%
+                                </span>
+                                <span className="text-rose-600 font-medium">
+                                  F: {recipe.macro_profile.fat_pct.toFixed(0)}%
+                                </span>
+                              </div>
+                            </div>
+                            
+                            {/* Protein Difference */}
+                            {recipe.protein_diff_g !== undefined && recipe.protein_diff_g !== 0 && (
+                              <div className="flex items-center justify-between">
+                                <span className="text-[10px] text-muted-foreground flex items-center gap-1">
+                                  <TrendingUp className="h-3 w-3" />
+                                  Protein
+                                </span>
+                                <span className={`text-[10px] font-medium ${recipe.protein_diff_g > 0 ? 'text-green-600' : 'text-rose-600'}`}>
+                                  {recipe.protein_diff_g > 0 ? '+' : ''}{recipe.protein_diff_g.toFixed(1)}g
+                                </span>
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </CardContent>
+                    </Card>
+                  )
+                })}
               </div>
             </div>
           )}

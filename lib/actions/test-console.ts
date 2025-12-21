@@ -3,6 +3,13 @@
 import { createClient } from '@/lib/supabase/server'
 import { getSystemSetting } from './settings'
 import type { MealSlot } from '@/lib/types/nutri'
+import {
+  calculateMacroPercentages,
+  calculateMacroSimilarity,
+  calculateProteinDifference,
+  getSwapQuality,
+  type MacroProfile,
+} from '@/lib/utils/nutrition'
 
 export interface RecipeIngredientForPlan {
   id: string
@@ -45,6 +52,11 @@ export interface RecipeForMealPlan {
   // Calculated fields
   scale_factor?: number
   scaled_calories?: number
+  // Macro comparison fields (NEW)
+  macro_similarity_score?: number
+  macro_profile?: MacroProfile
+  protein_diff_g?: number
+  swap_quality?: 'excellent' | 'good' | 'acceptable' | 'poor'
 }
 
 /**
@@ -58,7 +70,17 @@ function roundToNearest5(value: number): number {
 /**
  * Transform Supabase recipe response to proper RecipeForMealPlan type
  */
-function transformRecipe(recipe: any, scaleFactor?: number, scaledCalories?: number): RecipeForMealPlan {
+function transformRecipe(
+  recipe: any,
+  scaleFactor?: number,
+  scaledCalories?: number,
+  macroComparisonData?: {
+    macro_similarity_score: number
+    macro_profile: MacroProfile
+    protein_diff_g: number
+    swap_quality: 'excellent' | 'good' | 'acceptable' | 'poor'
+  }
+): RecipeForMealPlan {
   const sf = scaleFactor || 1
   
   const transformedIngredients = (recipe.recipe_ingredients || []).map((ri: any) => {
@@ -101,6 +123,8 @@ function transformRecipe(recipe: any, scaleFactor?: number, scaledCalories?: num
     recipe_ingredients: transformedIngredients,
     scale_factor: scaleFactor,
     scaled_calories: scaledCalories,
+    // Include macro comparison data if provided
+    ...(macroComparisonData && macroComparisonData),
   }
 }
 
@@ -232,6 +256,7 @@ export async function getRecipesForMeal(options: {
 
 /**
  * Get alternative recipes for a given recipe (same meal type)
+ * Now includes macro similarity scoring for better nutritional matches
  * Supports pagination with offset
  */
 export async function getRecipeAlternatives(options: {
@@ -269,8 +294,27 @@ export async function getRecipeAlternatives(options: {
     return { data: null, originalRecipe: null, total: 0, hasMore: false, error: originalError?.message || 'Recipe not found' }
   }
 
-  // Transform original recipe
-  const transformedOriginal = transformRecipe(original, 1.0, original.nutrition_per_serving?.calories || 0)
+  // Calculate original recipe's macro profile
+  const originalNutrition = original.nutrition_per_serving
+  const originalMacroProfile = calculateMacroPercentages({
+    calories: originalNutrition?.calories || 0,
+    protein_g: originalNutrition?.protein_g || 0,
+    carbs_g: originalNutrition?.carbs_g || 0,
+    fat_g: originalNutrition?.fat_g || 0,
+  })
+
+  // Transform original recipe with its macro profile
+  const transformedOriginal = transformRecipe(
+    original,
+    1.0,
+    originalNutrition?.calories || 0,
+    {
+      macro_similarity_score: 100, // Original is 100% similar to itself
+      macro_profile: originalMacroProfile,
+      protein_diff_g: 0,
+      swap_quality: 'excellent',
+    }
+  )
 
   const mealTypes = original.meal_type || []
   if (mealTypes.length === 0) {
@@ -278,7 +322,7 @@ export async function getRecipeAlternatives(options: {
   }
 
   // Use original recipe calories if target not specified
-  const target = targetCalories || original.nutrition_per_serving?.calories || 500
+  const target = targetCalories || originalNutrition?.calories || 500
 
   // Get alternatives with same meal type (including ingredients)
   // Use FK hint to disambiguate which ingredients relation to use
@@ -315,16 +359,56 @@ export async function getRecipeAlternatives(options: {
     const scaleFactor = target / baseCalories
     if (scaleFactor < minScale || scaleFactor > maxScale) continue
 
+    // Calculate macro profile for this alternative
+    const altNutrition = recipe.nutrition_per_serving
+    const altMacroProfile = calculateMacroPercentages({
+      calories: altNutrition?.calories || 0,
+      protein_g: altNutrition?.protein_g || 0,
+      carbs_g: altNutrition?.carbs_g || 0,
+      fat_g: altNutrition?.fat_g || 0,
+    })
+
+    // Calculate macro similarity score
+    const macroSimilarityScore = calculateMacroSimilarity(
+      originalMacroProfile,
+      altMacroProfile
+    )
+
+    // Calculate protein difference (scaled)
+    const proteinDiff = calculateProteinDifference(
+      originalNutrition?.protein_g || 0,
+      altNutrition?.protein_g || 0,
+      scaleFactor
+    )
+
+    // Get swap quality rating
+    const swapQuality = getSwapQuality(macroSimilarityScore)
+
     // Scaled calories will ALWAYS equal target
     suitableAlternatives.push(transformRecipe(
       recipe,
       Math.round(scaleFactor * 100) / 100,
-      target
+      target,
+      {
+        macro_similarity_score: macroSimilarityScore,
+        macro_profile: altMacroProfile,
+        protein_diff_g: proteinDiff,
+        swap_quality: swapQuality,
+      }
     ))
   }
 
-  // Sort by scale factor closest to 1.0 (most natural portion size)
+  // Sort by: 1) Macro similarity score (highest first), 2) Scale factor closest to 1.0
+  // This prioritizes nutritionally similar alternatives while still preferring natural portions
   suitableAlternatives.sort((a, b) => {
+    // Primary: Macro similarity (higher is better)
+    const scoreA = a.macro_similarity_score || 0
+    const scoreB = b.macro_similarity_score || 0
+    if (Math.abs(scoreA - scoreB) > 5) {  // Only prioritize if difference is significant (>5 points)
+      return scoreB - scoreA
+    }
+    
+    // Secondary: Scale factor closest to 1.0 (most natural portion size)
     const aDistFromOne = Math.abs((a.scale_factor || 1) - 1)
     const bDistFromOne = Math.abs((b.scale_factor || 1) - 1)
     return aDistFromOne - bDistFromOne
@@ -366,6 +450,10 @@ export async function getIngredientSwaps(options: {
     macros: { calories?: number; protein_g?: number; carbs_g?: number; fat_g?: number }
     suggested_amount?: number
     calorie_diff_percent?: number
+    macro_similarity_score?: number
+    macro_profile?: { protein_pct: number; carbs_pct: number; fat_pct: number }
+    protein_diff_g?: number
+    swap_quality?: 'excellent' | 'good' | 'acceptable' | 'poor'
   }> | null
   originalIngredient: {
     id: string
@@ -376,6 +464,7 @@ export async function getIngredientSwaps(options: {
     serving_size: number
     serving_unit: string
     macros: { calories?: number; protein_g?: number; carbs_g?: number; fat_g?: number }
+    macro_profile?: { protein_pct: number; carbs_pct: number; fat_pct: number }
   } | null
   total: number
   hasMore: boolean
@@ -412,14 +501,24 @@ export async function getIngredientSwaps(options: {
     return { data: null, originalIngredient: original, total: 0, hasMore: false, error: error.message }
   }
 
+  // Calculate macro profile for original ingredient
+  const originalMacros = original.macros || {}
+  const originalMacroProfile = calculateMacroPercentages({
+    calories: originalMacros.calories || 0,
+    protein_g: originalMacros.protein_g || 0,
+    carbs_g: originalMacros.carbs_g || 0,
+    fat_g: originalMacros.fat_g || 0,
+  })
+
   // Calculate calorie equivalence if target amount provided
-  const originalCaloriesPerUnit = (original.macros?.calories || 0) / original.serving_size
+  const originalCaloriesPerUnit = (originalMacros.calories || 0) / original.serving_size
   const targetCalories = targetAmount 
     ? originalCaloriesPerUnit * targetAmount 
-    : original.macros?.calories || 0
+    : originalMacros.calories || 0
 
   const swapOptions = (alternatives || []).map(alt => {
-    const altCaloriesPerUnit = (alt.macros?.calories || 0) / alt.serving_size
+    const altMacros = alt.macros || {}
+    const altCaloriesPerUnit = (altMacros.calories || 0) / alt.serving_size
     
     // Calculate suggested amount to match calories
     let suggested_amount: number | undefined
@@ -431,17 +530,66 @@ export async function getIngredientSwaps(options: {
       calorie_diff_percent = Math.round(((suggestedCalories - targetCalories) / targetCalories) * 100)
     }
 
+    // Calculate macro profile for alternative
+    const altMacroProfile = calculateMacroPercentages({
+      calories: altMacros.calories || 0,
+      protein_g: altMacros.protein_g || 0,
+      carbs_g: altMacros.carbs_g || 0,
+      fat_g: altMacros.fat_g || 0,
+    })
+
+    // Calculate macro similarity score
+    const macroSimilarityScore = calculateMacroSimilarity(
+      originalMacroProfile,
+      altMacroProfile
+    )
+
+    // Calculate protein difference for suggested amount
+    const proteinDiff = suggested_amount
+      ? (altMacros.protein_g || 0) * (suggested_amount / alt.serving_size) - (originalMacros.protein_g || 0) * ((targetAmount || original.serving_size) / original.serving_size)
+      : 0
+
+    // Get swap quality rating
+    const swapQuality = getSwapQuality(macroSimilarityScore)
+
     return {
       ...alt,
       suggested_amount,
       calorie_diff_percent,
+      macro_similarity_score: macroSimilarityScore,
+      macro_profile: altMacroProfile,
+      protein_diff_g: proteinDiff,
+      swap_quality: swapQuality,
     }
   })
 
-  // Sort by same subgroup first, then by name
+  // Enhanced sorting: 1) Same subgroup + high protein similarity, 2) Same subgroup, 3) High protein similarity, 4) Name
   swapOptions.sort((a, b) => {
-    if (a.subgroup === original.subgroup && b.subgroup !== original.subgroup) return -1
-    if (b.subgroup === original.subgroup && a.subgroup !== original.subgroup) return 1
+    const aScor = a.macro_similarity_score || 0
+    const bScore = b.macro_similarity_score || 0
+    const aSameSubgroup = a.subgroup === original.subgroup
+    const bSameSubgroup = b.subgroup === original.subgroup
+    const aHighProtein = aScor >= 70  // 70+ is good protein match
+    const bHighProtein = bScore >= 70
+
+    // Priority 1: Same subgroup AND high protein similarity
+    if (aSameSubgroup && aHighProtein && !(bSameSubgroup && bHighProtein)) return -1
+    if (bSameSubgroup && bHighProtein && !(aSameSubgroup && aHighProtein)) return 1
+
+    // Priority 2: Same subgroup (regardless of protein)
+    if (aSameSubgroup && !bSameSubgroup) return -1
+    if (bSameSubgroup && !aSameSubgroup) return 1
+
+    // Priority 3: High protein similarity (even if different subgroup)
+    if (aHighProtein && !bHighProtein) return -1
+    if (bHighProtein && !aHighProtein) return 1
+
+    // Priority 4: By macro similarity score (higher first)
+    if (Math.abs(aScor - bScore) > 5) {
+      return bScore - aScor
+    }
+
+    // Finally: Alphabetical by name
     return a.name.localeCompare(b.name)
   })
 
@@ -450,7 +598,13 @@ export async function getIngredientSwaps(options: {
   const paginatedData = swapOptions.slice(offset, offset + limit)
   const hasMore = offset + limit < total
 
-  return { data: paginatedData, originalIngredient: original, total, hasMore, error: null }
+  return { 
+    data: paginatedData, 
+    originalIngredient: { ...original, macro_profile: originalMacroProfile }, 
+    total, 
+    hasMore, 
+    error: null 
+  }
 }
 
 /**

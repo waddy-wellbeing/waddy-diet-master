@@ -11,6 +11,8 @@ import {
   Apple,
   ArrowRight,
   Check,
+  Target,
+  TrendingUp,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -26,7 +28,8 @@ interface IngredientOption {
   subgroup: string | null
   serving_size: number
   serving_unit: string
-  macros?: { calories?: number }
+  macros?: { calories?: number; protein_g?: number; carbs_g?: number; fat_g?: number }
+  macro_profile?: { protein_pct: number; carbs_pct: number; fat_pct: number }
 }
 
 interface SwapOption {
@@ -40,6 +43,10 @@ interface SwapOption {
   macros: { calories?: number; protein_g?: number; carbs_g?: number; fat_g?: number }
   suggested_amount?: number
   calorie_diff_percent?: number
+  macro_similarity_score?: number
+  macro_profile?: { protein_pct: number; carbs_pct: number; fat_pct: number }
+  protein_diff_g?: number
+  swap_quality?: 'excellent' | 'good' | 'acceptable' | 'poor'
 }
 
 export default function SwapsPage() {
@@ -271,6 +278,30 @@ export default function SwapsPage() {
                         ≈ {Math.round(((originalIngredient.macros?.calories || 0) / originalIngredient.serving_size) * (amount || originalIngredient.serving_size))} kcal
                       </span>
                     </div>
+                    {/* Original Ingredient Macros */}
+                    {originalIngredient.macro_profile && (
+                      <div className="flex items-center gap-3 mt-3 pt-3 border-t">
+                        <span className="text-xs text-muted-foreground font-medium">Macros:</span>
+                        <div className="flex gap-3 text-xs">
+                          <span className="text-blue-600 font-medium">
+                            P: {originalIngredient.macro_profile.protein_pct.toFixed(0)}%
+                          </span>
+                          <span className="text-amber-600 font-medium">
+                            C: {originalIngredient.macro_profile.carbs_pct.toFixed(0)}%
+                          </span>
+                          <span className="text-rose-600 font-medium">
+                            F: {originalIngredient.macro_profile.fat_pct.toFixed(0)}%
+                          </span>
+                        </div>
+                        {originalIngredient.macros && (
+                          <span className="text-xs text-muted-foreground ml-auto">
+                            ({originalIngredient.macros.protein_g?.toFixed(0) || 0}g / 
+                            {originalIngredient.macros.carbs_g?.toFixed(0) || 0}g / 
+                            {originalIngredient.macros.fat_g?.toFixed(0) || 0}g)
+                          </span>
+                        )}
+                      </div>
+                    )}
                   </div>
                 </div>
               </CardContent>
@@ -289,80 +320,128 @@ export default function SwapsPage() {
               </div>
 
               <div className="space-y-2">
-                {swapOptions.map(swap => (
-                  <Card key={swap.id} className="overflow-hidden">
-                    <CardContent className="p-4">
-                      <div className="flex items-center gap-4">
-                        <div className="w-12 h-12 rounded-full bg-muted flex items-center justify-center flex-shrink-0">
-                          <Apple className="h-6 w-6 text-muted-foreground" />
-                        </div>
-                        
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2">
-                            <span className="font-medium truncate">{swap.name}</span>
-                            {swap.subgroup === originalIngredient?.subgroup && (
-                              <span className="flex items-center gap-0.5 text-xs text-green-600 bg-green-100 dark:bg-green-950 px-1.5 py-0.5 rounded">
-                                <Check className="h-3 w-3" />
-                                Same subgroup
-                              </span>
-                            )}
-                          </div>
-                          <div className="text-xs text-muted-foreground mt-0.5">
-                            {swap.subgroup || swap.food_group}
-                          </div>
-                        </div>
+                {swapOptions.map(swap => {
+                  // Determine swap quality badge color
+                  const swapQualityColors = {
+                    excellent: 'bg-green-100 text-green-700 border-green-300',
+                    good: 'bg-blue-100 text-blue-700 border-blue-300',
+                    acceptable: 'bg-amber-100 text-amber-700 border-amber-300',
+                    poor: 'bg-rose-100 text-rose-700 border-rose-300',
+                  }
 
-                        <div className="flex items-center gap-6 text-sm">
-                          <div className="flex items-center gap-2">
-                            <Scale className="h-4 w-4 text-primary" />
-                            <div>
-                              <div className="font-medium">
-                                {swap.suggested_amount !== undefined 
-                                  ? `${swap.suggested_amount} ${swap.serving_unit}`
-                                  : `${swap.serving_size} ${swap.serving_unit}`
+                  return (
+                    <Card key={swap.id} className="overflow-hidden">
+                      <CardContent className="p-4">
+                        <div className="flex items-center gap-4">
+                          <div className="w-12 h-12 rounded-full bg-muted flex items-center justify-center flex-shrink-0">
+                            <Apple className="h-6 w-6 text-muted-foreground" />
+                          </div>
+                          
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2">
+                              <span className="font-medium truncate">{swap.name}</span>
+                              {swap.swap_quality && (
+                                <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium border ${swapQualityColors[swap.swap_quality]}`}>
+                                  {swap.swap_quality}
+                                </span>
+                              )}
+                              {swap.subgroup === originalIngredient?.subgroup && (
+                                <span className="flex items-center gap-0.5 text-xs text-green-600 bg-green-100 dark:bg-green-950 px-1.5 py-0.5 rounded">
+                                  <Check className="h-3 w-3" />
+                                  Same subgroup
+                                </span>
+                              )}
+                            </div>
+                            <div className="text-xs text-muted-foreground mt-0.5">
+                              {swap.subgroup || swap.food_group}
+                            </div>
+                          </div>
+
+                          <div className="flex items-center gap-6 text-sm">
+                            <div className="flex items-center gap-2">
+                              <Scale className="h-4 w-4 text-primary" />
+                              <div>
+                                <div className="font-medium">
+                                  {swap.suggested_amount !== undefined 
+                                    ? `${swap.suggested_amount} ${swap.serving_unit}`
+                                    : `${swap.serving_size} ${swap.serving_unit}`
+                                  }
+                                </div>
+                                <div className="text-xs text-muted-foreground">
+                                  suggested
+                                </div>
+                              </div>
+                            </div>
+
+                            <div className="text-right min-w-[60px]">
+                              <div className={`font-medium ${getCalorieDiffColor(swap.calorie_diff_percent)}`}>
+                                {swap.calorie_diff_percent !== undefined 
+                                  ? `${swap.calorie_diff_percent >= 0 ? '+' : ''}${swap.calorie_diff_percent}%`
+                                  : '—'
                                 }
                               </div>
                               <div className="text-xs text-muted-foreground">
-                                suggested
+                                cal diff
                               </div>
                             </div>
                           </div>
+                        </div>
 
-                          <div className="text-right min-w-[60px]">
-                            <div className={`font-medium ${getCalorieDiffColor(swap.calorie_diff_percent)}`}>
-                              {swap.calorie_diff_percent !== undefined 
-                                ? `${swap.calorie_diff_percent >= 0 ? '+' : ''}${swap.calorie_diff_percent}%`
-                                : '—'
-                              }
+                        {/* Macro Comparison Section */}
+                        {swap.macro_profile && (
+                          <div className="mt-3 pt-3 border-t space-y-2">
+                            {/* Macro Similarity Score */}
+                            {swap.macro_similarity_score !== undefined && (
+                              <div className="flex items-center justify-between">
+                                <span className="text-xs text-muted-foreground flex items-center gap-1">
+                                  <Target className="h-3 w-3" />
+                                  Macro Match
+                                </span>
+                                <span className="text-xs font-bold text-primary">
+                                  {swap.macro_similarity_score.toFixed(0)}/100
+                                </span>
+                              </div>
+                            )}
+                            
+                            {/* Macro Percentages */}
+                            <div className="flex items-center gap-2">
+                              <span className="text-[10px] text-muted-foreground">Macros:</span>
+                              <div className="flex gap-2 text-[10px]">
+                                <span className="text-blue-600 font-medium">
+                                  P: {swap.macro_profile.protein_pct.toFixed(0)}%
+                                </span>
+                                <span className="text-amber-600 font-medium">
+                                  C: {swap.macro_profile.carbs_pct.toFixed(0)}%
+                                </span>
+                                <span className="text-rose-600 font-medium">
+                                  F: {swap.macro_profile.fat_pct.toFixed(0)}%
+                                </span>
+                              </div>
+                              <span className="text-[10px] text-muted-foreground ml-auto">
+                                ({swap.macros?.protein_g?.toFixed(0) || 0}g / 
+                                {swap.macros?.carbs_g?.toFixed(0) || 0}g / 
+                                {swap.macros?.fat_g?.toFixed(0) || 0}g)
+                              </span>
                             </div>
-                            <div className="text-xs text-muted-foreground">
-                              cal diff
-                            </div>
+                            
+                            {/* Protein Difference */}
+                            {swap.protein_diff_g !== undefined && Math.abs(swap.protein_diff_g) >= 0.5 && (
+                              <div className="flex items-center justify-between">
+                                <span className="text-[10px] text-muted-foreground flex items-center gap-1">
+                                  <TrendingUp className="h-3 w-3" />
+                                  Protein ({swap.suggested_amount}{swap.serving_unit})
+                                </span>
+                                <span className={`text-[10px] font-medium ${swap.protein_diff_g > 0 ? 'text-green-600' : 'text-rose-600'}`}>
+                                  {swap.protein_diff_g > 0 ? '+' : ''}{swap.protein_diff_g.toFixed(1)}g
+                                </span>
+                              </div>
+                            )}
                           </div>
-                        </div>
-                      </div>
-
-                      {/* Macros comparison */}
-                      <div className="flex gap-4 mt-3 pt-3 border-t text-xs">
-                        <div className="flex items-center gap-4">
-                          <span className="text-muted-foreground">Per {swap.serving_size} {swap.serving_unit}:</span>
-                          <span>
-                            <strong>{swap.macros?.calories || 0}</strong> kcal
-                          </span>
-                          <span>
-                            <strong>{swap.macros?.protein_g || 0}</strong>g protein
-                          </span>
-                          <span>
-                            <strong>{swap.macros?.carbs_g || 0}</strong>g carbs
-                          </span>
-                          <span>
-                            <strong>{swap.macros?.fat_g || 0}</strong>g fat
-                          </span>
-                        </div>
-                      </div>
-                    </CardContent>
-                  </Card>
-                ))}
+                        )}
+                      </CardContent>
+                    </Card>
+                  )
+                })}
               </div>
             </div>
           )}

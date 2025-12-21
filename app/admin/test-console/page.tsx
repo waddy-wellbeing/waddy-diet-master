@@ -25,14 +25,14 @@ const tools = [
   },
   {
     title: 'Recipe Alternatives',
-    description: 'Test recipe filtering by meal type. See what alternatives would be shown when a user swipes to change a meal.',
+    description: 'Test recipe filtering by meal type with macro-aware scoring. See alternatives ranked by macronutrient similarity and portion size.',
     icon: RefreshCw,
     href: '/admin/test-console/alternatives',
     status: 'ready' as const,
   },
   {
     title: 'Ingredient Swaps',
-    description: 'Test ingredient substitution by food group. Validate swap suggestions and nutritional comparisons.',
+    description: 'Test ingredient substitution by food group with protein-aware scoring. View macro similarity scores and swap quality ratings.',
     icon: ArrowRightLeft,
     href: '/admin/test-console/swaps',
     status: 'ready' as const,
@@ -124,8 +124,9 @@ export default function TestConsolePage() {
           <ul className="list-disc list-inside space-y-1 ml-2">
             <li>Verify TDEE calculations for different user profiles</li>
             <li>Preview which recipes would be suggested for specific calorie targets</li>
-            <li>Test recipe filtering and alternatives by meal type</li>
-            <li>Validate ingredient swap suggestions within food groups</li>
+            <li>Test recipe filtering and alternatives with macro-aware scoring</li>
+            <li>Validate ingredient swap suggestions with protein similarity matching</li>
+            <li>Review macro similarity scores and swap quality ratings</li>
           </ul>
         </CardContent>
       </Card>
