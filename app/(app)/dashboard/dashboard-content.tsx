@@ -359,17 +359,20 @@ export function DashboardContent({
       }
       
       // Use SCALED calories (what user sees), not original recipe calories
+      // NOTE: scaled_calories is already the target amount (e.g., breakfast target = 488 cal)
+      // It's NOT per-serving - it's the total scaled amount for this meal
+      // So we don't multiply by servings/scale_factor here!
       const scaledCalories = scaledRecipe.scaled_calories || (meal.recipe.nutrition_per_serving?.calories || 0) * scaleFactor
       const originalProtein = meal.recipe.nutrition_per_serving?.protein_g || 0
       const originalCarbs = meal.recipe.nutrition_per_serving?.carbs_g || 0
       const originalFat = meal.recipe.nutrition_per_serving?.fat_g || 0
-      const servings = meal.planSlot?.servings || 1
+      const scaleFactor2 = scaledRecipe.scale_factor || 1
       
       const updatedTotals = {
-        calories: (currentTotals.calories || 0) + Math.round(scaledCalories * servings),
-        protein_g: (currentTotals.protein_g || 0) + Math.round(originalProtein * scaleFactor * servings),
-        carbs_g: (currentTotals.carbs_g || 0) + Math.round(originalCarbs * scaleFactor * servings),
-        fat_g: (currentTotals.fat_g || 0) + Math.round(originalFat * scaleFactor * servings),
+        calories: (currentTotals.calories || 0) + Math.round(scaledCalories),
+        protein_g: (currentTotals.protein_g || 0) + Math.round(originalProtein * scaleFactor2),
+        carbs_g: (currentTotals.carbs_g || 0) + Math.round(originalCarbs * scaleFactor2),
+        fat_g: (currentTotals.fat_g || 0) + Math.round(originalFat * scaleFactor2),
       }
     
     if (existingLog) {
@@ -447,6 +450,8 @@ export function DashboardContent({
       if (!mealLog?.items?.length) return
       
       // Calculate calories to subtract using scaled values
+      // NOTE: scaled_calories is already the target amount (total for this meal)
+      // NOT per-serving, so don't multiply by servings/scale_factor!
       const meal = meals.find(m => m.name === mealName)
       const scaledRecipe = meal?.recipe as ScaledRecipe | undefined
       const scaleFactor = scaledRecipe?.scale_factor || 1
@@ -454,7 +459,6 @@ export function DashboardContent({
       const originalProtein = meal?.recipe?.nutrition_per_serving?.protein_g || 0
       const originalCarbs = meal?.recipe?.nutrition_per_serving?.carbs_g || 0
       const originalFat = meal?.recipe?.nutrition_per_serving?.fat_g || 0
-      const servings = meal?.planSlot?.servings || 1
       
       // Remove the meal from log
       const updatedLog = {
@@ -464,10 +468,10 @@ export function DashboardContent({
       
       // Update totals (subtract the scaled calories)
       const updatedTotals = {
-        calories: Math.max(0, (currentTotals.calories || 0) - Math.round(scaledCalories * servings)),
-        protein_g: Math.max(0, (currentTotals.protein_g || 0) - Math.round(originalProtein * scaleFactor * servings)),
-        carbs_g: Math.max(0, (currentTotals.carbs_g || 0) - Math.round(originalCarbs * scaleFactor * servings)),
-        fat_g: Math.max(0, (currentTotals.fat_g || 0) - Math.round(originalFat * scaleFactor * servings)),
+        calories: Math.max(0, (currentTotals.calories || 0) - Math.round(scaledCalories)),
+        protein_g: Math.max(0, (currentTotals.protein_g || 0) - Math.round(originalProtein * scaleFactor)),
+        carbs_g: Math.max(0, (currentTotals.carbs_g || 0) - Math.round(originalCarbs * scaleFactor)),
+        fat_g: Math.max(0, (currentTotals.fat_g || 0) - Math.round(originalFat * scaleFactor)),
       }
       
       await supabase
