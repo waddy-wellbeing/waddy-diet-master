@@ -350,6 +350,10 @@ export async function getRecipeAlternatives(options: {
   const minScale = scalingLimits?.min_scale_factor || 0.5
   const maxScale = scalingLimits?.max_scale_factor || 2.0
 
+  // Get macro similarity weights from settings (default to 50/30/20 if not set)
+  const { data: macroWeights } = await getSystemSetting('macro_similarity_weights')
+  const weights = macroWeights || { protein: 0.5, carbs: 0.3, fat: 0.2 }
+
   const suitableAlternatives: RecipeForMealPlan[] = []
 
   for (const recipe of alternatives || []) {
@@ -368,11 +372,14 @@ export async function getRecipeAlternatives(options: {
       fat_g: altNutrition?.fat_g || 0,
     })
 
-    // Calculate macro similarity score
+    // Calculate macro similarity score with custom weights from settings
     const macroSimilarityScore = calculateMacroSimilarity(
       originalMacroProfile,
-      altMacroProfile
+      altMacroProfile,
+      weights
     )
+
+    // Calculate protein difference (scaled)
 
     // Calculate protein difference (scaled)
     const proteinDiff = calculateProteinDifference(
@@ -501,6 +508,10 @@ export async function getIngredientSwaps(options: {
     return { data: null, originalIngredient: original, total: 0, hasMore: false, error: error.message }
   }
 
+  // Get{ data: macroWeights }arity weights from settings (default to 50/30/20 if not set)
+  const { data: macroWeights } = await getSystemSetting('macro_similarity_weights')
+  const weights = macroWeights || { protein: 0.5, carbs: 0.3, fat: 0.2 }
+
   // Calculate macro profile for original ingredient
   const originalMacros = original.macros || {}
   const originalMacroProfile = calculateMacroPercentages({
@@ -538,10 +549,11 @@ export async function getIngredientSwaps(options: {
       fat_g: altMacros.fat_g || 0,
     })
 
-    // Calculate macro similarity score
+    // Calculate macro similarity score with custom weights from settings
     const macroSimilarityScore = calculateMacroSimilarity(
       originalMacroProfile,
-      altMacroProfile
+      altMacroProfile,
+      weights
     )
 
     // Calculate protein difference for suggested amount

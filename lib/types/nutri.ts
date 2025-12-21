@@ -414,6 +414,8 @@ export interface SystemSettingsMap {
   min_calories_per_day: number
   max_calories_per_day: number
   scaling_limits: ScalingLimits
+  macro_similarity_weights: { protein: number; carbs: number; fat: number }
+  min_macro_similarity_threshold: number
 }
 
 export type SystemSettingKey = keyof SystemSettingsMap
