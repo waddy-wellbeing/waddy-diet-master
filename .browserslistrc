@@ -1,0 +1,30 @@
+# Browsers that we support
+# This helps tools like Autoprefixer know which CSS prefixes to add
+# and helps Next.js determine the right JavaScript features to transpile
+
+# Production browsers (default)
+> 0.5%
+last 2 versions
+not dead
+not IE 11
+
+# Samsung Internet (important for Samsung devices)
+Samsung >= 10
+
+# iOS Safari (important for iPhone/iPad)
+iOS >= 12
+
+# Chrome on Android
+ChromeAndroid >= 90
+
+# Samsung Internet on Android
+Android >= 6.0
+
+# Desktop browsers
+Chrome >= 90
+Firefox >= 88
+Safari >= 14
+Edge >= 90
+
+# Exclude problematic browsers
+not OperaMini all

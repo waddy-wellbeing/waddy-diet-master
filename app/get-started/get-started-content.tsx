@@ -95,7 +95,11 @@ export function GetStartedContent() {
               size="lg"
               className="w-full h-14 text-lg font-semibold"
             >
-              <Link href="/get-started/onboarding">
+              <Link 
+                href="/get-started/onboarding"
+                prefetch={false}
+                scroll={true}
+              >
                 Get Started Free
                 <ArrowRight className="ml-2 h-5 w-5" />
               </Link>
@@ -118,7 +122,11 @@ export function GetStartedContent() {
               size="lg"
               className="w-full h-12"
             >
-              <Link href="/login">
+              <Link 
+                href="/login"
+                prefetch={false}
+                scroll={true}
+              >
                 <LogIn className="mr-2 h-4 w-4" />
                 Sign In to Existing Account
               </Link>

@@ -122,6 +122,39 @@
   body {
     @apply bg-background text-foreground;
   }
+  
+  /* Improve touch handling for mobile browsers (Samsung Internet, iOS Safari, etc.) */
+  button,
+  a,
+  [role="button"],
+  [role="link"] {
+    touch-action: manipulation;
+    -webkit-tap-highlight-color: transparent;
+    -webkit-touch-callout: none;
+  }
+  
+  /* Ensure buttons are always clickable */
+  button {
+    cursor: pointer;
+    user-select: none;
+  }
+  
+  /* Fix for Samsung Internet and other WebKit browsers */
+  input,
+  textarea,
+  select {
+    -webkit-appearance: none;
+    appearance: none;
+  }
+  
+  /* Prevent zoom on input focus for better mobile UX */
+  input[type="text"],
+  input[type="email"],
+  input[type="password"],
+  input[type="number"],
+  textarea {
+    font-size: 16px;
+  }
 }
 
 /* Arabic text styling - auto-detects Arabic characters */
