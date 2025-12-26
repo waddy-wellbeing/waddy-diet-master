@@ -37,6 +37,7 @@ const goalOptions: { value: GoalType; label: string; description: string }[] = [
   { value: 'lose_weight', label: GOAL_LABELS.lose_weight.label, description: GOAL_LABELS.lose_weight.description },
   { value: 'maintain', label: GOAL_LABELS.maintain.label, description: GOAL_LABELS.maintain.description },
   { value: 'build_muscle', label: GOAL_LABELS.build_muscle.label, description: GOAL_LABELS.build_muscle.description },
+  { value: 'recomposition', label: GOAL_LABELS.recomposition.label, description: GOAL_LABELS.recomposition.description },
 ]
 
 const paceOptions: { value: Pace; label: string }[] = [
@@ -188,7 +189,7 @@ export default function TDEECalculatorPage() {
             {/* Goal */}
             <div className="space-y-3">
               <Label>Goal</Label>
-              <div className="grid grid-cols-3 gap-2">
+              <div className="grid grid-cols-2 gap-2">
                 {goalOptions.map(opt => (
                   <label
                     key={opt.value}
@@ -217,6 +218,11 @@ export default function TDEECalculatorPage() {
             {input.goal_type !== 'maintain' && (
               <div className="space-y-3">
                 <Label>Pace</Label>
+                {input.goal_type === 'recomposition' && (
+                  <p className="text-xs text-muted-foreground">
+                    Recomposition: Slow = -5% deficit, Moderate = maintenance, Aggressive = +5% surplus (all with high protein)
+                  </p>
+                )}
                 <div className="grid grid-cols-3 gap-2">
                   {paceOptions.map(opt => (
                     <label
