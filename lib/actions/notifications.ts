@@ -13,7 +13,7 @@ import type {
 // Generate these once with: npx web-push generate-vapid-keys
 const VAPID_PUBLIC_KEY = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY || ''
 const VAPID_PRIVATE_KEY = process.env.VAPID_PRIVATE_KEY || ''
-const VAPID_SUBJECT = process.env.VAPID_SUBJECT || 'mailto:support@waddydiet.com'
+const VAPID_SUBJECT = process.env.VAPID_SUBJECT || 'mailto:support@waddyclub.com'
 
 if (VAPID_PUBLIC_KEY && VAPID_PRIVATE_KEY) {
   webpush.setVapidDetails(VAPID_SUBJECT, VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY)
@@ -244,6 +244,36 @@ export async function sendNotificationToUser(
       return { success: false, error: 'User has disabled push notifications' }
     }
 
+    // Log the notification first to get the ID
+    const { data: logEntry, error: logError } = await supabase
+      .from('notifications_log')
+      .insert({
+        user_id: userId,
+        title: payload.title,
+        body: payload.body,
+        icon: payload.icon,
+        url: payload.url,
+        notification_type: 'admin',
+        is_broadcast: false,
+        status: 'sent',
+      })
+      .select('id')
+      .single()
+
+    if (logError || !logEntry) {
+      console.error('Error creating notification log:', logError)
+      return { success: false, error: 'Failed to log notification' }
+    }
+
+    // Add notification ID to payload for click tracking
+    const payloadWithId = {
+      ...payload,
+      data: {
+        ...payload.data,
+        notificationId: logEntry.id,
+      },
+    }
+
     // Send to all devices
     let sent = 0
     let failed = 0
@@ -258,7 +288,7 @@ export async function sendNotificationToUser(
               auth: sub.auth,
             },
           },
-          JSON.stringify(payload)
+          JSON.stringify(payloadWithId)
         )
         sent++
       } catch (error: unknown) {
@@ -276,17 +306,13 @@ export async function sendNotificationToUser(
       }
     }
 
-    // Log the notification
-    await supabase.from('notifications_log').insert({
-      user_id: userId,
-      title: payload.title,
-      body: payload.body,
-      icon: payload.icon,
-      url: payload.url,
-      notification_type: 'admin',
-      is_broadcast: false,
-      status: sent > 0 ? 'sent' : 'failed',
-    })
+    // Update log status if all failed
+    if (sent === 0 && failed > 0) {
+      await supabase
+        .from('notifications_log')
+        .update({ status: 'failed' })
+        .eq('id', logEntry.id)
+    }
 
     return { success: true, data: { sent, failed } }
   } catch (error) {
@@ -346,6 +372,36 @@ export async function sendBroadcastNotification(
       return { success: false, error: 'No active subscriptions found' }
     }
 
+    // Log the broadcast notification first to get ID
+    const { data: logEntry, error: logError } = await supabase
+      .from('notifications_log')
+      .insert({
+        user_id: user.id,
+        title: payload.title,
+        body: payload.body,
+        icon: payload.icon,
+        url: payload.url,
+        notification_type: 'admin',
+        is_broadcast: true,
+        status: 'sent',
+      })
+      .select('id')
+      .single()
+
+    if (logError || !logEntry) {
+      console.error('Error creating broadcast log:', logError)
+      return { success: false, error: 'Failed to log notification' }
+    }
+
+    // Add notification ID to payload for click tracking
+    const payloadWithId = {
+      ...payload,
+      data: {
+        ...payload.data,
+        notificationId: logEntry.id,
+      },
+    }
+
     // Send to all devices
     let sent = 0
     let failed = 0
@@ -360,7 +416,7 @@ export async function sendBroadcastNotification(
               auth: sub.auth,
             },
           },
-          JSON.stringify(payload)
+          JSON.stringify(payloadWithId)
         )
         sent++
       } catch (error: unknown) {
@@ -377,17 +433,13 @@ export async function sendBroadcastNotification(
       }
     }
 
-    // Log the broadcast notification
-    await supabase.from('notifications_log').insert({
-      user_id: user.id,
-      title: payload.title,
-      body: payload.body,
-      icon: payload.icon,
-      url: payload.url,
-      notification_type: 'admin',
-      is_broadcast: true,
-      status: sent > 0 ? 'sent' : 'failed',
-    })
+    // Update log status if all failed
+    if (sent === 0 && failed > 0) {
+      await supabase
+        .from('notifications_log')
+        .update({ status: 'failed' })
+        .eq('id', logEntry.id)
+    }
 
     return { success: true, data: { sent, failed, total: subscriptions.length } }
   } catch (error) {
