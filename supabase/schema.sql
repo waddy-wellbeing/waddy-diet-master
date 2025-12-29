@@ -576,3 +576,43 @@ ALTER TABLE analytics_page_views DISABLE ROW LEVEL SECURITY;
 --       WHERE user_id = auth.uid() AND role IN ('admin', 'moderator')
 --     )
 --   );
+
+-- =============================================================================
+-- SHOPPING LISTS
+-- =============================================================================
+-- Stores weekly shopping lists aggregated from user's meal plans
+
+CREATE TABLE shopping_lists (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  week_start_date DATE NOT NULL,
+  week_end_date DATE NOT NULL,
+  items JSONB NOT NULL DEFAULT '{}',
+  checked_items TEXT[] NOT NULL DEFAULT '{}',
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  CONSTRAINT shopping_lists_user_week_unique UNIQUE (user_id, week_start_date)
+);
+
+CREATE INDEX shopping_lists_user_id_idx ON shopping_lists(user_id);
+CREATE INDEX shopping_lists_week_start_idx ON shopping_lists(week_start_date);
+
+-- Row Level Security
+ALTER TABLE shopping_lists ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY shopping_lists_select_own ON shopping_lists
+  FOR SELECT USING (auth.uid() = user_id);
+
+CREATE POLICY shopping_lists_insert_own ON shopping_lists
+  FOR INSERT WITH CHECK (auth.uid() = user_id);
+
+CREATE POLICY shopping_lists_update_own ON shopping_lists
+  FOR UPDATE USING (auth.uid() = user_id);
+
+CREATE POLICY shopping_lists_delete_own ON shopping_lists
+  FOR DELETE USING (auth.uid() = user_id);
+
+-- Trigger for updated_at
+CREATE TRIGGER shopping_lists_updated_at
+  BEFORE UPDATE ON shopping_lists
+  FOR EACH ROW EXECUTE FUNCTION update_updated_at();

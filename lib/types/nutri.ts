@@ -480,3 +480,33 @@ export interface PushNotificationPayload {
   tag?: string
   data?: Record<string, unknown>
 }
+
+// =============================================================================
+// SHOPPING LISTS
+// =============================================================================
+
+/** Single item in a shopping list */
+export interface ShoppingListItem {
+  ingredient_id: string
+  ingredient_name: string
+  ingredient_name_ar?: string
+  total_quantity: number
+  unit: string
+  food_group: string
+  used_in_recipes: string[] // Recipe names for reference
+}
+
+/** Shopping list items grouped by food group */
+export type ShoppingListItems = Record<string, ShoppingListItem[]>
+
+/** Shopping list record from database */
+export interface ShoppingListRecord {
+  id: string
+  user_id: string
+  week_start_date: string // DATE as ISO string
+  week_end_date: string // DATE as ISO string
+  items: ShoppingListItems
+  checked_items: string[] // Array of ingredient_ids
+  created_at: string
+  updated_at: string
+}
