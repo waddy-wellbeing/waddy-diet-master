@@ -2,14 +2,12 @@
 
 import { revalidatePath } from 'next/cache'
 import { createClient } from '@/lib/supabase/server'
-import { startOfWeek, endOfWeek, format, addDays } from 'date-fns'
+import { startOfWeek, endOfWeek, format } from 'date-fns'
 import type { 
   ShoppingListRecord, 
-  ShoppingListItems, 
-  ShoppingListItem,
+  ShoppingListItems,
   DailyPlan,
-  RecipeIngredient,
-  IngredientRecord
+  RecipeIngredient
 } from '@/lib/types/nutri'
 
 type ActionResult<T> = { success: true; data: T } | { success: false; error: string }
@@ -69,11 +67,21 @@ export async function generateShoppingList(
 
       // Process each meal type (breakfast, lunch, dinner, snacks)
       for (const mealType of ['breakfast', 'lunch', 'dinner', 'snacks'] as const) {
-        const meals = mealType === 'snacks' && Array.isArray(plan.snacks) 
-          ? plan.snacks 
-          : plan[mealType] ? [plan[mealType]] : []
+        // Handle snacks as array, others as single meal
+        let mealsToProcess: Array<{ recipe_id?: string; servings?: number }> = []
+        
+        if (mealType === 'snacks') {
+          if (Array.isArray(plan.snacks)) {
+            mealsToProcess = plan.snacks
+          }
+        } else {
+          const meal = plan[mealType]
+          if (meal) {
+            mealsToProcess = [meal]
+          }
+        }
 
-        for (const meal of meals) {
+        for (const meal of mealsToProcess) {
           if (!meal || !meal.recipe_id) continue
 
           // Fetch recipe with ingredients

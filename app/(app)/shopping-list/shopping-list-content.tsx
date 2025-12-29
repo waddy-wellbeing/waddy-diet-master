@@ -17,7 +17,7 @@ import {
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { 
   generateShoppingList, 
   toggleShoppingListItem, 
@@ -60,7 +60,6 @@ export function ShoppingListContent({
   const [isGenerating, setIsGenerating] = useState(false)
 
   const weekStart = startOfWeek(selectedDate, { weekStartsOn: 1 })
-  const weekEnd = addWeeks(weekStart, 1)
 
   const handlePreviousWeek = () => {
     const newDate = subWeeks(selectedDate, 1)
@@ -326,7 +325,7 @@ export function ShoppingListContent({
             <ShoppingCart className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
             <h3 className="text-lg font-semibold mb-2">Ready to Shop?</h3>
             <p className="text-muted-foreground mb-4">
-              Generate your shopping list from this week's meal plans.
+              Generate your shopping list from this week&apos;s meal plans.
             </p>
           </CardContent>
         </Card>
