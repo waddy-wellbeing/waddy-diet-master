@@ -24,6 +24,7 @@ Tables are prefix-free for clarity:
 - `recipes` - Recipes with JSONB: `ingredients`, `instructions`, `nutrition_per_serving`, `admin_notes`
 - `daily_plans` - Meal plans with JSONB: `plan`, `daily_totals`
 - `daily_logs` - Food logging with JSONB: `log`, `logged_totals`
+- `shopping_lists` - Weekly shopping lists with JSONB: `items` (grouped by food_group), `checked_items`
 
 **RLS is enabled on all tables** - users can only access their own data. Public ingredients/recipes use `is_public` flag.
 
@@ -67,7 +68,7 @@ className={cn("base-styles", conditional && "conditional-styles", className)}
 | Directory | Purpose |
 |-----------|---------|
 | `app/admin/` | Admin panel routes (recipes, ingredients, settings, test-console) |
-| `app/(app)/` | Authenticated user routes (dashboard, onboarding, recipes, plans) |
+| `app/(app)/` | Authenticated user routes (dashboard, onboarding, recipes, plans, shopping-list) |
 | `app/(marketing)/` | Public marketing pages |
 | `app/api/` | API routes (uploads, etc.) |
 | `components/ui/` | shadcn/ui base components |
@@ -141,3 +142,88 @@ When modifying the database schema, update these files:
 3. **Modals** - For create/edit, with form reset on close
 4. **Bulk actions** - Select multiple rows for batch operations
 5. **Confirmation dialogs** - For destructive actions (delete)
+
+## Shopping Lists
+
+The app includes a weekly shopping list feature that aggregates ingredients from user meal plans:
+
+### Overview
+- **Route**: `app/(app)/shopping-list/` 
+- **Backend**: `lib/actions/shopping-lists.ts`
+- **Database**: `shopping_lists` table with JSONB structure
+- **Navigation**: Accessible via bottom navigation (Shopping tab)
+
+### How It Works
+1. User generates a shopping list for a specific week
+2. System fetches all daily plans for that week (Monday-Sunday)
+3. Aggregates ingredients from all recipes across all meals
+4. Groups by `food_group` for organized shopping
+5. Allows users to check off items as purchased
+6. Supports export/share functionality
+
+### Key Features
+- **Week Selector**: Navigate between weeks to generate lists for different time periods
+- **Aggregation**: Same ingredients are combined (e.g., 150g + 200g = 350g chicken breast)
+- **Grouping**: Items organized by food groups (Proteins, Vegetables, Grains, etc.) with visual icons
+- **Progress Tracking**: Shows % of items checked off
+- **Optimistic UI**: Immediate feedback when checking/unchecking items
+- **Empty States**: Helpful messages when no meal plans exist
+
+### Data Structure
+```typescript
+// shopping_lists.items (JSONB)
+{
+  "Proteins": [
+    {
+      ingredient_id: "uuid",
+      ingredient_name: "Chicken breast",
+      total_quantity: 750,
+      unit: "g",
+      food_group: "Proteins",
+      used_in_recipes: ["Grilled Chicken Salad", "Chicken Stir-Fry"]
+    }
+  ],
+  "Vegetables": [...]
+}
+
+// shopping_lists.checked_items (TEXT[])
+["ingredient_id_1", "ingredient_id_2", ...]
+```
+
+### Important Rules
+1. **Exclude spices**: Ingredients with `is_spice = true` are NOT added to shopping lists
+2. **Skip missing data**: Ingredients without `ingredient_id` or `quantity` are skipped
+3. **Week boundaries**: Always use Monday-Sunday for week calculations
+4. **Serving multipliers**: Apply recipe `servings` factor when aggregating quantities
+5. **User-scoped**: RLS ensures users only see their own shopping lists
+
+### Server Actions
+- `generateShoppingList(weekStartDate)` - Generate list from meal plans
+- `getShoppingList(weekStartDate)` - Retrieve existing list
+- `toggleShoppingListItem(listId, ingredientId, checked)` - Mark item as purchased
+- `deleteShoppingList(listId)` - Remove shopping list
+- `getWeekPlanCount(weekStartDate)` - Check if user has plans for the week
+
+### Common Patterns
+```typescript
+// Generate shopping list
+const result = await generateShoppingList(new Date())
+if (result.success) {
+  // result.data contains ShoppingListRecord
+}
+
+// Toggle item (with optimistic update)
+const newChecked = !currentlyChecked
+// Update UI immediately
+setCheckedState(newChecked)
+// Then sync with server
+await toggleShoppingListItem(listId, itemId, newChecked)
+```
+
+### Future Enhancements
+- Unit conversion (e.g., 500g + 1kg = 1.5kg)
+- Smart suggestions (common pantry items)
+- Store integration (add to online cart)
+- Price estimation
+- Bulk buying recommendations
+
