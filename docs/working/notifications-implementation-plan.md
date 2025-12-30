@@ -63,21 +63,38 @@ Create API endpoint to handle notification click tracking from service worker. U
 
 ---
 
-#### ⬜ Step 2: Add Notification Icon Assets
-**Status:** Not Started  
-**Estimated Time:** 5 minutes  
-**Files to Create:**
-- `public/icons/icon-192x192.png`
-- `public/icons/badge-72x72.png`
+#### ✅ Step 2: Add Notification Icon Assets
+**Status:** ✅ COMPLETED  
+**Completed:** December 29, 2025  
+**Time Taken:** 8 minutes  
+**Files Created:**
+- ✅ `public/icons/icon-192x192.svg` (source)
+- ✅ `public/icons/icon-192x192.png` (192x192)
+- ✅ `public/icons/badge-72x72.svg` (source)
+- ✅ `public/icons/badge-72x72.png` (72x72)
+- ✅ `scripts/generate-notification-icons.mjs` (generator)
 
 **Description:**  
-Add missing icon files referenced in service worker for proper notification display with branding.
+Added notification icon files with brand styling (lime green gradient with lightning bolt ⚡).
 
 **Acceptance Criteria:**
-- [ ] Icons created from brand assets
-- [ ] Correct dimensions (192x192, 72x72)
-- [ ] PNG format with transparency
-- [ ] Displays correctly in notifications
+- [x] Icons created from brand assets
+- [x] Correct dimensions (192x192, 72x72)
+- [x] PNG format with transparency
+- [x] SVG sources for future editing
+- [x] Automated generation script
+
+**Implementation Notes:**
+- Created SVG icons with brand colors (oklch lime green)
+- Lightning bolt design matches brand identity
+- Used sharp library to convert SVG → PNG
+- Icons feature gradient background for visual appeal
+- Badge is simpler design for small notification badges
+
+**Visual Design:**
+- Main icon: 192x192 with gradient lime background + white lightning
+- Badge: 72x72 solid lime background + white lightning
+- Both use rounded corners and high contrast
 
 ---
 
@@ -441,8 +458,9 @@ Comprehensive testing across browsers and devices with documented workarounds.
 
 ## Progress Tracking
 
-### Completed: 1/12 (8%)
+### Completed: 2/12 (17%)
 - ✅ Step 1: Click tracking API endpoint
+- ✅ Step 2: Notification icon assets
 
 ### In Progress: 0/12
 - None
@@ -551,7 +569,13 @@ If issues arise in production:
 - ✅ **Completed Step 1:** Click tracking API endpoint
   - Created `/api/notifications/track-click` route
   - Modified server actions to include notification ID in payload
-  - Both single user and broadcast notifications now trackable
+  - Both single user and broadc
+- ✅ **Completed Step 2:** Notification icon assets
+  - Created brand-styled icons with lime green gradient + lightning bolt
+  - Generated 192x192 main icon and 72x72 badge icon
+  - Created reusable generation script with sharp library
+  - Icons now display properly in notifications
+  - **Next:** Ready to test full notification flow (Step 3)ast notifications now trackable
   - Ready for testing in Step 3
 
 ---

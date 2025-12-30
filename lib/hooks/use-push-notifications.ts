@@ -44,7 +44,7 @@ function getDeviceInfo(): { type: string; name: string } {
 export function usePushNotifications() {
   const [isSupported, setIsSupported] = useState(false)
   const [isSubscribed, setIsSubscribed] = useState(false)
-  const [isLoading, setIsLoading] = useState(true)
+  const [isLoading, setIsLoading] = useState(false) // Changed to false by default
   const [permission, setPermission] = useState<NotificationPermission>('default')
   const [error, setError] = useState<string | null>(null)
   const [subscription, setSubscription] = useState<PushSubscription | null>(null)
@@ -62,21 +62,32 @@ export function usePushNotifications() {
       if (supported) {
         setPermission(Notification.permission)
         
-        // Check existing subscription
+        // Check existing subscription with timeout
         try {
-          const registration = await navigator.serviceWorker.ready
-          const existingSub = await registration.pushManager.getSubscription()
+          // Add timeout to prevent hanging
+          const timeoutPromise = new Promise((_, reject) => 
+            setTimeout(() => reject(new Error('Timeout checking subscription')), 5000)
+          )
+          
+          const checkPromise = (async () => {
+            const registration = await navigator.serviceWorker.ready
+            const existingSub = await registration.pushManager.getSubscription()
+            return existingSub
+          })()
+
+          const existingSub = await Promise.race([checkPromise, timeoutPromise]) as PushSubscription | null
           setSubscription(existingSub)
           setIsSubscribed(!!existingSub)
         } catch (err) {
           console.error('Error checking subscription:', err)
+          // Don't show error to user for initial check failure
         }
       }
-      
-      setIsLoading(false)
     }
 
-    checkSupport()
+    checkSupport().catch(err => {
+      console.error('Error in checkSupport:', err)
+    })
   }, [])
 
   // Register service worker
@@ -127,15 +138,26 @@ export function usePushNotifications() {
       const registration = await navigator.serviceWorker.ready
       console.log('[Push] Service worker ready')
 
-      // Check for existing subscription first
+      // IMPORTANT: Unsubscribe from ALL existing subscriptions first
+      // This is crucial when VAPID keys change
       const existingSub = await registration.pushManager.getSubscription()
       if (existingSub) {
-        console.log('[Push] Found existing subscription, unsubscribing first...')
-        await existingSub.unsubscribe()
+        console.log('[Push] Found existing subscription, removing it...')
+        try {
+          await existingSub.unsubscribe()
+          console.log('[Push] Successfully unsubscribed from old subscription')
+          // Also remove from server
+          await removeSubscription(existingSub.endpoint)
+        } catch (unsubErr) {
+          console.warn('[Push] Error unsubscribing (will continue anyway):', unsubErr)
+        }
       }
 
+      // Wait a bit for the unsubscribe to fully process
+      await new Promise(resolve => setTimeout(resolve, 500))
+
       // Subscribe to push
-      console.log('[Push] Subscribing to push manager...')
+      console.log('[Push] Creating new subscription with VAPID key...')
       const sub = await registration.pushManager.subscribe({
         userVisibleOnly: true,
         applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY),
@@ -157,7 +179,15 @@ export function usePushNotifications() {
       return true
     } catch (err) {
       console.error('Error subscribing:', err)
-      setError(err instanceof Error ? err.message : 'Failed to subscribe')
+      const errorMessage = err instanceof Error ? err.message : 'Failed to subscribe'
+      
+      // Provide more helpful error messages
+      if (errorMessage.includes('push service error') || errorMessage.includes('Registration failed') || errorMessage.includes('AbortError')) {
+        setError('Unable to register push notifications. This is a browser limitation on localhost. Use ngrok (https) or try a different browser.')
+      } else {
+        setError(errorMessage)
+      }
+      
       setIsLoading(false)
       return false
     }

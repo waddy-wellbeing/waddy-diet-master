@@ -29,6 +29,7 @@ import {
   BellOff,
   Smartphone,
   Loader2,
+  XCircle,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
@@ -364,8 +365,37 @@ function NotificationsSection() {
 
               {/* Error Display */}
               {pushError && (
-                <div className="p-3 bg-red-500/10 border border-red-500/20 rounded-xl text-red-500 text-sm">
-                  {pushError}
+                <div className="p-4 bg-red-500/10 border border-red-500/20 rounded-xl space-y-3">
+                  <div className="flex items-start gap-2">
+                    <XCircle className="w-5 h-5 text-red-500 flex-shrink-0 mt-0.5" />
+                    <div className="flex-1">
+                      <p className="text-sm text-red-500 font-medium">
+                        Push Notification Error
+                      </p>
+                      <p className="text-xs text-red-500/80 mt-1">
+                        {pushError}
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex gap-2">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => window.location.reload()}
+                      className="text-xs"
+                    >
+                      Reload Page
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={handleTogglePush}
+                      disabled={pushLoading}
+                      className="text-xs"
+                    >
+                      {pushLoading ? 'Retrying...' : 'Retry'}
+                    </Button>
+                  </div>
                 </div>
               )}
 

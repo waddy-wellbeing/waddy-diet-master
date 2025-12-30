@@ -1,0 +1,11 @@
+<svg width="72" height="72" viewBox="0 0 72 72" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- Background Circle -->
+  <circle cx="36" cy="36" r="36" fill="oklch(0.75 0.2 125)"/>
+  
+  <!-- Lightning Bolt Badge -->
+  <path d="M40.5 18.75L25.5 38.25H36L33 53.25L48 33.75H36L40.5 18.75Z" 
+        fill="white" 
+        stroke="white" 
+        stroke-width="2" 
+        stroke-linejoin="round"/>
+</svg>
