@@ -8,6 +8,32 @@ This document identifies the root causes of slow page transitions in the Waddy D
 
 **Target Performance**: Page transitions should feel instant (<200ms perceived latency), with content streaming progressively and skeleton states showing immediately.
 
+## 📑 Table of Contents
+
+### 🔍 Analysis
+1. [Middleware Authentication Overhead](#1-middleware-authentication-overhead--high-impact) 🔴 HIGH
+2. [Missing Streaming and Suspense](#2-missing-streaming-and-suspense-boundaries--high-impact) 🔴 HIGH
+3. [Excessive Client Components](#3-excessive-client-components--medium-impact) 🟡 MEDIUM
+4. [Heavy Dependencies](#4-heavy-dependencies--medium-impact) 🟡 MEDIUM
+5. [Missing Route Segment Configuration](#5-missing-route-segment-configuration--medium-impact) 🟡 MEDIUM
+6. [Layout Queries Blocking Navigation](#6-layout-queries-blocking-navigation--moderate-impact) 🟠 MODERATE
+7. [Missing Image Optimization](#7-missing-image-optimization--moderate-impact) 🟠 MODERATE
+8. [Lack of Prefetching](#8-lack-of-prefetching--moderate-impact) 🟠 MODERATE
+9. [Unoptimized Database Queries](#9-unoptimized-database-queries--moderate-impact) 🟠 MODERATE
+
+### 📋 Implementation
+- [Phase 1: Quick Wins (1-2 days)](#phase-1-quick-wins-1-2-days-) - 40-50% improvement
+- [Phase 2: Bundle Optimization (2-3 days)](#phase-2-bundle-optimization-2-3-days-) - 25-30% improvement
+- [Phase 3: Caching & Database (3-4 days)](#phase-3-caching--database-3-4-days-) - 20-25% improvement
+- [Phase 4: Advanced Optimization (2-3 days)](#phase-4-advanced-optimization-2-3-days-) - 10-15% improvement
+
+### 📊 Resources
+- [Target Performance Metrics](#-target-performance-metrics)
+- [Tools for Monitoring](#-tools-for-monitoring)
+- [Testing Strategy](#-testing-strategy)
+- [Best Practices Summary](#-best-practices-summary)
+- [Quick Reference Commands](#-quick-reference-commands)
+
 ---
 
 ## 🔍 Root Causes Analysis
