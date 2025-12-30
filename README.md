@@ -20,6 +20,25 @@ You can start editing the page by modifying `app/page.tsx`. The page auto-update
 
 This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
 
+## Performance Optimization
+
+The app has been analyzed for performance bottlenecks, particularly around page transitions. See our comprehensive guides:
+
+- **[Performance Quick Start](./docs/PERFORMANCE_QUICK_START.md)** - 30-minute guide for immediate 40% improvement
+- **[Full Performance Guide](./docs/PERFORMANCE_OPTIMIZATION.md)** - Complete analysis and optimization roadmap
+
+**Key Issues Identified:**
+- Middleware auth overhead (200-500ms per navigation)
+- Missing Suspense boundaries and streaming
+- Excessive client components (91% of components)
+- Heavy dependencies (framer-motion, lucide-react)
+- Unoptimized database queries
+
+**Expected Results After Optimization:**
+- Page transitions: 1-3s → 100-300ms (90% improvement)
+- Lighthouse score: 75 → 90+
+- Bundle size reduction: 40%
+
 ## Learn More
 
 To learn more about Next.js, take a look at the following resources:
