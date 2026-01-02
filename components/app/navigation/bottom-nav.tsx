@@ -3,7 +3,7 @@
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { useTransition } from 'react'
-import { Home, UtensilsCrossed, BarChart3, User, Loader2 } from 'lucide-react'
+import { Home, UtensilsCrossed, ShoppingCart, User, Loader2 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 const navItems = [
@@ -18,9 +18,9 @@ const navItems = [
     icon: UtensilsCrossed,
   },
   {
-    href: '/nutrition',
-    label: 'Nutrition',
-    icon: BarChart3,
+    href: '/shopping-list',
+    label: 'Shopping',
+    icon: ShoppingCart,
   },
   {
     href: '/profile',
