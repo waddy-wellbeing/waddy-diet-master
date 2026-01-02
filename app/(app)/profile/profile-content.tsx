@@ -30,6 +30,7 @@ import {
   Smartphone,
   Loader2,
   XCircle,
+  Moon,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
@@ -302,6 +303,15 @@ function NotificationsSection() {
     setIsSaving(false)
   }
 
+  const handleQuietHoursChange = async (key: 'quiet_hours_start' | 'quiet_hours_end', value: string) => {
+    setIsSaving(true)
+    const result = await updateNotificationSettings({ [key]: value })
+    if (result.success) {
+      setSettings(s => s ? { ...s, [key]: value } : null)
+    }
+    setIsSaving(false)
+  }
+
   return (
     <motion.div
       className="bg-card rounded-2xl border border-border overflow-hidden"
@@ -457,6 +467,67 @@ function NotificationsSection() {
                           />
                         </div>
                       ))}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Quiet Hours Section */}
+              {(isSubscribed || settings?.push_enabled) && (
+                <div className="space-y-2 pt-2 border-t border-border/50">
+                  <div className="flex items-center gap-2">
+                    <Moon className="w-4 h-4 text-muted-foreground" />
+                    <p className="text-sm font-medium text-muted-foreground">
+                      Quiet Hours
+                    </p>
+                  </div>
+                  
+                  {isLoadingSettings ? (
+                    <div className="flex items-center justify-center py-4">
+                      <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
+                    </div>
+                  ) : (
+                    <div className="space-y-3">
+                      <p className="text-xs text-muted-foreground">
+                        Don&apos;t send notifications during these hours
+                      </p>
+                      
+                      <div className="grid grid-cols-2 gap-3">
+                        <div className="space-y-1.5">
+                          <Label htmlFor="quiet-start" className="text-xs text-muted-foreground">
+                            Start Time
+                          </Label>
+                          <Input
+                            id="quiet-start"
+                            type="time"
+                            value={settings?.quiet_hours_start || '22:00'}
+                            onChange={(e) => handleQuietHoursChange('quiet_hours_start', e.target.value)}
+                            className="h-9"
+                            disabled={isSaving}
+                          />
+                        </div>
+                        
+                        <div className="space-y-1.5">
+                          <Label htmlFor="quiet-end" className="text-xs text-muted-foreground">
+                            End Time
+                          </Label>
+                          <Input
+                            id="quiet-end"
+                            type="time"
+                            value={settings?.quiet_hours_end || '08:00'}
+                            onChange={(e) => handleQuietHoursChange('quiet_hours_end', e.target.value)}
+                            className="h-9"
+                            disabled={isSaving}
+                          />
+                        </div>
+                      </div>
+                      
+                      {settings?.quiet_hours_start && settings?.quiet_hours_end && (
+                        <p className="text-xs text-muted-foreground flex items-center gap-1">
+                          <Clock className="w-3 h-3" />
+                          Notifications paused from {settings.quiet_hours_start} to {settings.quiet_hours_end}
+                        </p>
+                      )}
                     </div>
                   )}
                 </div>

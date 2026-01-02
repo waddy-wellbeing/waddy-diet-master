@@ -22,6 +22,38 @@ if (VAPID_PUBLIC_KEY && VAPID_PRIVATE_KEY) {
 type ActionResult<T = void> = { success: true; data?: T } | { success: false; error: string }
 
 // =============================================================================
+// HELPER FUNCTIONS
+// =============================================================================
+
+/**
+ * Check if current time is within user's quiet hours
+ * @param quietStart - Start time in HH:MM format
+ * @param quietEnd - End time in HH:MM format
+ * @returns true if in quiet hours, false otherwise
+ */
+function isInQuietHours(quietStart?: string, quietEnd?: string): boolean {
+  if (!quietStart || !quietEnd) return false
+
+  const now = new Date()
+  const currentMinutes = now.getHours() * 60 + now.getMinutes()
+
+  // Parse quiet hours
+  const [startHour, startMin] = quietStart.split(':').map(Number)
+  const [endHour, endMin] = quietEnd.split(':').map(Number)
+  const startMinutes = startHour * 60 + startMin
+  const endMinutes = endHour * 60 + endMin
+
+  // Handle cases where quiet hours span midnight
+  if (startMinutes > endMinutes) {
+    // e.g., 22:00 to 08:00 (overnight)
+    return currentMinutes >= startMinutes || currentMinutes < endMinutes
+  } else {
+    // e.g., 13:00 to 14:00 (same day)
+    return currentMinutes >= startMinutes && currentMinutes < endMinutes
+  }
+}
+
+// =============================================================================
 // SUBSCRIPTION MANAGEMENT
 // =============================================================================
 
@@ -236,12 +268,17 @@ export async function sendNotificationToUser(
     // Check user's notification settings
     const { data: settings } = await supabase
       .from('notification_settings')
-      .select('push_enabled')
+      .select('push_enabled, quiet_hours_start, quiet_hours_end')
       .eq('user_id', userId)
       .single()
 
     if (settings && !settings.push_enabled) {
       return { success: false, error: 'User has disabled push notifications' }
+    }
+
+    // Check if user is in quiet hours
+    if (settings && isInQuietHours(settings.quiet_hours_start, settings.quiet_hours_end)) {
+      return { success: false, error: 'User is in quiet hours' }
     }
 
     // Log the notification first to get the ID
@@ -343,17 +380,22 @@ export async function sendBroadcastNotification(
       return { success: false, error: 'Only admins can send broadcast notifications' }
     }
 
-    // Get all users with push enabled
+    // Get all users with push enabled and their quiet hours
     const { data: enabledUsers } = await supabase
       .from('notification_settings')
-      .select('user_id')
+      .select('user_id, quiet_hours_start, quiet_hours_end')
       .eq('push_enabled', true)
 
-    const enabledUserIds = enabledUsers?.map(u => u.user_id) || []
+    // Filter out users in quiet hours
+    const activeUsers = enabledUsers?.filter(u => 
+      !isInQuietHours(u.quiet_hours_start, u.quiet_hours_end)
+    ) || []
 
-    // If no users have push enabled, return early
-    if (enabledUserIds.length === 0) {
-      return { success: false, error: 'No users have push notifications enabled' }
+    const activeUserIds = activeUsers.map(u => u.user_id)
+
+    // If no users are available (all in quiet hours), return early
+    if (activeUserIds.length === 0) {
+      return { success: false, error: 'All users are in quiet hours or have disabled notifications' }
     }
 
     // Get all active subscriptions for those users
@@ -361,7 +403,7 @@ export async function sendBroadcastNotification(
       .from('push_subscriptions')
       .select('*')
       .eq('is_active', true)
-      .in('user_id', enabledUserIds)
+      .in('user_id', activeUserIds)
 
     if (subError) {
       console.error('Error fetching subscriptions:', subError)
