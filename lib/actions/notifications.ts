@@ -664,3 +664,251 @@ export async function getRecentNotifications(limit = 10): Promise<ActionResult<A
     return { success: false, error: 'An unexpected error occurred' }
   }
 }
+
+// =============================================================================
+// ACHIEVEMENT NOTIFICATIONS
+// =============================================================================
+
+/**
+ * Send an achievement notification to a user
+ * Used for real-time milestone celebrations (streaks, targets, etc.)
+ */
+export async function sendAchievementNotification(
+  userId: string,
+  achievement: {
+    title: string
+    message: string
+    emoji: string
+    metadata?: Record<string, any>
+  }
+): Promise<ActionResult> {
+  try {
+    const supabase = await createClient()
+
+    // Check if user has achievement notifications enabled
+    const { data: settings } = await supabase
+      .from('notification_settings')
+      .select('push_enabled, goal_achievements, quiet_hours_start, quiet_hours_end')
+      .eq('user_id', userId)
+      .single()
+
+    if (!settings?.push_enabled || !settings?.goal_achievements) {
+      console.log('Achievement notifications disabled for user:', userId)
+      return { success: true } // Not an error, just skipped
+    }
+
+    // Check quiet hours
+    if (isInQuietHours(settings.quiet_hours_start, settings.quiet_hours_end)) {
+      console.log('User in quiet hours, skipping achievement notification')
+      return { success: true }
+    }
+
+    // Get user's active subscriptions
+    const { data: subscriptions } = await supabase
+      .from('push_subscriptions')
+      .select('endpoint, p256dh, auth')
+      .eq('user_id', userId)
+      .eq('is_active', true)
+
+    if (!subscriptions || subscriptions.length === 0) {
+      console.log('No active subscriptions for user:', userId)
+      return { success: true }
+    }
+
+    // Prepare notification payload
+    const payload: PushNotificationPayload = {
+      title: `${achievement.emoji} ${achievement.title}`,
+      body: achievement.message,
+      icon: '/icons/icon-192x192.png',
+      badge: '/icons/icon-96x96.png',
+      url: '/dashboard',
+      data: {
+        type: 'achievement',
+        ...achievement.metadata,
+      },
+    }
+
+    // Send to all devices
+    let sentCount = 0
+    let failedCount = 0
+
+    for (const sub of subscriptions) {
+      try {
+        await webpush.sendNotification(
+          {
+            endpoint: sub.endpoint,
+            keys: {
+              p256dh: sub.p256dh,
+              auth: sub.auth,
+            },
+          },
+          JSON.stringify(payload)
+        )
+        sentCount++
+      } catch (error: any) {
+        console.error('Failed to send achievement notification:', error)
+        failedCount++
+
+        // If subscription is invalid, deactivate it
+        if (error.statusCode === 410 || error.statusCode === 404) {
+          await supabase
+            .from('push_subscriptions')
+            .update({ is_active: false })
+            .eq('endpoint', sub.endpoint)
+        }
+      }
+    }
+
+    // Log the notification
+    await supabase
+      .from('notifications_log')
+      .insert({
+        user_id: userId,
+        title: payload.title,
+        body: payload.body,
+        icon: payload.icon,
+        url: payload.url,
+        notification_type: 'achievement',
+        is_broadcast: false,
+        status: sentCount > 0 ? 'sent' : 'failed',
+        error_message: failedCount > 0 ? `Failed to send to ${failedCount} device(s)` : null,
+      })
+
+    console.log(`Achievement notification sent to ${sentCount}/${subscriptions.length} devices`)
+
+    return { success: true }
+  } catch (error) {
+    console.error('Unexpected error sending achievement notification:', error)
+    return { success: false, error: 'Failed to send achievement notification' }
+  }
+}
+
+// =============================================================================
+// PLAN UPDATE NOTIFICATIONS
+// =============================================================================
+
+/**
+ * Send notification when admin assigns or updates a user's meal plan
+ */
+export async function sendPlanUpdateNotification(
+  userId: string,
+  planDate: string,
+  isNewAssignment = false
+): Promise<ActionResult> {
+  try {
+    const supabase = await createClient()
+
+    // Check if user has plan update notifications enabled
+    const { data: settings } = await supabase
+      .from('notification_settings')
+      .select('push_enabled, plan_updates, quiet_hours_start, quiet_hours_end')
+      .eq('user_id', userId)
+      .single()
+
+    if (!settings?.push_enabled || !settings?.plan_updates) {
+      console.log('Plan update notifications disabled for user:', userId)
+      return { success: true }
+    }
+
+    // Check quiet hours
+    if (isInQuietHours(settings.quiet_hours_start, settings.quiet_hours_end)) {
+      console.log('User in quiet hours, skipping plan update notification')
+      return { success: true }
+    }
+
+    // Get user's active subscriptions
+    const { data: subscriptions } = await supabase
+      .from('push_subscriptions')
+      .select('endpoint, p256dh, auth')
+      .eq('user_id', userId)
+      .eq('is_active', true)
+
+    if (!subscriptions || subscriptions.length === 0) {
+      console.log('No active subscriptions for user:', userId)
+      return { success: true }
+    }
+
+    // Format the date nicely
+    const date = new Date(planDate)
+    const dateStr = date.toLocaleDateString('en-US', { 
+      weekday: 'long', 
+      month: 'short', 
+      day: 'numeric' 
+    })
+
+    // Prepare notification payload
+    const title = isNewAssignment 
+      ? '🎉 New Meal Plan Assigned!' 
+      : '📝 Meal Plan Updated'
+    
+    const body = isNewAssignment
+      ? `Your personalized meal plan for ${dateStr} is ready!`
+      : `Your meal plan for ${dateStr} has been updated.`
+
+    const payload: PushNotificationPayload = {
+      title,
+      body,
+      icon: '/icons/icon-192x192.png',
+      badge: '/icons/icon-96x96.png',
+      url: '/plans',
+      data: {
+        type: 'plan_update',
+        plan_date: planDate,
+        is_new: isNewAssignment,
+      },
+    }
+
+    // Send to all devices
+    let sentCount = 0
+    let failedCount = 0
+
+    for (const sub of subscriptions) {
+      try {
+        await webpush.sendNotification(
+          {
+            endpoint: sub.endpoint,
+            keys: {
+              p256dh: sub.p256dh,
+              auth: sub.auth,
+            },
+          },
+          JSON.stringify(payload)
+        )
+        sentCount++
+      } catch (error: any) {
+        console.error('Failed to send plan update notification:', error)
+        failedCount++
+
+        // If subscription is invalid, deactivate it
+        if (error.statusCode === 410 || error.statusCode === 404) {
+          await supabase
+            .from('push_subscriptions')
+            .update({ is_active: false })
+            .eq('endpoint', sub.endpoint)
+        }
+      }
+    }
+
+    // Log the notification
+    await supabase
+      .from('notifications_log')
+      .insert({
+        user_id: userId,
+        title: payload.title,
+        body: payload.body,
+        icon: payload.icon,
+        url: payload.url,
+        notification_type: 'plan_update',
+        is_broadcast: false,
+        status: sentCount > 0 ? 'sent' : 'failed',
+        error_message: failedCount > 0 ? `Failed to send to ${failedCount} device(s)` : null,
+      })
+
+    console.log(`Plan update notification sent to ${sentCount}/${subscriptions.length} devices`)
+
+    return { success: true }
+  } catch (error) {
+    console.error('Unexpected error sending plan update notification:', error)
+    return { success: false, error: 'Failed to send plan update notification' }
+  }
+}

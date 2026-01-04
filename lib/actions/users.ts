@@ -240,6 +240,19 @@ export async function assignMealStructure(
     return { success: false, error: updateError.message }
   }
 
+  // Send plan assignment notification (non-blocking)
+  // Use today's date as the plan effective date
+  const today = new Date().toISOString().split('T')[0]
+  import('@/lib/actions/notifications')
+    .then(({ sendPlanUpdateNotification }) => {
+      sendPlanUpdateNotification(userId, today, true).catch(err => {
+        console.error('Failed to send plan assignment notification:', err)
+      })
+    })
+    .catch(err => {
+      console.error('Failed to import notification module:', err)
+    })
+
   revalidatePath('/admin/users')
   return { success: true, error: null }
 }

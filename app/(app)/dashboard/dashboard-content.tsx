@@ -401,6 +401,12 @@ export function DashboardContent({
         })
     }
     
+      // Check for achievements (non-blocking)
+      const { checkAndNotifyAchievements } = await import('@/lib/actions/daily-logs')
+      checkAndNotifyAchievements(profile.user_id, dateStr).catch(err => {
+        console.error('Failed to check achievements:', err)
+      })
+    
       // Refresh the data
       fetchDayData(selectedDate)
       fetchWeekData(selectedDate)
