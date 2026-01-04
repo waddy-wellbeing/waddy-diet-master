@@ -15,12 +15,14 @@ import {
   Radio,
   User,
   ChevronDown,
+  BarChart3,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { cn } from '@/lib/utils'
 import { sendNotificationToUser, sendBroadcastNotification } from '@/lib/actions/notifications'
+import Link from 'next/link'
 
 interface NotificationsPanelProps {
   stats?: {
@@ -114,6 +116,20 @@ export function NotificationsPanel({ stats, users, recentLogs }: NotificationsPa
 
   return (
     <div className="space-y-6">
+      {/* Header with Analytics Link */}
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold">Push Notifications</h1>
+          <p className="text-sm text-muted-foreground">Send and manage push notifications</p>
+        </div>
+        <Button asChild variant="outline">
+          <Link href="/admin/notifications/analytics">
+            <BarChart3 className="w-4 h-4 mr-2" />
+            View Analytics
+          </Link>
+        </Button>
+      </div>
+
       {/* Stats Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <motion.div

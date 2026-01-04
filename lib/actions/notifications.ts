@@ -8,6 +8,7 @@ import type {
   PushSubscription,
   PushNotificationPayload 
 } from '@/lib/types/nutri'
+import { checkRateLimit, RATE_LIMITS, BatchNotificationProcessor } from '@/lib/utils/rate-limiting'
 
 // Configure web-push with VAPID keys
 // Generate these once with: npx web-push generate-vapid-keys
@@ -249,6 +250,19 @@ export async function sendNotificationToUser(
       return { success: false, error: 'Unauthorized' }
     }
 
+    // Rate limiting check
+    const rateLimitResult = checkRateLimit({
+      identifier: `admin-send:${user.id}`,
+      ...RATE_LIMITS.ADMIN_SEND,
+    })
+
+    if (!rateLimitResult.allowed) {
+      return {
+        success: false,
+        error: `Rate limit exceeded. Try again in ${rateLimitResult.retryAfter} seconds.`,
+      }
+    }
+
     // Get user's active subscriptions
     const { data: subscriptions, error: subError } = await supabase
       .from('push_subscriptions')
@@ -380,6 +394,19 @@ export async function sendBroadcastNotification(
       return { success: false, error: 'Only admins can send broadcast notifications' }
     }
 
+    // Rate limiting check for broadcasts (stricter)
+    const rateLimitResult = checkRateLimit({
+      identifier: `broadcast:${user.id}`,
+      ...RATE_LIMITS.BROADCAST,
+    })
+
+    if (!rateLimitResult.allowed) {
+      return {
+        success: false,
+        error: `Broadcast rate limit exceeded. Try again in ${rateLimitResult.retryAfter} seconds.`,
+      }
+    }
+
     // Get all users with push enabled and their quiet hours
     const { data: enabledUsers } = await supabase
       .from('notification_settings')
@@ -444,36 +471,44 @@ export async function sendBroadcastNotification(
       },
     }
 
-    // Send to all devices
-    let sent = 0
-    let failed = 0
+    // Use batch processor for efficient sending
+    const processor = new BatchNotificationProcessor<typeof subscriptions[0]>({
+      batchSize: 50, // Send 50 at a time
+      delayBetweenBatches: 1000, // 1 second between batches
+    })
 
-    for (const sub of subscriptions) {
-      try {
-        await webpush.sendNotification(
-          {
-            endpoint: sub.endpoint,
-            keys: {
-              p256dh: sub.p256dh,
-              auth: sub.auth,
+    const result = await processor.process(
+      subscriptions,
+      async (sub) => {
+        try {
+          await webpush.sendNotification(
+            {
+              endpoint: sub.endpoint,
+              keys: {
+                p256dh: sub.p256dh,
+                auth: sub.auth,
+              },
             },
-          },
-          JSON.stringify(payloadWithId)
-        )
-        sent++
-      } catch (error: unknown) {
-        console.error('Error sending to subscription:', error)
-        failed++
+            JSON.stringify(payloadWithId)
+          )
+          return true // Success
+        } catch (error: unknown) {
+          console.error('Error sending to subscription:', error)
 
-        const webPushError = error as { statusCode?: number }
-        if (webPushError.statusCode === 410 || webPushError.statusCode === 404) {
-          await supabase
-            .from('push_subscriptions')
-            .update({ is_active: false })
-            .eq('id', sub.id)
+          const webPushError = error as { statusCode?: number }
+          if (webPushError.statusCode === 410 || webPushError.statusCode === 404) {
+            await supabase
+              .from('push_subscriptions')
+              .update({ is_active: false })
+              .eq('id', sub.id)
+          }
+
+          return false // Failed
         }
       }
-    }
+    )
+
+    const { successful: sent, failed } = result
 
     // Update log status if all failed
     if (sent === 0 && failed > 0) {
