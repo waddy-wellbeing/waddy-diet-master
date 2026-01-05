@@ -1,0 +1,294 @@
+/**
+ * Meal Planning Sheet Component
+ * 
+ * Mobile-first bottom sheet for planning meals on a specific date
+ * Integrates with dashboard calendar
+ */
+
+'use client'
+
+import { useState, useEffect } from 'react'
+import { format } from 'date-fns'
+import { Loader2, Plus, Trash2, X } from 'lucide-react'
+import { toast } from 'sonner'
+import { cn } from '@/lib/utils'
+import { Button } from '@/components/ui/button'
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+} from '@/components/ui/sheet'
+import { RecipePickerSheet } from './recipe-picker-sheet'
+import { savePlanMeal, removePlanMeal, deletePlan, getPlan } from '@/lib/actions/meal-planning'
+import { formatPlanDateHeader } from '@/lib/utils/meal-planning'
+import type { DailyPlan, RecipeRecord } from '@/lib/types/nutri'
+
+interface MealPlanSheetProps {
+  open: boolean
+  onOpenChange: (open: boolean) => void
+  date: Date | null
+  recipes: RecipeRecord[]
+  onPlanUpdated: () => void
+}
+
+type MealType = 'breakfast' | 'lunch' | 'dinner' | 'snacks'
+
+const MEAL_TYPES: { key: MealType; label: string; emoji: string }[] = [
+  { key: 'breakfast', label: 'Breakfast', emoji: '🍳' },
+  { key: 'lunch', label: 'Lunch', emoji: '🍱' },
+  { key: 'dinner', label: 'Dinner', emoji: '🍽️' },
+  { key: 'snacks', label: 'Snacks', emoji: '🍎' },
+]
+
+export function MealPlanSheet({ open, onOpenChange, date, recipes, onPlanUpdated }: MealPlanSheetProps) {
+  const [plan, setPlan] = useState<DailyPlan | null>(null)
+  const [loading, setLoading] = useState(false)
+  const [saving, setSaving] = useState(false)
+  const [pickerOpen, setPickerOpen] = useState(false)
+  const [activeMealType, setActiveMealType] = useState<MealType | null>(null)
+
+  // Fetch plan when date changes
+  useEffect(() => {
+    if (!open || !date) return
+
+    const fetchPlan = async () => {
+      setLoading(true)
+      const dateStr = format(date, 'yyyy-MM-dd')
+      const result = await getPlan(dateStr)
+      
+      if (result.success) {
+        setPlan(result.data)
+      } else {
+        toast.error('Failed to load plan')
+      }
+      setLoading(false)
+    }
+
+    fetchPlan()
+  }, [open, date])
+
+  const handleAddRecipe = (mealType: MealType) => {
+    setActiveMealType(mealType)
+    setPickerOpen(true)
+  }
+
+  const handleRecipeSelected = async (recipeId: string) => {
+    if (!date || !activeMealType) return
+
+    setSaving(true)
+    const dateStr = format(date, 'yyyy-MM-dd')
+    const result = await savePlanMeal({
+      date: dateStr,
+      mealType: activeMealType,
+      recipeId,
+    })
+
+    if (result.success) {
+      // Refresh plan
+      const updated = await getPlan(dateStr)
+      if (updated.success) {
+        setPlan(updated.data)
+      }
+      toast.success('Meal added to plan')
+      onPlanUpdated()
+    } else {
+      toast.error(result.error)
+    }
+
+    setSaving(false)
+    setPickerOpen(false)
+    setActiveMealType(null)
+  }
+
+  const handleRemoveRecipe = async (mealType: MealType) => {
+    if (!date) return
+
+    setSaving(true)
+    const dateStr = format(date, 'yyyy-MM-dd')
+    const result = await removePlanMeal({
+      date: dateStr,
+      mealType,
+    })
+
+    if (result.success) {
+      // Refresh plan
+      const updated = await getPlan(dateStr)
+      if (updated.success) {
+        setPlan(updated.data)
+      }
+      toast.success('Meal removed from plan')
+      onPlanUpdated()
+    } else {
+      toast.error(result.error)
+    }
+
+    setSaving(false)
+  }
+
+  const handleClearAll = async () => {
+    if (!date || !plan) return
+
+    const confirmed = confirm('Are you sure you want to clear all meals from this plan?')
+    if (!confirmed) return
+
+    setSaving(true)
+    const dateStr = format(date, 'yyyy-MM-dd')
+    const result = await deletePlan(dateStr)
+
+    if (result.success) {
+      setPlan(null)
+      toast.success('Plan cleared')
+      onPlanUpdated()
+    } else {
+      toast.error(result.error)
+    }
+
+    setSaving(false)
+  }
+
+  // Get recipe for a meal slot
+  const getRecipeForMeal = (mealType: MealType): RecipeRecord | null => {
+    if (!plan) return null
+
+    let recipeId: string | undefined
+
+    if (mealType === 'snacks') {
+      recipeId = plan.snacks?.[0]?.recipe_id
+    } else {
+      recipeId = plan[mealType]?.recipe_id
+    }
+
+    if (!recipeId) return null
+
+    return recipes.find(r => r.id === recipeId) || null
+  }
+
+  // Check if plan has any meals
+  const hasMeals = !!(
+    plan?.breakfast?.recipe_id ||
+    plan?.lunch?.recipe_id ||
+    plan?.dinner?.recipe_id ||
+    (plan?.snacks && plan.snacks[0]?.recipe_id)
+  )
+
+  if (!date) return null
+
+  return (
+    <>
+      <Sheet open={open} onOpenChange={onOpenChange}>
+        <SheetContent 
+          side="bottom" 
+          className="h-[90vh] rounded-t-xl flex flex-col p-0"
+        >
+          <SheetHeader className="p-6 pb-4 border-b border-border">
+            <div className="flex items-center justify-between">
+              <div>
+                <SheetTitle className="text-2xl">
+                  Plan Meals for {formatPlanDateHeader(date)}
+                </SheetTitle>
+                <SheetDescription>
+                  Select recipes for each meal (1 serving each)
+                </SheetDescription>
+              </div>
+              {hasMeals && !saving && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={handleClearAll}
+                  className="text-destructive hover:text-destructive hover:bg-destructive/10"
+                >
+                  <Trash2 className="h-4 w-4 mr-2" />
+                  Clear All
+                </Button>
+              )}
+            </div>
+          </SheetHeader>
+
+          <div className="flex-1 overflow-y-auto p-6 space-y-4">
+            {loading ? (
+              <div className="flex items-center justify-center py-12">
+                <Loader2 className="h-8 w-8 animate-spin text-primary" />
+              </div>
+            ) : (
+              MEAL_TYPES.map(({ key, label, emoji }) => {
+                const recipe = getRecipeForMeal(key)
+
+                return (
+                  <div
+                    key={key}
+                    className="border border-border rounded-xl p-4 bg-card"
+                  >
+                    <div className="flex items-center justify-between mb-3">
+                      <h3 className="text-lg font-semibold flex items-center gap-2">
+                        <span>{emoji}</span>
+                        <span>{label}</span>
+                      </h3>
+                      {recipe && (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => handleRemoveRecipe(key)}
+                          disabled={saving}
+                          className="h-8 w-8 p-0 hover:bg-destructive/10 hover:text-destructive"
+                        >
+                          <X className="h-4 w-4" />
+                        </Button>
+                      )}
+                    </div>
+
+                    {recipe ? (
+                      <div className="flex items-center gap-3">
+                        {recipe.image_url && (
+                          <img
+                            src={recipe.image_url}
+                            alt={recipe.name}
+                            className="w-16 h-16 rounded-lg object-cover"
+                          />
+                        )}
+                        <div className="flex-1">
+                          <p className="font-medium">{recipe.name}</p>
+                          <p className="text-sm text-muted-foreground">
+                            {recipe.nutrition_per_serving?.calories} kcal • 1 serving
+                          </p>
+                        </div>
+                      </div>
+                    ) : (
+                      <Button
+                        variant="outline"
+                        className="w-full h-auto py-3 border-dashed hover:border-primary hover:bg-primary/5"
+                        onClick={() => handleAddRecipe(key)}
+                        disabled={saving}
+                      >
+                        <Plus className="h-5 w-5 mr-2" />
+                        Add Recipe
+                      </Button>
+                    )}
+                  </div>
+                )
+              })
+            )}
+          </div>
+
+          {saving && (
+            <div className="p-4 border-t border-border bg-muted/50">
+              <div className="flex items-center justify-center gap-2 text-sm text-muted-foreground">
+                <Loader2 className="h-4 w-4 animate-spin" />
+                <span>Saving...</span>
+              </div>
+            </div>
+          )}
+        </SheetContent>
+      </Sheet>
+
+      <RecipePickerSheet
+        open={pickerOpen}
+        onOpenChange={setPickerOpen}
+        recipes={recipes}
+        mealType={activeMealType}
+        onRecipeSelected={handleRecipeSelected}
+      />
+    </>
+  )
+}

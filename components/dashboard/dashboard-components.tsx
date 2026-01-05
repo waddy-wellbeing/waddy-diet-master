@@ -19,21 +19,25 @@ import {
   Loader2,
   ExternalLink,
 } from 'lucide-react'
-import type { ProfileTargets } from '@/lib/types/nutri'
+import type { ProfileTargets, DailyPlan, DailyLog } from '@/lib/types/nutri'
+import { getDayPlanState, getPlanIndicatorClasses, getPlanIndicatorLabel, canPlanDate } from '@/lib/utils/meal-planning'
 
 interface WeekDayCardProps {
   date: Date
   isSelected: boolean
   onClick: () => void
+  onPlanClick?: () => void
   consumed: number
   target: number
+  planState?: 'none' | 'planned' | 'logged' | 'both'
 }
 
-function WeekDayCard({ date, isSelected, onClick, consumed, target }: WeekDayCardProps) {
+function WeekDayCard({ date, isSelected, onClick, onPlanClick, consumed, target, planState = 'none' }: WeekDayCardProps) {
   const today = isToday(date)
   const progress = Math.min((consumed / target) * 100, 100)
   const dayName = format(date, 'EEE')
   const dayNum = format(date, 'd')
+  const canPlan = canPlanDate(date)
   
   // Calculate stroke dash for circular progress (responsive radius)
   // Mobile: 18, Desktop: 22
@@ -42,17 +46,36 @@ function WeekDayCard({ date, isSelected, onClick, consumed, target }: WeekDayCar
   const circumference = 2 * Math.PI * radius
   const dashOffset = circumference - (progress / 100) * circumference
 
+  const handleClick = (e: React.MouseEvent) => {
+    if (canPlan && e.altKey) {
+      // Alt/Option + click opens plan sheet
+      e.preventDefault()
+      e.stopPropagation()
+      onPlanClick?.()
+    } else {
+      onClick()
+    }
+  }
+
   return (
     <button
-      onClick={onClick}
+      onClick={handleClick}
+      onContextMenu={(e) => {
+        // Long press / right-click on mobile also opens plan sheet
+        if (canPlan) {
+          e.preventDefault()
+          onPlanClick?.()
+        }
+      }}
       className={cn(
-        'flex flex-col items-center p-1.5 sm:p-2 rounded-xl touch-manipulation flex-1 min-w-0',
+        'flex flex-col items-center p-1.5 sm:p-2 rounded-xl touch-manipulation flex-1 min-w-0 relative',
         'border-2 active:scale-95 transition-transform duration-75',
         isSelected
           ? 'border-primary bg-primary/5 shadow-sm'
           : 'border-transparent hover:bg-muted/50',
         today && !isSelected && 'border-primary/30'
       )}
+      title={planState !== 'none' ? getPlanIndicatorLabel(planState) : undefined}
     >
       <span className={cn(
         'text-[10px] sm:text-xs font-medium mb-0.5 sm:mb-1 leading-tight',
@@ -96,6 +119,17 @@ function WeekDayCard({ date, isSelected, onClick, consumed, target }: WeekDayCar
         )}>
           {dayNum}
         </span>
+
+        {/* Plan indicator - positioned at bottom right of circle */}
+        {planState !== 'none' && (
+          <div
+            className={cn(
+              'absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full',
+              getPlanIndicatorClasses(planState)
+            )}
+            aria-label={getPlanIndicatorLabel(planState)}
+          />
+        )}
       </div>
       
       {today && (
@@ -108,12 +142,24 @@ function WeekDayCard({ date, isSelected, onClick, consumed, target }: WeekDayCar
 interface WeekSelectorProps {
   selectedDate: Date
   onDateSelect: (date: Date) => void
+  onPlanClick?: (date: Date) => void
   weekData: Record<string, { consumed: number }>
+  weekPlans?: Record<string, DailyPlan>
+  weekLogs?: Record<string, DailyLog>
   dailyTarget: number
   showDayProgress?: boolean
 }
 
-export function WeekSelector({ selectedDate, onDateSelect, weekData, dailyTarget, showDayProgress = false }: WeekSelectorProps) {
+export function WeekSelector({ 
+  selectedDate, 
+  onDateSelect, 
+  onPlanClick,
+  weekData, 
+  weekPlans = {},
+  weekLogs = {},
+  dailyTarget, 
+  showDayProgress = false 
+}: WeekSelectorProps) {
   const [weekStart, setWeekStart] = useState(() => startOfWeek(new Date(), { weekStartsOn: 0 }))
   
   const weekDays = Array.from({ length: 7 }, (_, i) => addDays(weekStart, i))
@@ -163,6 +209,7 @@ export function WeekSelector({ selectedDate, onDateSelect, weekData, dailyTarget
         {weekDays.map((date) => {
           const dateKey = format(date, 'yyyy-MM-dd')
           const dayData = weekData[dateKey] || { consumed: 0 }
+          const planState = getDayPlanState(date, weekPlans, weekLogs)
           
           return (
             <WeekDayCard
@@ -170,8 +217,10 @@ export function WeekSelector({ selectedDate, onDateSelect, weekData, dailyTarget
               date={date}
               isSelected={isSameDay(date, selectedDate)}
               onClick={() => onDateSelect(date)}
+              onPlanClick={() => onPlanClick?.(date)}
               consumed={dayData.consumed}
               target={dailyTarget}
+              planState={planState}
             />
           )
         })}
