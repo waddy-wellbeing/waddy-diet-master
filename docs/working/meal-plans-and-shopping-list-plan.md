@@ -328,6 +328,203 @@ lib/utils/
 
 ---
 
+## 👥 Account Linking (Future Phase 8)
+
+### Overview
+Allow users to link accounts for shared meal planning. Perfect for families, spouses, roommates, or meal-prep groups.
+
+### Use Cases
+1. **Couples/Spouses:** Plan meals together, share shopping list
+2. **Families:** Parents plan, children see and log their meals
+3. **Roommates:** Coordinate shared meals and groceries
+4. **Meal Prep Groups:** Friends batch-cooking together
+
+### Key Features
+
+#### 1. Link Requests
+```typescript
+interface AccountLink {
+  user_id: string
+  linked_user_id: string
+  relationship: 'spouse' | 'family' | 'friend' | 'roommate'
+  permissions: 'view' | 'edit' | 'admin'
+  status: 'pending' | 'active' | 'declined'
+}
+```
+
+**Flow:**
+1. User A sends link request to User B
+2. Specify relationship type
+3. User B receives notification
+4. Accepts → Accounts linked
+5. Declines → Request removed
+
+#### 2. Shared Plans
+- **Planner creates meal plan** → All linked accounts see it
+- **Visual indicator:** "Shared by Sarah ❤️"
+- **Each user logs individually** (separate daily_logs)
+- **Combined shopping list** (all linked users' plans)
+
+#### 3. Permission Levels
+- **View:** See plans, cannot edit
+- **Edit:** Add/remove meals, modify plans
+- **Admin:** Manage linked accounts, full control
+
+#### 4. Shopping List Coordination
+```typescript
+// Generate shopping list for linked accounts
+const linkedUserIds = [userId, ...linkedAccountIds]
+const allPlans = await getPlansForUsers(linkedUserIds, dateRange)
+const combinedList = aggregateIngredients(allPlans)
+```
+
+**Smart Aggregation:**
+- User A plans chicken recipe (2 breasts)
+- User B plans fish recipe (1 fillet)
+- Shopping list: "2 chicken breasts, 1 fish fillet"
+- Shows which user needs each item
+
+### Database Changes
+
+```sql
+-- New table for account links
+CREATE TABLE account_links (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE,
+  linked_user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE,
+  relationship VARCHAR(50) NOT NULL,
+  permissions VARCHAR(20) DEFAULT 'view',
+  status VARCHAR(20) DEFAULT 'pending',
+  created_at TIMESTAMPTZ DEFAULT now(),
+  accepted_at TIMESTAMPTZ,
+  UNIQUE(user_id, linked_user_id),
+  CHECK (user_id != linked_user_id)
+);
+
+-- Index for quick lookups
+CREATE INDEX idx_account_links_user ON account_links(user_id, status);
+CREATE INDEX idx_account_links_linked ON account_links(linked_user_id, status);
+
+-- RLS policies
+ALTER TABLE account_links ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Users can view their own links"
+ON account_links FOR SELECT
+TO authenticated
+USING (auth.uid() = user_id OR auth.uid() = linked_user_id);
+
+CREATE POLICY "Users can create link requests"
+ON account_links FOR INSERT
+TO authenticated
+WITH CHECK (auth.uid() = user_id);
+
+CREATE POLICY "Users can accept/decline requests"
+ON account_links FOR UPDATE
+TO authenticated
+USING (auth.uid() = linked_user_id);
+```
+
+### UI/UX Design
+
+#### Settings Page: Linked Accounts
+```
+┌─────────────────────────────────────────┐
+│  👥 Linked Accounts                     │
+├─────────────────────────────────────────┤
+│  Sarah Ahmed                            │
+│  ❤️ Spouse • Can edit                   │
+│  Linked 3 months ago                    │
+│  [Manage] [Unlink]                      │
+│                                         │
+│  Ahmed Ali                              │
+│  👨‍👩‍👦 Family • View only                 │
+│  Linked 1 week ago                      │
+│  [Manage] [Unlink]                      │
+│                                         │
+│  [+ Link Account]                       │
+└─────────────────────────────────────────┘
+```
+
+#### Calendar with Shared Indicator
+```
+┌─────────────────────────────────────────┐
+│  📆 Jan 5                               │
+│  ❤️ Shared plan with Sarah              │
+├─────────────────────────────────────────┤
+│  🌅 Breakfast: Oatmeal                  │
+│  🌞 Lunch: Grilled Chicken              │
+│  🌙 Dinner: Salmon                      │
+└─────────────────────────────────────────┘
+```
+
+#### Shopping List with Sources
+```
+┌─────────────────────────────────────────┐
+│  🛒 Shopping List (You + Sarah)         │
+├─────────────────────────────────────────┤
+│  🥬 Produce                             │
+│  ☐ Tomatoes - 1kg                       │
+│     (You: 3 recipes, Sarah: 1 recipe)   │
+│  ☐ Spinach - 500g (Sarah)               │
+└─────────────────────────────────────────┘
+```
+
+### Implementation Phases
+
+**Phase 8.1: Basic Linking (2 weeks)**
+- Send/accept link requests
+- View linked accounts list
+- Indicator on shared plans
+
+**Phase 8.2: Shared Planning (2 weeks)**
+- One user plans → All see plan
+- Permission enforcement
+- Edit tracking (who changed what)
+
+**Phase 8.3: Shopping List Integration (1 week)**
+- Combined ingredient aggregation
+- Show source attribution
+- Individual vs combined toggle
+
+### Privacy & Security
+
+**Considerations:**
+1. **Data Privacy:** Only share what's necessary
+2. **Unlink Anytime:** Users can unlink without penalty
+3. **Separate Logs:** Nutrition tracking remains private
+4. **Audit Trail:** Track who made changes
+5. **Notification Preferences:** Opt-out of link notifications
+
+### Edge Cases
+
+1. **Circular Links:** Prevent A→B→C→A loops
+2. **Deleted Users:** Auto-unlink if user deleted
+3. **Permission Conflicts:** Admin overrides edit/view
+4. **Duplicate Plans:** Warn if both users plan same day
+5. **Different Targets:** Shopping list shows combined, but logs calculated per user
+
+### Success Metrics
+
+- % of users who link at least one account
+- Average linked accounts per user
+- Engagement increase for linked users
+- Shopping list generation for linked vs single users
+
+### Recommendation
+
+**Separate Implementation Plan:** Yes, create dedicated plan after core features (Phases 1-4) are stable.
+
+**Why:**
+- Complex feature with many edge cases
+- Requires thorough UX research
+- Testing needs multiple test accounts
+- Security/privacy considerations
+- Can be built independently of core planning
+
+**Timeline:** Phase 8 (4-6 weeks after core features stable)
+
+---
+
 ## 🧮 Shopping List Algorithm
 
 ### 1. Ingredient Aggregation
@@ -681,13 +878,63 @@ function categorizeIngredient(ingredient: AggregatedIngredient): string {
 - Budget alerts
 - Cheaper alternative suggestions
 
-### Phase 8: Social Features
-- Share plans with family
-- Collaborative shopping lists
-- Split recipes for household
-- Meal planning groups
+### Phase 8: Account Linking & Shared Plans
+**Goal:** Enable meal planning for families and groups
 
-### Phase 9: Meal Prep Mode
+**Use Cases:**
+- Spouses/partners share meal plans
+- Families coordinate meals together
+- Friends meal-prepping together
+- Roommates planning shared groceries
+
+**Features:**
+- Link accounts with relationships (spouse, family, friend, roommate)
+- Shared meal plans (one person plans, all see it)
+- Collaborative shopping lists (combined ingredients)
+- Individual nutrition tracking (separate logs)
+- Permission system (view-only, edit, admin)
+
+**Database Schema:**
+```sql
+CREATE TABLE account_links (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID REFERENCES auth.users(id),
+  linked_user_id UUID REFERENCES auth.users(id),
+  relationship VARCHAR(50), -- 'spouse', 'family', 'friend', 'roommate'
+  permissions VARCHAR(20) DEFAULT 'view', -- 'view', 'edit', 'admin'
+  status VARCHAR(20) DEFAULT 'pending', -- 'pending', 'active', 'declined'
+  created_at TIMESTAMPTZ DEFAULT now(),
+  accepted_at TIMESTAMPTZ,
+  UNIQUE(user_id, linked_user_id)
+);
+
+-- Shared plans reference
+ALTER TABLE daily_plans ADD COLUMN shared_with UUID[] DEFAULT '{}';
+```
+
+**Implementation:**
+1. Send link request with relationship type
+2. Recipient accepts/declines
+3. Linked users see shared calendar indicator
+4. One user plans → All linked users see same plan
+5. Shopping list combines all linked users' plans
+6. Individual logs remain separate
+
+**Benefits:**
+- Solves "cooking for family" use case
+- Reduces duplicate planning work
+- More accurate shopping lists
+- Encourages meal planning adoption
+
+**Recommendation:** Separate implementation plan after core features stable
+
+### Phase 9: Social Features
+- Share plans publicly with community
+- Collaborative shopping lists with voting
+- Meal planning groups/challenges
+- Social meal planning features
+
+### Phase 10: Meal Prep Mode
 - Batch cooking workflows
 - Container/portion planning
 - Freeze/reheat instructions
@@ -906,25 +1153,16 @@ Helpful reminders without annoying.
    - Fresh calculation each time
    - Session state only for checkboxes
 
-### 3. **Recipe Portions:** ❓ **NEEDS CLARIFICATION**
-   
-   **Question:** When user adds a recipe to a meal slot, can they specify number of servings?
-   
-   **Example Scenario:**
-   - User is cooking for 2 people
-   - Recipe makes 4 servings total
-   - User wants to assign 2 servings to this meal
-   
-   **Options:**
-   - **A)** Fixed 1 serving per meal slot (simpler, assumes single person)
-   - **B)** Adjustable servings per recipe (flexible, supports meal prep/families)
-   - **C)** Auto-detect from user profile (if they have family size setting)
+### 3. **Recipe Portions:** ✅ **CONFIRMED - FIXED 1 SERVING**
+   - Fixed 1 serving per meal slot (simpler)
+   - Assumes single person planning
+   - Shopping list calculates based on 1 serving per recipe
    
    **Impact on Shopping List:**
-   - Option A: 1 chicken breast per recipe
-   - Option B: 2 chicken breasts if user selected 2 servings
+   - 1 chicken breast per recipe in plan
+   - If recipe appears in multiple days → multiply accordingly
    
-   **Your preference?**
+   **Future Enhancement:** Account linking will allow multiple users to share plans (see Phase 5 below)
 
 ### 4. **Template Design:** ✅ **CONFIRMED - SIMPLE & BRANDED**
    - Keep it simple and straightforward
