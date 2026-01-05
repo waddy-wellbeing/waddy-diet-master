@@ -141,3 +141,146 @@ When modifying the database schema, update these files:
 3. **Modals** - For create/edit, with form reset on close
 4. **Bulk actions** - Select multiple rows for batch operations
 5. **Confirmation dialogs** - For destructive actions (delete)
+
+## Meal Planning & Shopping Lists
+
+### Integration Approach
+- **NO separate /plans page** - Meal planning integrated into dashboard
+- Calendar-based planning directly from dashboard
+- Shopping lists dynamically generated from `daily_plans` (no database storage)
+- Mobile-first design with bottom sheets instead of modals
+
+### Component Patterns
+```typescript
+// Dashboard calendar with plan indicators
+import { CalendarWithPlans } from '@/components/dashboard/calendar-with-plans'
+
+// Meal planning bottom sheet (mobile-first)
+import { MealPlanSheet } from '@/components/dashboard/meal-plan-sheet'
+
+// Shopping list generation
+import { ShoppingListModal } from '@/components/dashboard/shopping-list-modal'
+```
+
+### Data Flow
+1. **Planning Meals:**
+   - User clicks future date on calendar → Bottom sheet opens
+   - Select recipes for breakfast, lunch, dinner, snacks
+   - Save to `daily_plans` table with date as key
+   - Calendar updates with visual indicators (🔵 planned, 🟢 logged, 🟡 both)
+
+2. **Generating Shopping List:**
+   - User clicks FAB (Floating Action Button) "🛒 Shopping List"
+   - Query `daily_plans` for date range (today → last planned day)
+   - Extract all recipe ingredients
+   - Aggregate by ingredient + unit
+   - Smart rounding to buyable quantities (250g → "250-300g")
+   - Categorize (Produce, Proteins, Grains, Dairy, etc.)
+   - Display with checkboxes (session state only)
+   - Export as: PDF, text, image, or WhatsApp share
+
+3. **No Persistence for Shopping Lists:**
+   - Shopping lists calculated fresh each time
+   - Not stored in database (ephemeral)
+   - Checkbox state exists only in component session
+   - User exports/shares if they need to keep it
+
+### Key Files
+- `components/dashboard/calendar-with-plans.tsx` - Enhanced calendar
+- `components/dashboard/meal-plan-sheet.tsx` - Bottom sheet for planning
+- `components/dashboard/recipe-picker-sheet.tsx` - Recipe selection
+- `components/dashboard/shopping-list-fab.tsx` - Floating action button
+- `components/dashboard/shopping-list-modal.tsx` - List generation UI
+- `lib/actions/meal-planning.ts` - Plan CRUD operations
+- `lib/actions/shopping-list-generator.ts` - Ingredient aggregation
+- `lib/utils/ingredient-aggregator.ts` - Combine ingredients from recipes
+- `lib/utils/unit-converter.ts` - ml→L, g→kg conversions
+- `lib/utils/quantity-rounder.ts` - Round to buyable amounts
+
+### UI Patterns
+```typescript
+// Mobile-first bottom sheet (not modal)
+<Sheet>
+  <SheetTrigger />
+  <SheetContent side="bottom" className="h-[90vh]">
+    {/* Meal planning UI */}
+  </SheetContent>
+</Sheet>
+
+// FAB with badge showing planned days
+<button className="fixed bottom-6 right-6 rounded-full bg-primary">
+  <ShoppingCart />
+  {plannedDays > 0 && <Badge>{plannedDays} days</Badge>}
+</button>
+
+// Calendar day with indicators
+<div className="relative">
+  <div className="date-number">5</div>
+  {hasPlanned && <div className="w-2 h-2 rounded-full border-2 border-blue-500" />}
+  {hasLogged && <div className="w-2 h-2 rounded-full bg-green-500" />}
+</div>
+```
+
+### Brand-Aligned Templates
+- Simple template system with brand identity
+- Use lime green buttons, lightning bolt ⚡ icons
+- Pre-built options:
+  * ⚡ "Quick Week" (7 days)
+  * 🎯 "3-Day Start" (3 days)
+  * 💪 "Weekend Prep" (4 days)
+- One-click calendar fill with ability to swap individual meals
+
+### Export Implementations
+```typescript
+// WhatsApp share
+const shareToWhatsApp = (text: string) => {
+  const url = `https://web.whatsapp.com/send?text=${encodeURIComponent(text)}`
+  window.open(url, '_blank')
+}
+
+// Copy to clipboard
+const copyAsText = async (text: string) => {
+  await navigator.clipboard.writeText(text)
+  toast.success('Copied to clipboard')
+}
+
+// PDF export (use jsPDF)
+import jsPDF from 'jspdf'
+const exportAsPDF = (items: ShoppingListItem[]) => {
+  const doc = new jsPDF()
+  // Format shopping list
+  doc.save('shopping-list.pdf')
+}
+
+// Image export (use html2canvas)
+import html2canvas from 'html2canvas'
+const exportAsImage = async (elementId: string) => {
+  const element = document.getElementById(elementId)
+  const canvas = await html2canvas(element)
+  // Download as PNG
+}
+```
+
+### Planning Duration
+- Users can plan 3-14 days ahead (configurable)
+- Default suggestion: 7 days (one week)
+- Shopping list auto-detects range from first to last planned day
+- Date range picker allows custom selection
+
+### Smart Features to Implement
+1. **Ingredient Aggregation:** Combine same ingredients across recipes
+2. **Unit Conversion:** Normalize units (ml/L, g/kg) before combining
+3. **Smart Rounding:** 
+   - Meat: Round to 50g increments
+   - Liquids: 250ml, 500ml, 1L standard sizes
+   - Eggs: Round up to whole eggs
+4. **Category Organization:** Group by food type for efficient shopping
+5. **Recipe Source Tracking:** Show which recipes use each ingredient
+
+### Mobile Optimizations
+- Bottom sheets for all planning interactions
+- Touch targets min 44px
+- Swipe gestures for quick actions
+- Thumb-reachable button placement
+- Progressive disclosure (collapsed categories)
+- Offline list access via localStorage/PWA
