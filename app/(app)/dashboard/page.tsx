@@ -3,7 +3,7 @@ import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import { DashboardContent } from './dashboard-content'
 import { format, startOfWeek, endOfWeek, subDays } from 'date-fns'
-import type { DailyPlan, DailyTotals, RecipeRecord } from '@/lib/types/nutri'
+import type { DailyPlan, DailyLog, DailyTotals, RecipeRecord } from '@/lib/types/nutri'
 
 export const metadata: Metadata = {
   title: 'Dashboard | Waddy Diet Master',
@@ -40,6 +40,7 @@ export default async function DashboardPage() {
     { data: dailyLog },
     { data: dailyPlan },
     { data: weekLogs },
+    { data: weekPlans },
     { data: streakLogs },
     { data: allRecipes },
   ] = await Promise.all([
@@ -62,10 +63,18 @@ export default async function DashboardPage() {
     // Week logs for the week selector
     supabase
       .from('daily_logs')
-      .select('log_date, logged_totals')
+      .select('log_date, log, logged_totals')
       .eq('user_id', user.id)
       .gte('log_date', format(weekStart, 'yyyy-MM-dd'))
       .lte('log_date', format(weekEnd, 'yyyy-MM-dd')),
+    
+    // Week plans for the week selector (NEW - for plan indicators)
+    supabase
+      .from('daily_plans')
+      .select('plan_date, plan')
+      .eq('user_id', user.id)
+      .gte('plan_date', format(weekStart, 'yyyy-MM-dd'))
+      .lte('plan_date', format(weekEnd, 'yyyy-MM-dd')),
     
     // Last 30 days for streak calculation (single query instead of 30!)
     supabase
@@ -87,10 +96,20 @@ export default async function DashboardPage() {
   
   // Process week data
   const weekData: Record<string, { consumed: number }> = {}
+  const weekLogsMap: Record<string, DailyLog> = {}
   if (weekLogs) {
     for (const log of weekLogs) {
       const totals = log.logged_totals as DailyTotals
       weekData[log.log_date] = { consumed: totals.calories || 0 }
+      weekLogsMap[log.log_date] = log.log as DailyLog
+    }
+  }
+
+  // Process week plans for indicators
+  const weekPlansMap: Record<string, DailyPlan> = {}
+  if (weekPlans) {
+    for (const planRecord of weekPlans) {
+      weekPlansMap[planRecord.plan_date] = planRecord.plan as DailyPlan
     }
   }
   
@@ -269,6 +288,8 @@ export default async function DashboardPage() {
       initialDailyLog={dailyLog}
       initialDailyPlan={dailyPlan}
       initialWeekLogs={weekData}
+      initialWeekPlans={weekPlansMap}
+      initialWeekLogsMap={weekLogsMap}
       initialStreak={streak}
       recipesByMealType={recipesByMealType}
       initialSelectedIndices={selectedRecipeIndices}

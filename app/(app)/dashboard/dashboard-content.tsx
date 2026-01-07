@@ -20,6 +20,7 @@ import {
   MealCard,
   QuickStats,
 } from '@/components/dashboard/dashboard-components'
+import { MealPlanSheet } from '@/components/dashboard/meal-plan-sheet'
 import { useAnalytics } from '@/components/analytics/analytics-provider'
 import { buildFeatureUseEvent, buildButtonClickEvent, buildMealLogError, getCurrentPagePath } from '@/lib/utils/analytics'
 import { createClient } from '@/lib/supabase/client'
@@ -41,6 +42,8 @@ interface DashboardContentProps {
   initialDailyLog: { log: DailyLog; logged_totals: DailyTotals } | null
   initialDailyPlan: { plan: DailyPlan; daily_totals: DailyTotals } | null
   initialWeekLogs: Record<string, { consumed: number }>
+  initialWeekPlans?: Record<string, DailyPlan>
+  initialWeekLogsMap?: Record<string, DailyLog>
   initialStreak: number
   recipesByMealType: Record<string, ScaledRecipe[]>
   initialSelectedIndices: Record<string, number>
@@ -52,6 +55,8 @@ export function DashboardContent({
   initialDailyLog,
   initialDailyPlan,
   initialWeekLogs,
+  initialWeekPlans = {},
+  initialWeekLogsMap = {},
   initialStreak,
   recipesByMealType,
   initialSelectedIndices,
@@ -63,8 +68,14 @@ export function DashboardContent({
   const [dailyLog, setDailyLog] = useState(initialDailyLog)
   const [dailyPlan, setDailyPlan] = useState(initialDailyPlan)
   const [weekData, setWeekData] = useState(initialWeekLogs)
+  const [weekPlans, setWeekPlans] = useState(initialWeekPlans)
+  const [weekLogsMap, setWeekLogsMap] = useState(initialWeekLogsMap)
   const [streak, setStreak] = useState(initialStreak)
   const [loadingMeal, setLoadingMeal] = useState<string | null>(null) // Track which meal is being logged
+  
+  // Meal planning sheet state
+  const [planSheetOpen, setPlanSheetOpen] = useState(false)
+  const [planSheetDate, setPlanSheetDate] = useState<Date | null>(null)
   
   // Track current recipe index for each meal type (for swiping)
   const [selectedIndices, setSelectedIndices] = useState<Record<MealName, number>>({
@@ -202,6 +213,34 @@ export function DashboardContent({
   // Get recipe count for each meal type
   const getRecipeCount = (mealType: MealName): number => {
     return (recipesByMealType[mealType] || []).length
+  }
+
+  // Meal planning handlers
+  const handlePlanClick = (date: Date) => {
+    setPlanSheetDate(date)
+    setPlanSheetOpen(true)
+  }
+
+  const handlePlanUpdated = async () => {
+    // Refresh week data to show updated indicators
+    const supabase = createClient()
+    const weekStart = startOfWeek(selectedDate, { weekStartsOn: 0 })
+    const weekEnd = endOfWeek(selectedDate, { weekStartsOn: 0 })
+    
+    const { data: updatedPlans } = await supabase
+      .from('daily_plans')
+      .select('plan_date, plan')
+      .eq('user_id', profile.user_id)
+      .gte('plan_date', format(weekStart, 'yyyy-MM-dd'))
+      .lte('plan_date', format(weekEnd, 'yyyy-MM-dd'))
+
+    if (updatedPlans) {
+      const newPlans: Record<string, DailyPlan> = {}
+      for (const p of updatedPlans) {
+        newPlans[p.plan_date] = p.plan as DailyPlan
+      }
+      setWeekPlans(newPlans)
+    }
   }
 
   // Build meal data using mealTargets for proper calorie allocation
@@ -745,7 +784,10 @@ export function DashboardContent({
         <WeekSelector
           selectedDate={selectedDate}
           onDateSelect={setSelectedDate}
+          onPlanClick={handlePlanClick}
           weekData={weekData}
+          weekPlans={weekPlans}
+          weekLogs={weekLogsMap}
           dailyTarget={dailyCalories}
           showDayProgress={true}
         />
@@ -882,8 +924,13 @@ export function DashboardContent({
             <h2 className="text-lg font-semibold">
               {isSelectedToday ? "Today's Meals" : format(selectedDate, 'EEEE\'s Meals')}
             </h2>
-            <Button variant="ghost" size="sm" className="text-primary" asChild>
-              <Link href="/profile">View Plan</Link>
+            <Button 
+              variant="ghost" 
+              size="sm" 
+              className="text-primary"
+              onClick={() => handlePlanClick(selectedDate)}
+            >
+              {isSelectedToday ? 'Plan Today' : 'Plan Day'}
             </Button>
           </div>
           
@@ -927,6 +974,15 @@ export function DashboardContent({
           </div>
         )}
       </main>
+
+      {/* Meal Planning Sheet */}
+      <MealPlanSheet
+        open={planSheetOpen}
+        onOpenChange={setPlanSheetOpen}
+        date={planSheetDate}
+        recipes={Object.values(recipesByMealType).flat()}
+        onPlanUpdated={handlePlanUpdated}
+      />
     </div>
   )
 }

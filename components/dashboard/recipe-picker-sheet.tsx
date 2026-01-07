@@ -72,9 +72,9 @@ export function RecipePickerSheet({
       if (searchQuery.trim()) {
         const query = searchQuery.toLowerCase()
         const name = recipe.name.toLowerCase()
-        const nameAr = recipe.name_ar?.toLowerCase() || ''
+        const description = recipe.description?.toLowerCase() || ''
         
-        return name.includes(query) || nameAr.includes(query)
+        return name.includes(query) || description.includes(query)
       }
 
       return true
