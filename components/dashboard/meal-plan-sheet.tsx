@@ -9,7 +9,7 @@
 
 import { useState, useEffect } from 'react'
 import { format } from 'date-fns'
-import { Loader2, Plus, Trash2, X } from 'lucide-react'
+import { Loader2, Plus, Trash2, X, ArrowLeftRight } from 'lucide-react'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
@@ -48,6 +48,7 @@ export function MealPlanSheet({ open, onOpenChange, date, recipes, onPlanUpdated
   const [saving, setSaving] = useState(false)
   const [pickerOpen, setPickerOpen] = useState(false)
   const [activeMealType, setActiveMealType] = useState<MealType | null>(null)
+  const [swapMode, setSwapMode] = useState(false)
 
   // Fetch plan when date changes
   useEffect(() => {
@@ -74,12 +75,13 @@ export function MealPlanSheet({ open, onOpenChange, date, recipes, onPlanUpdated
   const isReadOnly = isPast
 
 
-  const handleAddRecipe = (mealType: MealType) => {
+  const handleAddRecipe = (mealType: MealType, replace = false) => {
     if (isReadOnly) {
       toast('This plan is read-only')
       return
     }
     setActiveMealType(mealType)
+    setSwapMode(replace)
     setPickerOpen(true)
   }
 
@@ -106,7 +108,8 @@ export function MealPlanSheet({ open, onOpenChange, date, recipes, onPlanUpdated
       if (updated.success) {
         setPlan(updated.data)
       }
-      toast.success('Meal added to plan')
+
+      toast.success(swapMode ? 'Meal replaced in plan' : 'Meal added to plan')
       
       // Notify parent to refresh week indicators
       onPlanUpdated()
@@ -117,6 +120,7 @@ export function MealPlanSheet({ open, onOpenChange, date, recipes, onPlanUpdated
     setSaving(false)
     setPickerOpen(false)
     setActiveMealType(null)
+    setSwapMode(false)
   }
 
   const handleRemoveRecipe = async (mealType: MealType) => {
@@ -249,13 +253,14 @@ export function MealPlanSheet({ open, onOpenChange, date, recipes, onPlanUpdated
                       </h3>
                       {recipe && !isReadOnly && (
                         <Button
-                          variant="ghost"
+                          variant="outline"
                           size="sm"
-                          onClick={() => handleRemoveRecipe(key)}
+                          onClick={() => handleAddRecipe(key, true)}
                           disabled={saving}
-                          className="h-7 w-7 sm:h-8 sm:w-8 p-0 hover:bg-destructive/10 hover:text-destructive flex-shrink-0"
+                          className="h-7 px-2 sm:px-3 py-1 flex items-center gap-2"
                         >
-                          <X className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+                          <ArrowLeftRight className="h-4 w-4" />
+                          <span className="hidden sm:inline">Exchange</span>
                         </Button>
                       )}
 
@@ -301,6 +306,19 @@ export function MealPlanSheet({ open, onOpenChange, date, recipes, onPlanUpdated
                 )
               })
             )}
+          </div>
+
+          {/* Auto-shuffle placeholder - coming soon */}
+          <div className="p-4 border-t border-border flex items-center justify-between">
+            <div>
+              <div className="font-medium">Auto-shuffle</div>
+              <div className="text-xs text-muted-foreground">Automatically rotate suggestions (coming soon)</div>
+            </div>
+            <div className="opacity-70 cursor-not-allowed" role="button" onClick={() => toast('Coming soon: Auto-shuffle plans') }>
+              <div className="relative inline-flex h-6 w-11 items-center rounded-full bg-muted">
+                <span className="inline-block h-4 w-4 transform rounded-full bg-white translate-x-1" />
+              </div>
+            </div>
           </div>
 
           {saving && (
