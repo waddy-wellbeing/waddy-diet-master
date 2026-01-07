@@ -190,27 +190,28 @@ export function MealPlanSheet({ open, onOpenChange, date, recipes, onPlanUpdated
           side="bottom" 
           className="h-[90vh] max-h-[90vh] rounded-t-xl flex flex-col p-0 overflow-hidden"
         >
-          <SheetHeader className="p-6 pb-4 border-b border-border">
-            <div className="flex items-center justify-between">
-              <div>
-                <SheetTitle className="text-2xl">
-                  Plan Meals for {formatPlanDateHeader(date)}
-                </SheetTitle>
-                <SheetDescription>
-                  Select recipes for each meal (1 serving each)
-                </SheetDescription>
+          <SheetHeader className="px-4 pt-4 pb-3 sm:px-6 sm:pt-6 sm:pb-4 border-b border-border flex-shrink-0">
+            <div className="space-y-2">
+              <div className="flex items-start justify-between gap-3 pr-8">
+                <div className="flex-1 min-w-0">
+                  <SheetTitle className="text-base leading-tight sm:text-2xl">
+                    Plan Meals for {formatPlanDateHeader(date)}
+                  </SheetTitle>
+                </div>
+                {hasMeals && !saving && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={handleClearAll}
+                    className="text-destructive hover:text-destructive hover:bg-destructive/10 flex-shrink-0 h-7 px-2 sm:px-3"
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </Button>
+                )}
               </div>
-              {hasMeals && !saving && (
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={handleClearAll}
-                  className="text-destructive hover:text-destructive hover:bg-destructive/10"
-                >
-                  <Trash2 className="h-4 w-4 mr-2" />
-                  Clear All
-                </Button>
-              )}
+              <SheetDescription className="text-xs sm:text-sm">
+                Select recipes for each meal (1 serving each)
+              </SheetDescription>
             </div>
           </SheetHeader>
 
@@ -228,9 +229,9 @@ export function MealPlanSheet({ open, onOpenChange, date, recipes, onPlanUpdated
                     key={key}
                     className="border border-border rounded-xl p-3 sm:p-4 bg-card"
                   >
-                    <div className="flex items-center justify-between mb-3">
-                      <h3 className="text-lg font-semibold flex items-center gap-2">
-                        <span>{emoji}</span>
+                    <div className="flex items-center justify-between mb-2 sm:mb-3">
+                      <h3 className="text-base sm:text-lg font-semibold flex items-center gap-1.5 sm:gap-2">
+                        <span className="text-lg sm:text-xl">{emoji}</span>
                         <span>{label}</span>
                       </h3>
                       {recipe && (
@@ -239,25 +240,25 @@ export function MealPlanSheet({ open, onOpenChange, date, recipes, onPlanUpdated
                           size="sm"
                           onClick={() => handleRemoveRecipe(key)}
                           disabled={saving}
-                          className="h-8 w-8 p-0 hover:bg-destructive/10 hover:text-destructive"
+                          className="h-7 w-7 sm:h-8 sm:w-8 p-0 hover:bg-destructive/10 hover:text-destructive flex-shrink-0"
                         >
-                          <X className="h-4 w-4" />
+                          <X className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
                         </Button>
                       )}
                     </div>
 
                     {recipe ? (
-                      <div className="flex items-center gap-2 sm:gap-3">
+                      <div className="flex items-start gap-2 sm:gap-3">
                         {recipe.image_url && (
                           <img
                             src={recipe.image_url}
                             alt={recipe.name}
-                            className="w-14 h-14 sm:w-16 sm:h-16 rounded-lg object-cover flex-shrink-0"
+                            className="w-12 h-12 sm:w-16 sm:h-16 rounded-lg object-cover flex-shrink-0"
                           />
                         )}
                         <div className="flex-1 min-w-0">
-                          <p className="font-medium truncate">{recipe.name}</p>
-                          <p className="text-sm text-muted-foreground">
+                          <p className="font-medium text-sm sm:text-base line-clamp-2 leading-tight">{recipe.name}</p>
+                          <p className="text-xs sm:text-sm text-muted-foreground mt-0.5">
                             {recipe.nutrition_per_serving?.calories} kcal • 1 serving
                           </p>
                         </div>
@@ -265,11 +266,11 @@ export function MealPlanSheet({ open, onOpenChange, date, recipes, onPlanUpdated
                     ) : (
                       <Button
                         variant="outline"
-                        className="w-full h-auto py-3 border-dashed hover:border-primary hover:bg-primary/5"
+                        className="w-full h-auto py-2.5 sm:py-3 border-dashed hover:border-primary hover:bg-primary/5 text-sm sm:text-base"
                         onClick={() => handleAddRecipe(key)}
                         disabled={saving}
                       >
-                        <Plus className="h-5 w-5 mr-2" />
+                        <Plus className="h-4 w-4 sm:h-5 sm:w-5 mr-1.5 sm:mr-2" />
                         Add Recipe
                       </Button>
                     )}

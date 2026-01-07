@@ -241,6 +241,11 @@ export function DashboardContent({
       }
       setWeekPlans(newPlans)
     }
+
+    // If planning for today, refresh the current day plan
+    if (planSheetDate && isDateToday(planSheetDate)) {
+      await fetchDayData(selectedDate)
+    }
   }
 
   // Build meal data using mealTargets for proper calorie allocation
