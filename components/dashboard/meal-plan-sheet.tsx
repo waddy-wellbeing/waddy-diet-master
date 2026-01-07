@@ -283,7 +283,7 @@ export function MealPlanSheet({ open, onOpenChange, date, recipes, onPlanUpdated
                         <div className="flex-1 min-w-0">
                           <p className="font-medium text-sm sm:text-base line-clamp-2 leading-tight">{recipe.name}</p>
                           <p className="text-xs sm:text-sm text-muted-foreground mt-0.5">
-                            {recipe.nutrition_per_serving?.calories} kcal • 1 serving
+                            {(recipe as any).scaled_calories || recipe.nutrition_per_serving?.calories} kcal • 1 serving
                           </p>
                         </div>
                       </div>
