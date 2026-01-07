@@ -188,30 +188,30 @@ export function MealPlanSheet({ open, onOpenChange, date, recipes, onPlanUpdated
       <Sheet open={open} onOpenChange={onOpenChange}>
         <SheetContent 
           side="bottom" 
-          className="h-[90vh] max-h-[90vh] rounded-t-xl flex flex-col overflow-hidden"
+          className="h-[75vh] max-h-[75vh] rounded-t-xl flex flex-col overflow-hidden"
         >
-          <SheetHeader className="flex-shrink-0 border-b border-border px-4 py-3 sm:px-6 sm:py-4 space-y-0">
-            <div className="flex items-start gap-3 pr-8">
-              <div className="flex-1 min-w-0 space-y-1">
-                <SheetTitle className="text-sm leading-tight sm:text-xl sm:leading-tight">
+          <SheetHeader className="flex-shrink-0 border-b border-border px-4 py-3 sm:px-6 sm:py-4 space-y-1">
+            <div className="flex items-start gap-2 pr-10">
+              <div className="flex-1 min-w-0">
+                <SheetTitle className="text-sm leading-snug sm:text-lg sm:leading-tight">
                   Plan Meals for {formatPlanDateHeader(date)}
                 </SheetTitle>
-                <SheetDescription className="text-xs sm:text-sm">
+                <SheetDescription className="text-xs leading-snug sm:text-sm mt-1">
                   Select recipes for each meal (1 serving each)
                 </SheetDescription>
               </div>
+              {hasMeals && !saving && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={handleClearAll}
+                  className="text-destructive hover:text-destructive hover:bg-destructive/10 h-6 w-6 p-0 flex-shrink-0"
+                  aria-label="Clear all meals"
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                </Button>
+              )}
             </div>
-            {hasMeals && !saving && (
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={handleClearAll}
-                className="absolute top-3 right-12 sm:top-4 sm:right-14 text-destructive hover:text-destructive hover:bg-destructive/10 h-7 w-7 p-0"
-                aria-label="Clear all meals"
-              >
-                <Trash2 className="h-3.5 w-3.5" />
-              </Button>
-            )}
           </SheetHeader>
 
           <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-3 sm:space-y-4">
