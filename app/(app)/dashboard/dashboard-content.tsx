@@ -117,27 +117,27 @@ export function DashboardContent({
     setDailyLog(logData)
     setDailyPlan(planData)
     
-    // If there's a plan, update selected indices to match the plan
+    // If there's a plan, update selected indices to match the plan without causing re-definitions
     if (planData?.plan) {
       const plan = planData.plan as DailyPlan
-      const newIndices = { ...selectedIndices }
-      
-      if (plan.breakfast?.recipe_id) {
-        const idx = recipesByMealType.breakfast.findIndex(r => r.id === plan.breakfast?.recipe_id)
-        if (idx >= 0) newIndices.breakfast = idx
-      }
-      if (plan.lunch?.recipe_id) {
-        const idx = recipesByMealType.lunch.findIndex(r => r.id === plan.lunch?.recipe_id)
-        if (idx >= 0) newIndices.lunch = idx
-      }
-      if (plan.dinner?.recipe_id) {
-        const idx = recipesByMealType.dinner.findIndex(r => r.id === plan.dinner?.recipe_id)
-        if (idx >= 0) newIndices.dinner = idx
-      }
-      
-      setSelectedIndices(newIndices)
+      setSelectedIndices((prev) => {
+        const next = { ...prev }
+        if (plan.breakfast?.recipe_id) {
+          const idx = recipesByMealType.breakfast.findIndex(r => r.id === plan.breakfast?.recipe_id)
+          if (idx >= 0) next.breakfast = idx
+        }
+        if (plan.lunch?.recipe_id) {
+          const idx = recipesByMealType.lunch.findIndex(r => r.id === plan.lunch?.recipe_id)
+          if (idx >= 0) next.lunch = idx
+        }
+        if (plan.dinner?.recipe_id) {
+          const idx = recipesByMealType.dinner.findIndex(r => r.id === plan.dinner?.recipe_id)
+          if (idx >= 0) next.dinner = idx
+        }
+        return next
+      })
     }
-  }, [profile.user_id, recipesByMealType, selectedIndices])
+  }, [profile.user_id, recipesByMealType])
 
   // Fetch week data when week changes
   const fetchWeekData = useCallback(async (date: Date) => {
@@ -206,6 +206,19 @@ export function DashboardContent({
   // Get current recipe for each meal type based on selected index
   const getCurrentRecipe = (mealType: MealName): ScaledRecipe | null => {
     const recipes = recipesByMealType[mealType] || []
+    // If there's a plan for this day, prefer the planned recipe
+    try {
+      const planSlot = mealType === 'snacks' ? plan?.snacks?.[0] : (plan as any)?.[mealType]
+      const recipeId = planSlot?.recipe_id
+      if (recipeId) {
+        const allRecipes = Object.values(recipesByMealType).flat()
+        const planned = allRecipes.find(r => r.id === recipeId)
+        if (planned) return planned
+      }
+    } catch (e) {
+      // ignore
+    }
+
     const index = selectedIndices[mealType] || 0
     return recipes[index] || null
   }

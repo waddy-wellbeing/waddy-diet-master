@@ -69,7 +69,16 @@ export function MealPlanSheet({ open, onOpenChange, date, recipes, onPlanUpdated
     fetchPlan()
   }, [open, date])
 
+  // Computed flags
+  const isPast = date ? (new Date(format(date, 'yyyy-MM-dd')) < new Date(format(new Date(), 'yyyy-MM-dd'))) : false
+  const isReadOnly = isPast
+
+
   const handleAddRecipe = (mealType: MealType) => {
+    if (isReadOnly) {
+      toast('This plan is read-only')
+      return
+    }
     setActiveMealType(mealType)
     setPickerOpen(true)
   }
@@ -136,6 +145,11 @@ export function MealPlanSheet({ open, onOpenChange, date, recipes, onPlanUpdated
   }
 
   const handleClearAll = async () => {
+    if (isReadOnly) {
+      toast('This plan is read-only')
+      return
+    }
+
     if (!date || !plan) return
 
     const confirmed = confirm('Are you sure you want to clear all meals from this plan?')
@@ -233,7 +247,7 @@ export function MealPlanSheet({ open, onOpenChange, date, recipes, onPlanUpdated
                         <span className="text-lg sm:text-xl">{emoji}</span>
                         <span>{label}</span>
                       </h3>
-                      {recipe && (
+                      {recipe && !isReadOnly && (
                         <Button
                           variant="ghost"
                           size="sm"
@@ -243,6 +257,10 @@ export function MealPlanSheet({ open, onOpenChange, date, recipes, onPlanUpdated
                         >
                           <X className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
                         </Button>
+                      )}
+
+                      {isReadOnly && recipe && (
+                        <span className="text-xs text-muted-foreground">Read-only</span>
                       )}
                     </div>
 
@@ -263,15 +281,19 @@ export function MealPlanSheet({ open, onOpenChange, date, recipes, onPlanUpdated
                         </div>
                       </div>
                     ) : (
-                      <Button
-                        variant="outline"
-                        className="w-full h-auto py-2.5 sm:py-3 border-dashed hover:border-primary hover:bg-primary/5 text-sm sm:text-base"
-                        onClick={() => handleAddRecipe(key)}
-                        disabled={saving}
-                      >
-                        <Plus className="h-4 w-4 sm:h-5 sm:w-5 mr-1.5 sm:mr-2" />
-                        Add Recipe
-                      </Button>
+                      {!isReadOnly ? (
+                        <Button
+                          variant="outline"
+                          className="w-full h-auto py-2.5 sm:py-3 border-dashed hover:border-primary hover:bg-primary/5 text-sm sm:text-base"
+                          onClick={() => handleAddRecipe(key)}
+                          disabled={saving}
+                        >
+                          <Plus className="h-4 w-4 sm:h-5 sm:w-5 mr-1.5 sm:mr-2" />
+                          Add Recipe
+                        </Button>
+                      ) : (
+                        <div className="w-full py-2 text-xs text-muted-foreground text-center">Read-only</div>
+                      )
                     )}
                   </div>
                 )
