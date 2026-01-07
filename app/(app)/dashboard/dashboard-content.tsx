@@ -636,47 +636,42 @@ export function DashboardContent({
       [mealType]: newIdx,
     }))
     
-    // Save to daily plan if meal not logged yet and it's today
+    // Save to daily plan if it's today (regardless of logged status - always update plan)
     const todayDateStr = format(new Date(), 'yyyy-MM-dd')
     const selectedDateStr = format(selectedDate, 'yyyy-MM-dd')
     
     if (todayDateStr === selectedDateStr) {
-      // Get the current meal from meals array
-      const mealData = meals.find(m => m.name === mealType)
-      const isMealLogged = mealData?.isLogged ?? false
-      
-      if (!isMealLogged) {
-        // Get the new recipe and save it
-        const newRecipe = recipes[newIdx]
-        if (newRecipe) {
-          setLoadingMeal(mealType)
-          try {
-            const { saveMealToPlan } = await import('@/lib/actions/daily-plans')
-            await saveMealToPlan({
-              date: todayDateStr,
-              mealType,
-              recipeId: newRecipe.id,
-              servings: newRecipe.scale_factor || 1,
-            })
-            // Refresh data to show the updated plan
-            await fetchWeekData(selectedDate)
-            
-            // Track recipe swap event
-            trackEvent(buildButtonClickEvent('meal_builder', 'swap_recipe', getCurrentPagePath(), {
-              meal_type: mealType,
-              recipe_id: newRecipe.id,
-              recipe_name: newRecipe.name,
-              direction,
-              calories: newRecipe.scaled_calories || newRecipe.original_calories,
-            }))
-          } catch (error) {
-            captureError(buildMealLogError(
-              mealType,
-              error instanceof Error ? error.message : 'Unknown error'
-            ))
-          } finally {
-            setLoadingMeal(null)
-          }
+      // Get the new recipe and save it to plan
+      const newRecipe = recipes[newIdx]
+      if (newRecipe) {
+        setLoadingMeal(mealType)
+        try {
+          const { saveMealToPlan } = await import('@/lib/actions/daily-plans')
+          await saveMealToPlan({
+            date: todayDateStr,
+            mealType,
+            recipeId: newRecipe.id,
+            servings: newRecipe.scale_factor || 1,
+          })
+          // Refresh data to show the updated plan
+          await fetchDayData(selectedDate)
+          await fetchWeekData(selectedDate)
+          
+          // Track recipe swap event
+          trackEvent(buildButtonClickEvent('meal_builder', 'swap_recipe', getCurrentPagePath(), {
+            meal_type: mealType,
+            recipe_id: newRecipe.id,
+            recipe_name: newRecipe.name,
+            direction,
+            calories: newRecipe.scaled_calories || newRecipe.original_calories,
+          }))
+        } catch (error) {
+          captureError(buildMealLogError(
+            mealType,
+            error instanceof Error ? error.message : 'Unknown error'
+          ))
+        } finally {
+          setLoadingMeal(null)
         }
       }
     }

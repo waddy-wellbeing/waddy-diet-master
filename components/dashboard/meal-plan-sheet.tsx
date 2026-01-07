@@ -308,19 +308,6 @@ export function MealPlanSheet({ open, onOpenChange, date, recipes, onPlanUpdated
             )}
           </div>
 
-          {/* Auto-shuffle placeholder - coming soon */}
-          <div className="p-4 border-t border-border flex items-center justify-between">
-            <div>
-              <div className="font-medium">Auto-shuffle</div>
-              <div className="text-xs text-muted-foreground">Automatically rotate suggestions (coming soon)</div>
-            </div>
-            <div className="opacity-70 cursor-not-allowed" role="button" onClick={() => toast('Coming soon: Auto-shuffle plans') }>
-              <div className="relative inline-flex h-6 w-11 items-center rounded-full bg-muted">
-                <span className="inline-block h-4 w-4 transform rounded-full bg-white translate-x-1" />
-              </div>
-            </div>
-          </div>
-
           {saving && (
             <div className="p-4 border-t border-border bg-muted/50">
               <div className="flex items-center justify-center gap-2 text-sm text-muted-foreground">
