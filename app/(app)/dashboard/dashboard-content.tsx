@@ -980,7 +980,16 @@ export function DashboardContent({
         open={planSheetOpen}
         onOpenChange={setPlanSheetOpen}
         date={planSheetDate}
-        recipes={Object.values(recipesByMealType).flat()}
+        recipes={(() => {
+          // Deduplicate recipes using Map (recipes can appear in multiple meal types)
+          const uniqueRecipes = new Map()
+          Object.values(recipesByMealType).flat().forEach(recipe => {
+            if (!uniqueRecipes.has(recipe.id)) {
+              uniqueRecipes.set(recipe.id, recipe)
+            }
+          })
+          return Array.from(uniqueRecipes.values())
+        })()}
         onPlanUpdated={handlePlanUpdated}
       />
     </div>

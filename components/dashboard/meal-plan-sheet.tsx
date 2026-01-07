@@ -77,6 +77,8 @@ export function MealPlanSheet({ open, onOpenChange, date, recipes, onPlanUpdated
   const handleRecipeSelected = async (recipeId: string) => {
     if (!date || !activeMealType) return
 
+    console.log('[MealPlanSheet] Saving recipe:', { recipeId, mealType: activeMealType, date: format(date, 'yyyy-MM-dd') })
+    
     setSaving(true)
     const dateStr = format(date, 'yyyy-MM-dd')
     const result = await savePlanMeal({
@@ -85,13 +87,19 @@ export function MealPlanSheet({ open, onOpenChange, date, recipes, onPlanUpdated
       recipeId,
     })
 
+    console.log('[MealPlanSheet] Save result:', result)
+
     if (result.success) {
       // Refresh plan
       const updated = await getPlan(dateStr)
+      console.log('[MealPlanSheet] Refreshed plan:', updated)
+      
       if (updated.success) {
         setPlan(updated.data)
       }
       toast.success('Meal added to plan')
+      
+      // Notify parent to refresh week indicators
       onPlanUpdated()
     } else {
       toast.error(result.error)
@@ -180,7 +188,7 @@ export function MealPlanSheet({ open, onOpenChange, date, recipes, onPlanUpdated
       <Sheet open={open} onOpenChange={onOpenChange}>
         <SheetContent 
           side="bottom" 
-          className="h-[90vh] rounded-t-xl flex flex-col p-0"
+          className="h-[90vh] max-h-[90vh] rounded-t-xl flex flex-col p-0 overflow-hidden"
         >
           <SheetHeader className="p-6 pb-4 border-b border-border">
             <div className="flex items-center justify-between">
@@ -206,7 +214,7 @@ export function MealPlanSheet({ open, onOpenChange, date, recipes, onPlanUpdated
             </div>
           </SheetHeader>
 
-          <div className="flex-1 overflow-y-auto p-6 space-y-4">
+          <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-3 sm:space-y-4">
             {loading ? (
               <div className="flex items-center justify-center py-12">
                 <Loader2 className="h-8 w-8 animate-spin text-primary" />
@@ -218,7 +226,7 @@ export function MealPlanSheet({ open, onOpenChange, date, recipes, onPlanUpdated
                 return (
                   <div
                     key={key}
-                    className="border border-border rounded-xl p-4 bg-card"
+                    className="border border-border rounded-xl p-3 sm:p-4 bg-card"
                   >
                     <div className="flex items-center justify-between mb-3">
                       <h3 className="text-lg font-semibold flex items-center gap-2">
@@ -239,16 +247,16 @@ export function MealPlanSheet({ open, onOpenChange, date, recipes, onPlanUpdated
                     </div>
 
                     {recipe ? (
-                      <div className="flex items-center gap-3">
+                      <div className="flex items-center gap-2 sm:gap-3">
                         {recipe.image_url && (
                           <img
                             src={recipe.image_url}
                             alt={recipe.name}
-                            className="w-16 h-16 rounded-lg object-cover"
+                            className="w-14 h-14 sm:w-16 sm:h-16 rounded-lg object-cover flex-shrink-0"
                           />
                         )}
-                        <div className="flex-1">
-                          <p className="font-medium">{recipe.name}</p>
+                        <div className="flex-1 min-w-0">
+                          <p className="font-medium truncate">{recipe.name}</p>
                           <p className="text-sm text-muted-foreground">
                             {recipe.nutrition_per_serving?.calories} kcal • 1 serving
                           </p>

@@ -31,13 +31,17 @@ interface RemovePlanMealParams {
  */
 export async function savePlanMeal(params: SavePlanMealParams): Promise<ActionResult> {
   try {
+    console.log('[savePlanMeal] Starting with params:', params)
+    
     const supabase = await createClient()
     const { data: { user }, error: authError } = await supabase.auth.getUser()
 
     if (authError || !user) {
+      console.error('[savePlanMeal] Auth error:', authError)
       return { success: false, error: 'Not authenticated' }
     }
 
+    console.log('[savePlanMeal] User authenticated:', user.id)
     const { date, mealType, recipeId } = params
 
     // Get existing plan for this date
@@ -47,6 +51,8 @@ export async function savePlanMeal(params: SavePlanMealParams): Promise<ActionRe
       .eq('user_id', user.id)
       .eq('plan_date', date)
       .maybeSingle()
+
+    console.log('[savePlanMeal] Existing plan:', existingPlan)
 
     // Build the meal object (fixed 1 serving)
     const meal: PlanMealSlot = {
@@ -89,8 +95,10 @@ export async function savePlanMeal(params: SavePlanMealParams): Promise<ActionRe
 
     // Calculate daily totals
     const updatedTotals = await calculateDailyTotals(updatedPlan)
+    console.log('[savePlanMeal] Calculated totals:', updatedTotals)
 
     // Upsert the plan
+    console.log('[savePlanMeal] Upserting plan:', { user_id: user.id, plan_date: date, plan: updatedPlan })
     const { error: upsertError } = await supabase
       .from('daily_plans')
       .upsert({
@@ -103,10 +111,11 @@ export async function savePlanMeal(params: SavePlanMealParams): Promise<ActionRe
       })
 
     if (upsertError) {
-      console.error('Error saving plan meal:', upsertError)
+      console.error('[savePlanMeal] Upsert error:', upsertError)
       return { success: false, error: 'Failed to save meal to plan' }
     }
 
+    console.log('[savePlanMeal] Success! Revalidating paths...')
     // Revalidate dashboard to show updated indicators
     revalidatePath('/dashboard')
     revalidatePath(`/dashboard?date=${date}`)

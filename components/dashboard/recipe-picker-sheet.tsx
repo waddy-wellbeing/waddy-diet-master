@@ -95,9 +95,9 @@ export function RecipePickerSheet({
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent 
         side="bottom" 
-        className="h-[90vh] rounded-t-xl flex flex-col p-0"
+        className="h-[90vh] max-h-[90vh] rounded-t-xl flex flex-col p-0 overflow-hidden"
       >
-        <SheetHeader className="p-6 pb-4 border-b border-border">
+        <SheetHeader className="p-4 sm:p-6 pb-3 sm:pb-4 border-b border-border flex-shrink-0">
           <div className="flex items-center gap-3 mb-2">
             <Button
               variant="ghost"
@@ -150,7 +150,7 @@ export function RecipePickerSheet({
                   key={recipe.id}
                   onClick={() => handleRecipeClick(recipe.id)}
                   className={cn(
-                    'flex items-center gap-3 p-3 rounded-xl border border-border',
+                    'flex items-center gap-2 sm:gap-3 p-2.5 sm:p-3 rounded-xl border border-border',
                     'bg-card hover:bg-muted/50 transition-colors',
                     'text-left touch-manipulation active:scale-[0.98]'
                   )}
@@ -159,10 +159,10 @@ export function RecipePickerSheet({
                     <img
                       src={recipe.image_url}
                       alt={recipe.name}
-                      className="w-20 h-20 rounded-lg object-cover flex-shrink-0"
+                      className="w-16 h-16 sm:w-20 sm:h-20 rounded-lg object-cover flex-shrink-0"
                     />
                   ) : (
-                    <div className="w-20 h-20 rounded-lg bg-muted flex-shrink-0 flex items-center justify-center">
+                    <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-lg bg-muted flex-shrink-0 flex items-center justify-center">
                       <span className="text-2xl">🍽️</span>
                     </div>
                   )}
