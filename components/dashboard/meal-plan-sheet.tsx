@@ -270,6 +270,8 @@ export function MealPlanSheet({ open, onOpenChange, date, recipes, onPlanUpdated
                           <img
                             src={recipe.image_url}
                             alt={recipe.name}
+                            crossOrigin="anonymous"
+                            referrerPolicy="no-referrer"
                             className="w-12 h-12 sm:w-16 sm:h-16 rounded-lg object-cover flex-shrink-0"
                           />
                         )}
@@ -281,7 +283,7 @@ export function MealPlanSheet({ open, onOpenChange, date, recipes, onPlanUpdated
                         </div>
                       </div>
                     ) : (
-                      {!isReadOnly ? (
+                      !isReadOnly ? (
                         <Button
                           variant="outline"
                           className="w-full h-auto py-2.5 sm:py-3 border-dashed hover:border-primary hover:bg-primary/5 text-sm sm:text-base"

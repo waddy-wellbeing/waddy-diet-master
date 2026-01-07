@@ -47,8 +47,8 @@ function WeekDayCard({ date, isSelected, onClick, onPlanClick, consumed, target,
   const dashOffset = circumference - (progress / 100) * circumference
 
   const handleClick = (e: React.MouseEvent) => {
-    if (canPlan && e.altKey) {
-      // Alt/Option + click opens plan sheet
+    if (e.altKey) {
+      // Alt/Option + click opens plan sheet (view-only for past dates)
       e.preventDefault()
       e.stopPropagation()
       onPlanClick?.()
@@ -61,11 +61,9 @@ function WeekDayCard({ date, isSelected, onClick, onPlanClick, consumed, target,
     <button
       onClick={handleClick}
       onContextMenu={(e) => {
-        // Long press / right-click on mobile also opens plan sheet
-        if (canPlan) {
-          e.preventDefault()
-          onPlanClick?.()
-        }
+        // Long press / right-click on mobile opens plan sheet (view-only for past dates)
+        e.preventDefault()
+        onPlanClick?.()
       }}
       className={cn(
         'flex flex-col items-center p-1.5 sm:p-2 rounded-xl touch-manipulation flex-1 min-w-0 relative',
@@ -554,6 +552,8 @@ export function MealCard({ meal, isToday = true, onLogMeal, onUnlogMeal, onSwapM
                 <img
                   src={meal.recipe.image_url}
                   alt={meal.recipe.name}
+                  crossOrigin="anonymous"
+                  referrerPolicy="no-referrer"
                   className="w-full h-full object-cover"
                 />
               ) : (

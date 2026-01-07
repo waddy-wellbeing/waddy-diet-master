@@ -159,6 +159,8 @@ export function RecipePickerSheet({
                     <img
                       src={recipe.image_url}
                       alt={recipe.name}
+                      crossOrigin="anonymous"
+                      referrerPolicy="no-referrer"
                       className="w-16 h-16 sm:w-20 sm:h-20 rounded-lg object-cover flex-shrink-0"
                     />
                   ) : (
