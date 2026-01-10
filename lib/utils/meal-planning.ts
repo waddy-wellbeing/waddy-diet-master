@@ -143,7 +143,7 @@ export function countPlanRecipes(plan: DailyPlan | null | undefined): number {
 export function getPlanIndicatorClasses(state: DayPlanState): string {
   switch (state) {
     case 'planned':
-      return 'border-2 border-blue-500' // 🔵 Blue border for future plans
+      return 'bg-blue-500 sm:bg-transparent sm:border-2 sm:border-blue-500' // Blue fill on mobile, border on desktop
     case 'logged':
       return 'bg-green-500' // 🟢 Green fill for logged meals
     case 'both':

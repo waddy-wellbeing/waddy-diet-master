@@ -122,7 +122,7 @@ function WeekDayCard({ date, isSelected, onClick, onPlanClick, consumed, target,
         {planState !== 'none' && (
           <div
             className={cn(
-              'absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full',
+              'absolute -bottom-0.5 -right-0.5 w-3 h-3 sm:w-2.5 sm:h-2.5 rounded-full ring-2 ring-background',
               getPlanIndicatorClasses(planState)
             )}
             aria-label={getPlanIndicatorLabel(planState)}
