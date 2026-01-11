@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
 import {
   Table,
@@ -41,8 +41,9 @@ import {
   ChevronRight,
   Eye,
   ArrowRight,
+  Loader2,
 } from 'lucide-react'
-import { UserWithProfile, updatePlanStatus } from '@/lib/actions/users'
+import { UserWithProfile, updatePlanStatus, getUsers } from '@/lib/actions/users'
 import { PlanAssignmentDialog } from './plan-assignment-dialog'
 import type { PlanStatus } from '@/lib/types/nutri'
 import { cn } from '@/lib/utils'
@@ -61,23 +62,65 @@ const statusConfig: Record<PlanStatus, { label: string; variant: 'default' | 'se
 
 export function UsersTable({ initialUsers, initialCount }: UsersTableProps) {
   const [users, setUsers] = useState<UserWithProfile[]>(initialUsers)
+  // `searchInput` is the raw text in the field; `search` is the last executed query
+  const [searchInput, setSearchInput] = useState('')
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState<PlanStatus | 'all'>('all')
   const [selectedUser, setSelectedUser] = useState<UserWithProfile | null>(null)
   const [showAssignDialog, setShowAssignDialog] = useState(false)
   const [page, setPage] = useState(1)
+  const [isSearching, setIsSearching] = useState(false)
+  const [totalCount, setTotalCount] = useState(initialCount)
   const pageSize = 20
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const didMountRef = useRef(false)
 
-  // Filter users
+  // Execute the server-side search
+  const performSearch = async (value: string) => {
+    const q = value.trim()
+    setSearch(q)
+    setPage(1)
+
+    if (!q) {
+      // Reset to initial list when query is cleared
+      setUsers(initialUsers)
+      setTotalCount(initialCount)
+      setIsSearching(false)
+      return
+    }
+
+    setIsSearching(true)
+    const { data, count } = await getUsers({ search: q })
+    setUsers(data || [])
+    setTotalCount(count)
+    setIsSearching(false)
+  }
+
+  // Debounce search: only trigger after user stops typing for 300ms
+  useEffect(() => {
+    // Skip running on initial mount
+    if (!didMountRef.current) {
+      didMountRef.current = true
+      return
+    }
+
+    if (debounceRef.current) clearTimeout(debounceRef.current)
+
+    debounceRef.current = setTimeout(() => {
+      performSearch(searchInput)
+    }, 300)
+
+    return () => {
+      if (debounceRef.current) clearTimeout(debounceRef.current)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchInput])
+
+  // Filter by status on client side (status filtering is fast and doesn't need pagination)
   const filteredUsers = users.filter(user => {
-    const matchesSearch = search === '' || 
-      user.profile?.basic_info?.name?.toLowerCase().includes(search.toLowerCase()) ||
-      user.id.toLowerCase().includes(search.toLowerCase())
-    
     const matchesStatus = statusFilter === 'all' || 
       user.profile?.plan_status === statusFilter
-
-    return matchesSearch && matchesStatus
+    return matchesStatus
   })
 
   // Pagination
@@ -124,11 +167,21 @@ export function UsersTable({ initialUsers, initialCount }: UsersTableProps) {
         <div className="relative flex-1">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <Input
-            placeholder="Search by name or ID..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Search by name, email, mobile, or ID..."
+            value={searchInput}
+            onChange={(e) => setSearchInput(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                if (debounceRef.current) clearTimeout(debounceRef.current)
+                performSearch(searchInput)
+              }
+            }}
             className="pl-9"
+            disabled={isSearching}
           />
+          {isSearching && (
+            <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground animate-spin" />
+          )}
         </div>
         <Select 
           value={statusFilter} 
@@ -151,7 +204,7 @@ export function UsersTable({ initialUsers, initialCount }: UsersTableProps) {
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
         <StatCard 
           label="Total Users" 
-          value={users.length} 
+          value={totalCount} 
           icon={<UserCog className="h-4 w-4" />}
         />
         <StatCard 
@@ -320,7 +373,7 @@ export function UsersTable({ initialUsers, initialCount }: UsersTableProps) {
       {totalPages > 1 && (
         <div className="flex items-center justify-between">
           <p className="text-sm text-muted-foreground">
-            Showing {(page - 1) * pageSize + 1} to {Math.min(page * pageSize, filteredUsers.length)} of {filteredUsers.length}
+            Showing {(page - 1) * pageSize + 1} to {Math.min(page * pageSize, filteredUsers.length)} of {filteredUsers.length} {search ? 'results' : 'users'}
           </p>
           <div className="flex gap-2">
             <Button

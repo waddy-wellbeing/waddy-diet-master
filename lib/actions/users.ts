@@ -89,6 +89,16 @@ export async function getUsers(options?: {
     query = query.eq('plan_status', options.planStatus)
   }
 
+  // Add search filters if provided (include JSON basic_info.name)
+  if (options?.search) {
+    const trimmed = options.search.trim()
+    const searchTerm = `%${trimmed}%`
+    // Avoid ilike on UUIDs (causes errors); search text fields + JSON name
+    query = query.or(
+      `name.ilike.${searchTerm},email.ilike.${searchTerm},mobile.ilike.${searchTerm},basic_info->>name.ilike.${searchTerm}`
+    )
+  }
+
   // Get profiles
   const { data: profiles, count, error } = await query
     .order('created_at', { ascending: false })
@@ -128,17 +138,8 @@ export async function getUsers(options?: {
     },
   }))
 
-  // Filter by search if provided (search in basic_info.name)
-  let filteredUsers = users
-  if (options?.search) {
-    const searchLower = options.search.toLowerCase()
-    filteredUsers = users.filter(u => 
-      u.profile?.basic_info?.name?.toLowerCase().includes(searchLower) ||
-      u.id.toLowerCase().includes(searchLower)
-    )
-  }
-
-  return { data: filteredUsers, count: count || 0, error: null }
+  // Return server-filtered results directly; count reflects server-side total
+  return { data: users, count: count || 0, error: null }
 }
 
 /**
