@@ -11,6 +11,58 @@ import {
   type MacroProfile,
 } from '@/lib/utils/nutrition'
 
+// Normalize legacy percentage formats (0-1) to decimals (0-1) for internal calculations
+const normalizeMealStructurePercentages = (structure: MealSlot[] = []): MealSlot[] => {
+  const total = structure.reduce((sum, meal) => sum + (meal.percentage || 0), 0)
+  if (total > 0 && total <= 1.5) return structure // already decimals
+  if (total > 1.5) {
+    return structure.map(meal => ({ ...meal, percentage: meal.percentage / 100 }))
+  }
+  return structure
+}
+
+export interface TestConsoleUserSearchResult {
+  id: string
+  name: string | null
+  email: string | null
+  mobile?: string | null
+  daily_calories?: number | null
+  meal_structure?: MealSlot[] | null
+}
+
+export async function searchUsersForTestConsole(query: string): Promise<{ users: TestConsoleUserSearchResult[]; error: string | null }> {
+  const supabase = await createClient()
+
+  const trimmed = query.trim()
+  if (!trimmed) return { users: [], error: null }
+
+  const { data, error } = await supabase
+    .from('profiles')
+    .select('id, name, email, mobile, targets, preferences')
+    .or(
+      `name.ilike.%${trimmed}%,email.ilike.%${trimmed}%,mobile.ilike.%${trimmed}%`
+    )
+    .limit(10)
+
+  if (error) {
+    return { users: [], error: error.message }
+  }
+
+  const users: TestConsoleUserSearchResult[] = (data || []).map((profile) => {
+    const mealStructure = normalizeMealStructurePercentages(profile.preferences?.meal_structure || [])
+    return {
+      id: profile.id,
+      name: profile.name,
+      email: profile.email,
+      mobile: profile.mobile,
+      daily_calories: profile.targets?.daily_calories || profile.targets?.tdee || null,
+      meal_structure: mealStructure.length > 0 ? mealStructure : null,
+    }
+  })
+
+  return { users, error: null }
+}
+
 export interface RecipeIngredientForPlan {
   id: string
   ingredient_id: string | null
@@ -642,6 +694,8 @@ export async function generateTestMealPlan(options: {
 }> {
   const { dailyCalories, mealStructure, dietaryFilters } = options
 
+  const normalizedStructure = normalizeMealStructurePercentages(mealStructure)
+
   const mealPlan: Array<{
     slot: MealSlot
     recipe: RecipeForMealPlan | null
@@ -650,7 +704,7 @@ export async function generateTestMealPlan(options: {
 
   let totalCalories = 0
 
-  for (const slot of mealStructure) {
+  for (const slot of normalizedStructure) {
     const targetCalories = Math.round(dailyCalories * slot.percentage)
     
     const { data: recipes } = await getRecipesForMeal({

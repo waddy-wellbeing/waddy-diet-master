@@ -40,6 +40,7 @@ import {
   ChevronLeft,
   ChevronRight,
   Eye,
+  ArrowRight,
 } from 'lucide-react'
 import { UserWithProfile, updatePlanStatus } from '@/lib/actions/users'
 import { PlanAssignmentDialog } from './plan-assignment-dialog'
@@ -279,6 +280,12 @@ export function UsersTable({ initialUsers, initialCount }: UsersTableProps) {
                             <Link href={`/admin/users/${user.id}`}>
                               <Eye className="h-4 w-4 mr-2" />
                               View Details
+                            </Link>
+                          </DropdownMenuItem>
+                          <DropdownMenuItem asChild>
+                            <Link href={`/admin/test-console/meal-planner?user=${encodeURIComponent(user.profile?.email || user.profile?.mobile || user.id)}`}>
+                              <ArrowRight className="h-4 w-4 mr-2" />
+                              Open in Test Console
                             </Link>
                           </DropdownMenuItem>
                           <DropdownMenuItem onClick={() => handleAssignClick(user)}>

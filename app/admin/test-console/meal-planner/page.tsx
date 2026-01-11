@@ -1,8 +1,9 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useEffect, useState, useTransition } from 'react'
 import Link from 'next/link'
 import Image from 'next/image'
+import { useSearchParams } from 'next/navigation'
 import { 
   ArrowLeft, 
   CalendarDays, 
@@ -14,12 +15,13 @@ import {
   AlertCircle,
   CheckCircle2,
   Filter,
+  Search,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { generateTestMealPlan, type RecipeForMealPlan } from '@/lib/actions/test-console'
+import { generateTestMealPlan, searchUsersForTestConsole, type RecipeForMealPlan } from '@/lib/actions/test-console'
 import type { MealSlot } from '@/lib/types/nutri'
 
 // Default meal structures
@@ -76,7 +78,18 @@ interface MealPlanResult {
   alternativeCount: number
 }
 
+interface TestConsoleUser {
+  id: string
+  name: string | null
+  email: string | null
+  mobile?: string | null
+  daily_calories?: number | null
+  meal_structure?: MealSlot[] | null
+}
+
 export default function MealPlannerPage() {
+  const searchParams = useSearchParams()
+
   const [dailyCalories, setDailyCalories] = useState(2000)
   const [selectedTemplate, setSelectedTemplate] = useState('3_meals_2_snacks')
   const [dietaryFilters, setDietaryFilters] = useState({
@@ -86,15 +99,65 @@ export default function MealPlannerPage() {
     dairy_free: false,
   })
   const [isGenerating, setIsGenerating] = useState(false)
+  const [isSearching, startSearching] = useTransition()
   const [mealPlan, setMealPlan] = useState<MealPlanResult[] | null>(null)
   const [totalCalories, setTotalCalories] = useState(0)
   const [error, setError] = useState<string | null>(null)
+  const [userQuery, setUserQuery] = useState('')
+  const [userResults, setUserResults] = useState<TestConsoleUser[]>([])
+  const [selectedUser, setSelectedUser] = useState<TestConsoleUser | null>(null)
+  const [customStructure, setCustomStructure] = useState<MealSlot[] | null>(null)
+
+  const activeStructure = customStructure || MEAL_TEMPLATES[selectedTemplate]
+
+  const handleSearchUser = (query?: string) => {
+    const q = (query ?? userQuery).trim()
+    if (!q) return
+    startSearching(async () => {
+      const { users, error: searchError } = await searchUsersForTestConsole(q)
+      setUserResults(users)
+      if (searchError) setError(searchError)
+    })
+  }
+
+  const handleSelectUser = (user: TestConsoleUser) => {
+    setSelectedUser(user)
+    setDailyCalories(user.daily_calories || 2000)
+    if (user.meal_structure && user.meal_structure.length > 0) {
+      setCustomStructure(user.meal_structure.map(slot => ({
+        ...slot,
+        target_calories: Math.round((user.daily_calories || 2000) * slot.percentage),
+      })))
+    }
+    setMealPlan(null)
+    setError(null)
+    setUserResults([]) // Clear search results
+  }
+
+  useEffect(() => {
+    const preset = searchParams.get('user')
+    if (preset) {
+      setUserQuery(preset)
+      handleSearchUser(preset)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams])
+
+  useEffect(() => {
+    // Update target_calories when daily calories change, but only if using custom structure
+    if (customStructure && selectedUser) {
+      setCustomStructure(prev => prev?.map(slot => ({
+        ...slot,
+        target_calories: Math.round(dailyCalories * slot.percentage),
+      })) || null)
+    }
+  }, [dailyCalories, selectedUser])
 
   const handleGenerate = async () => {
     setIsGenerating(true)
     setError(null)
     
-    const mealStructure = MEAL_TEMPLATES[selectedTemplate]
+    const mealStructure = activeStructure
     
     const { data, totalCalories: total, error: err } = await generateTestMealPlan({
       dailyCalories,
@@ -135,6 +198,64 @@ export default function MealPlannerPage() {
         </div>
       </div>
 
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Search className="h-5 w-5" />
+            Load User Context
+          </CardTitle>
+          <CardDescription>Search by email, name, or mobile to preload calories and meal structure.</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <div className="flex flex-col md:flex-row gap-3">
+            <Input
+              placeholder="Enter email, name, or mobile..."
+              value={userQuery}
+              onChange={(e) => setUserQuery(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') handleSearchUser()
+              }}
+            />
+            <Button onClick={() => handleSearchUser()} disabled={isSearching}>
+              {isSearching ? 'Searching...' : 'Search User'}
+            </Button>
+          </div>
+
+          {selectedUser && (
+            <div className="rounded-md bg-primary/5 px-3 py-2 text-sm flex items-center justify-between">
+              <div className="space-y-0.5">
+                <div className="font-medium">{selectedUser.name || 'Unnamed'} ({selectedUser.email || selectedUser.mobile || selectedUser.id})</div>
+                <div className="text-muted-foreground">Calories: {selectedUser.daily_calories || '—'} • Structure: {selectedUser.meal_structure?.length || '—'} slots</div>
+              </div>
+              <Button variant="ghost" size="sm" onClick={() => { setSelectedUser(null); setCustomStructure(null); setUserResults([]); }}>
+                Clear
+              </Button>
+            </div>
+          )}
+
+          {userResults.length > 0 && (
+            <div className="border rounded-md divide-y">
+              {userResults.map((user) => (
+                <button
+                  key={user.id}
+                  className="w-full text-left px-3 py-2 hover:bg-muted"
+                  onClick={() => handleSelectUser(user)}
+                >
+                  <div className="font-medium">{user.name || 'Unnamed User'}</div>
+                  <div className="text-xs text-muted-foreground flex gap-2">
+                    <span>{user.email || 'No email'}</span>
+                    {user.mobile && <span>• {user.mobile}</span>}
+                  </div>
+                  <div className="text-xs text-muted-foreground">
+                    Calories: {user.daily_calories || '—'} | Structure: {user.meal_structure?.length || '—'} slots
+                  </div>
+                </button>
+              ))}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
       <div className="grid gap-6 lg:grid-cols-3">
         {/* Config Panel */}
         <div className="space-y-4">
@@ -161,23 +282,32 @@ export default function MealPlannerPage() {
 
               <div className="space-y-2">
                 <Label>Meal Structure</Label>
-                <select
-                  className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                  value={selectedTemplate}
-                  onChange={(e) => setSelectedTemplate(e.target.value)}
-                >
-                  <option value="3_meals">3 Meals</option>
-                  <option value="3_meals_1_snack">3 Meals + 1 Snack</option>
-                  <option value="3_meals_2_snacks">3 Meals + 2 Snacks</option>
-                  <option value="4_meals">4 Meals (3 + 1 Snack)</option>
-                  <option value="3_meals_3_snacks">3 Meals + 3 Snacks</option>
-                </select>
+                {selectedUser && customStructure ? (
+                  <div className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm items-center text-muted-foreground">
+                    {customStructure.length} meals ({customStructure.map(s => Math.round(s.percentage * 100) + '%').join(', ')})
+                  </div>
+                ) : (
+                  <select
+                    className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                    value={selectedTemplate}
+                    onChange={(e) => setSelectedTemplate(e.target.value)}
+                  >
+                    <option value="3_meals">3 Meals</option>
+                    <option value="3_meals_1_snack">3 Meals + 1 Snack</option>
+                    <option value="3_meals_2_snacks">3 Meals + 2 Snacks</option>
+                    <option value="4_meals">4 Meals (3 + 1 Snack)</option>
+                    <option value="3_meals_3_snacks">3 Meals + 3 Snacks</option>
+                  </select>
+                )}
+                {selectedUser && customStructure && (
+                  <p className="text-xs text-muted-foreground">Using user's saved structure</p>
+                )}
               </div>
 
               {/* Meal breakdown preview */}
               <div className="rounded-lg bg-muted/50 p-3 space-y-2">
                 <div className="text-sm font-medium">Calorie Distribution</div>
-                {MEAL_TEMPLATES[selectedTemplate].map(slot => (
+                {activeStructure.map(slot => (
                   <div key={slot.name} className="flex justify-between text-sm">
                     <span className="text-muted-foreground">{MEAL_SLOT_LABELS[slot.name] || slot.name}</span>
                     <span className="font-mono">
