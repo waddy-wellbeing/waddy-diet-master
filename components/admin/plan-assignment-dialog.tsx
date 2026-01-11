@@ -44,47 +44,47 @@ const mealTemplates = [
   {
     name: '3 Meals (Classic)',
     meals: [
-      { name: 'breakfast', label: 'Breakfast', percentage: 0.25 },
-      { name: 'lunch', label: 'Lunch', percentage: 0.40 },
-      { name: 'dinner', label: 'Dinner', percentage: 0.35 },
+      { name: 'breakfast', label: 'Breakfast', percentage: 25 },
+      { name: 'lunch', label: 'Lunch', percentage: 40 },
+      { name: 'dinner', label: 'Dinner', percentage: 35 },
     ],
   },
   {
     name: '3 Meals + 2 Snacks',
     meals: [
-      { name: 'breakfast', label: 'Breakfast', percentage: 0.25 },
-      { name: 'mid_morning', label: 'Mid-Morning', percentage: 0.10 },
-      { name: 'lunch', label: 'Lunch', percentage: 0.30 },
-      { name: 'afternoon', label: 'Afternoon', percentage: 0.10 },
-      { name: 'dinner', label: 'Dinner', percentage: 0.25 },
+      { name: 'breakfast', label: 'Breakfast', percentage: 25 },
+      { name: 'mid_morning', label: 'Mid-Morning', percentage: 10 },
+      { name: 'lunch', label: 'Lunch', percentage: 30 },
+      { name: 'afternoon', label: 'Afternoon', percentage: 10 },
+      { name: 'dinner', label: 'Dinner', percentage: 25 },
     ],
   },
   {
     name: '5 Equal Meals',
     meals: [
-      { name: 'breakfast', label: 'Breakfast', percentage: 0.20 },
-      { name: 'mid_morning', label: 'Mid-Morning', percentage: 0.20 },
-      { name: 'lunch', label: 'Lunch', percentage: 0.20 },
-      { name: 'afternoon', label: 'Afternoon', percentage: 0.20 },
-      { name: 'dinner', label: 'Dinner', percentage: 0.20 },
+      { name: 'breakfast', label: 'Breakfast', percentage: 20 },
+      { name: 'mid_morning', label: 'Mid-Morning', percentage: 20 },
+      { name: 'lunch', label: 'Lunch', percentage: 20 },
+      { name: 'afternoon', label: 'Afternoon', percentage: 20 },
+      { name: 'dinner', label: 'Dinner', percentage: 20 },
     ],
   },
   {
     name: '6 Small Meals',
     meals: [
-      { name: 'breakfast', label: 'Breakfast', percentage: 0.18 },
-      { name: 'mid_morning', label: 'Mid-Morning', percentage: 0.14 },
-      { name: 'lunch', label: 'Lunch', percentage: 0.20 },
-      { name: 'afternoon', label: 'Afternoon', percentage: 0.14 },
-      { name: 'dinner', label: 'Dinner', percentage: 0.20 },
-      { name: 'evening', label: 'Evening', percentage: 0.14 },
+      { name: 'breakfast', label: 'Breakfast', percentage: 18 },
+      { name: 'mid_morning', label: 'Mid-Morning', percentage: 14 },
+      { name: 'lunch', label: 'Lunch', percentage: 20 },
+      { name: 'afternoon', label: 'Afternoon', percentage: 14 },
+      { name: 'dinner', label: 'Dinner', percentage: 20 },
+      { name: 'evening', label: 'Evening', percentage: 14 },
     ],
   },
   {
     name: 'Intermittent Fasting (2 Meals)',
     meals: [
-      { name: 'lunch', label: 'Lunch', percentage: 0.50 },
-      { name: 'dinner', label: 'Dinner', percentage: 0.50 },
+      { name: 'lunch', label: 'Lunch', percentage: 50 },
+      { name: 'dinner', label: 'Dinner', percentage: 50 },
     ],
   },
 ]
@@ -95,6 +95,14 @@ export function PlanAssignmentDialog({
   onOpenChange,
   onSuccess,
 }: PlanAssignmentDialogProps) {
+  const normalizeStructure = (structure: MealSlot[] = []) => {
+    const total = structure.reduce((sum, meal) => sum + (meal.percentage || 0), 0)
+    if (total > 0 && total <= 1.5) {
+      return structure.map(meal => ({ ...meal, percentage: meal.percentage * 100 }))
+    }
+    return structure
+  }
+
   const [meals, setMeals] = useState<MealSlot[]>([])
   const [dailyCalories, setDailyCalories] = useState<number>(0)
   const [isSubmitting, setIsSubmitting] = useState(false)
@@ -105,7 +113,7 @@ export function PlanAssignmentDialog({
     if (user && open) {
       const existingStructure = user.profile?.preferences?.meal_structure
       if (existingStructure && existingStructure.length > 0) {
-        setMeals(existingStructure)
+        setMeals(normalizeStructure(existingStructure))
       } else {
         // Default based on user's requested meal count
         const requestedMeals = user.profile?.preferences?.meals_per_day || 3
@@ -119,7 +127,7 @@ export function PlanAssignmentDialog({
 
   // Calculate total percentage
   const totalPercentage = meals.reduce((sum, m) => sum + m.percentage, 0)
-  const isValidPercentage = Math.abs(totalPercentage - 1.0) < 0.01
+  const isValidPercentage = Math.abs(totalPercentage - 100) < 0.5
 
   function applyTemplate(template: typeof mealTemplates[0]) {
     setMeals(template.meals)
@@ -153,7 +161,7 @@ export function PlanAssignmentDialog({
         return { ...m, name: value as string, label: option?.label || value as string }
       }
       if (field === 'percentage') {
-        return { ...m, percentage: Math.min(1, Math.max(0, Number(value))) }
+        return { ...m, percentage: Math.min(100, Math.max(0, Number(value))) }
       }
       return { ...m, [field]: value }
     }))
@@ -328,8 +336,8 @@ export function PlanAssignmentDialog({
                         min={0}
                         max={100}
                         step={5}
-                        value={Math.round(meal.percentage * 100)}
-                        onChange={(e) => updateMeal(index, 'percentage', Number(e.target.value) / 100)}
+                        value={Math.round(meal.percentage)}
+                        onChange={(e) => updateMeal(index, 'percentage', Number(e.target.value))}
                         className="w-20"
                       />
                       <span className="text-sm text-muted-foreground">%</span>
@@ -338,12 +346,12 @@ export function PlanAssignmentDialog({
                       <div className="flex-1 h-2 bg-muted rounded-full overflow-hidden">
                         <div 
                           className="h-full bg-primary rounded-full transition-all"
-                          style={{ width: `${meal.percentage * 100}%` }}
+                          style={{ width: `${meal.percentage}%` }}
                         />
                       </div>
 
                       <span className="text-sm font-medium w-20 text-right">
-                        {dailyCalories ? Math.round(dailyCalories * meal.percentage) : 0} cal
+                        {dailyCalories ? Math.round(dailyCalories * (meal.percentage / 100)) : 0} cal
                       </span>
                     </div>
                   </div>
@@ -374,7 +382,7 @@ export function PlanAssignmentDialog({
                   "font-bold",
                   isValidPercentage ? "text-green-600 dark:text-green-400" : "text-destructive"
                 )}>
-                  {Math.round(totalPercentage * 100)}%
+                  {Math.round(totalPercentage)}%
                 </span>
                 {isValidPercentage ? (
                   <Check className="h-4 w-4 text-green-600 dark:text-green-400" />

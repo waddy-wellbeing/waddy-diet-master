@@ -56,11 +56,24 @@ const MEAL_OPTIONS = [
 ]
 
 export function MealStructureEditor({ user, onUpdate }: MealStructureEditorProps) {
+  const normalizeStructure = (structure: MealSlot[] = []) => {
+    const total = structure.reduce((sum, meal) => sum + (meal.percentage || 0), 0)
+    if (total > 0 && total <= 1.5) {
+      return structure.map(meal => ({ ...meal, percentage: meal.percentage * 100 }))
+    }
+    return structure
+  }
+
   const existingStructure = user.profile?.preferences?.meal_structure
-  const initialStructure = existingStructure || DEFAULT_STRUCTURES["3-meals"]
+  const initialStructure = existingStructure 
+    ? normalizeStructure(existingStructure)
+    : DEFAULT_STRUCTURES["3-meals"]
   
   const [mealSlots, setMealSlots] = useState<EditableMealSlot[]>(
-    initialStructure.map((slot, idx) => ({ ...slot, tempId: idx }))
+    initialStructure.map((slot, idx) => ({
+      ...slot,
+      tempId: idx,
+    }))
   )
   const [saving, setSaving] = useState(false)
   const [success, setSuccess] = useState(false)
