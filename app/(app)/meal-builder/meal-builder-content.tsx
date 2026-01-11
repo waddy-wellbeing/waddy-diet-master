@@ -34,7 +34,7 @@ import { saveMealToPlan } from '@/lib/actions/daily-plans'
 import type { DailyPlan, PlanMealSlot, PlanSnackItem } from '@/lib/types/nutri'
 import type { ScaledRecipeWithIngredients } from './page'
 
-type MealType = 'breakfast' | 'lunch' | 'dinner' | 'snacks'
+type MealType = string
 
 interface MealBuilderContentProps {
   mealTargets: Record<MealType, { calories: number; protein: number; carbs: number; fat: number }>
@@ -45,7 +45,7 @@ interface MealBuilderContentProps {
   todaysPlan?: DailyPlan | null
 }
 
-const mealLabels: Record<MealType, string> = {
+const mealLabels: Record<string, string> = {
   breakfast: 'Breakfast',
   lunch: 'Lunch',
   dinner: 'Dinner',
@@ -123,13 +123,13 @@ export function MealBuilderContent({
 
   // State - initialize with initialMeal if provided
   const [selectedMeal, setSelectedMeal] = useState<MealType | null>(initialMeal)
-  const [recipeIndices, setRecipeIndices] = useState<Record<MealType, number>>(() => {
-    return {
-      breakfast: getIndexForRecipeId('breakfast', getPlanRecipeId('breakfast')),
-      lunch: getIndexForRecipeId('lunch', getPlanRecipeId('lunch')),
-      dinner: getIndexForRecipeId('dinner', getPlanRecipeId('dinner')),
-      snacks: getIndexForRecipeId('snacks', getPlanRecipeId('snacks')),
+  const [recipeIndices, setRecipeIndices] = useState<Record<string, number>>(() => {
+    const keys = Object.keys(recipesByMealType)
+    const initial: Record<string, number> = {}
+    for (const k of keys) {
+      initial[k] = getIndexForRecipeId(k as MealType, getPlanRecipeId(k as MealType))
     }
+    return initial
   })
   const [activeTab, setActiveTab] = useState<'ingredients' | 'instructions'>('ingredients')
   const [expandedIngredient, setExpandedIngredient] = useState<string | null>(null)
@@ -242,6 +242,11 @@ export function MealBuilderContent({
       .map(x => x.r)
   }, [debouncedQuery, recipesByMealType, selectedMeal])
 
+  const getMealLabel = (meal?: string | null) => {
+    if (!meal) return 'recipes'
+    return mealLabels[meal] || meal.replace('_', ' ').replace(/\b\w/g, c => c.toUpperCase())
+  }
+
   const renderHighlighted = (text: string, query: string) => {
     if (!query || !text) return text
 
@@ -300,9 +305,9 @@ export function MealBuilderContent({
   
   // Get current recipe for selected meal
   const currentRecipe = selectedMeal 
-    ? recipesByMealType[selectedMeal][recipeIndices[selectedMeal]] 
+    ? (recipesByMealType[selectedMeal] || [])[recipeIndices[selectedMeal] || 0] 
     : null
-  const totalRecipes = selectedMeal ? recipesByMealType[selectedMeal].length : 0
+  const totalRecipes = selectedMeal ? (recipesByMealType[selectedMeal] || []).length : 0
 
   // Handlers
   const handleSelectMeal = (meal: MealType) => {
@@ -437,10 +442,10 @@ export function MealBuilderContent({
 
         {/* Meal Cards Grid */}
         <div className="px-4 grid grid-cols-2 gap-3">
-          {(Object.keys(mealLabels) as MealType[]).map((meal) => {
-            const recipes = recipesByMealType[meal]
-            const firstRecipe = recipes[recipeIndices[meal]]
-            const target = mealTargets[meal]
+          {(Object.keys(recipesByMealType) as string[]).map((meal) => {
+            const recipes = recipesByMealType[meal] || []
+            const firstRecipe = recipes[recipeIndices[meal] || 0]
+            const target = mealTargets[meal] || { calories: 0, protein: 0, carbs: 0, fat: 0 }
 
             return (
               <div
@@ -479,7 +484,7 @@ export function MealBuilderContent({
 
                 {/* Content */}
                 <div className="absolute inset-x-0 bottom-0 p-3 text-left text-white">
-                  <h3 className="font-bold text-lg">{mealLabels[meal]}</h3>
+                  <h3 className="font-bold text-lg">{mealLabels[meal] || meal.replace('_', ' ').replace(/\b\w/g, c => c.toUpperCase())}</h3>
                   <div className="flex items-center text-xs text-white/80 mt-1">
                     <div className="flex items-center gap-2 overflow-hidden">
                       <motion.div 
@@ -609,7 +614,7 @@ export function MealBuilderContent({
           <ChefHat className="w-16 h-16 mx-auto text-muted-foreground mb-4" />
           <h3 className="font-semibold text-lg">No recipes available</h3>
           <p className="text-muted-foreground text-sm">
-            No recipes match your {mealLabels[selectedMeal].toLowerCase()} calorie target.
+            No recipes match your {getMealLabel(selectedMeal).toLowerCase()} calorie target.
           </p>
         </div>
       </div>
@@ -654,7 +659,7 @@ export function MealBuilderContent({
                   ref={searchInputRef}
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  placeholder={`Search ${selectedMeal ? mealLabels[selectedMeal].toLowerCase() : 'recipes'}...`}
+                  placeholder={`Search ${getMealLabel(selectedMeal).toLowerCase()}...`}
                   className="h-11 pl-9"
                   autoComplete="off"
                 />
@@ -875,7 +880,7 @@ export function MealBuilderContent({
             transition={{ delay: 0.1 }}
           >
             <Badge variant="secondary" className="mb-3 shadow-md">
-              {mealLabels[selectedMeal]}
+              {getMealLabel(selectedMeal)}
             </Badge>
             <h1 className="text-3xl font-bold font-arabic text-white drop-shadow-lg mb-2">{currentRecipe.name}</h1>
           </motion.div>

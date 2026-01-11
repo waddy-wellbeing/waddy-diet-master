@@ -65,9 +65,16 @@ export function MealStructureEditor({ user, onUpdate }: MealStructureEditorProps
   }
 
   const existingStructure = user.profile?.preferences?.meal_structure
+  const requestedMeals = user.profile?.preferences?.meals_per_day || 3
   const initialStructure = existingStructure 
     ? normalizeStructure(existingStructure)
-    : DEFAULT_STRUCTURES["3-meals"]
+    : (
+        requestedMeals === 4
+          ? DEFAULT_STRUCTURES["4-meals"]
+          : requestedMeals === 5
+          ? DEFAULT_STRUCTURES["5-meals"]
+          : DEFAULT_STRUCTURES["3-meals"]
+      )
   
   const [mealSlots, setMealSlots] = useState<EditableMealSlot[]>(
     initialStructure.map((slot, idx) => ({

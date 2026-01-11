@@ -162,11 +162,19 @@ export default async function DashboardPage() {
   
   // Meal type mapping (same as test console)
   // Database meal_types: breakfast, lunch, dinner, snacks & sweetes, snack, smoothies, one pot, side dishes
+  // Build mapping from saved meal structure, with defaults for standard slots
   const mealTypeMapping: Record<string, string[]> = {
     breakfast: ['breakfast', 'smoothies'],
+    mid_morning: ['snack', 'snacks & sweetes', 'smoothies'],  // Mid-morning snacks
     lunch: ['lunch', 'one pot', 'dinner', 'side dishes'],  // Lunch includes one pot, dinner recipes, and sides
+    afternoon: ['snack', 'snacks & sweetes', 'smoothies'],  // Afternoon snacks
     dinner: ['dinner', 'lunch', 'one pot', 'side dishes', 'breakfast'],  // Dinner uses dinner recipes first, then lunch/one pot
+    snack: ['snack', 'snacks & sweetes', 'smoothies'],  // Snack slot
     snacks: ['snack', 'snacks & sweetes', 'smoothies'],  // Include both singular and plural forms
+    snack_1: ['snack', 'snacks & sweetes', 'smoothies'],
+    snack_2: ['snack', 'snacks & sweetes', 'smoothies'],
+    snack_3: ['snack', 'snacks & sweetes', 'smoothies'],
+    evening: ['snack', 'snacks & sweetes', 'smoothies'],  // Evening snack
   }
   
   // Get scaling limits from system settings or use defaults
@@ -181,15 +189,18 @@ export default async function DashboardPage() {
     macro_similarity_score?: number // Score 0-100 indicating how well recipe matches target macros
   }
   
-  const recipesByMealType: Record<string, ScaledRecipe[]> = {
-    breakfast: [],
-    lunch: [],
-    dinner: [],
-    snacks: [],
+  // Build list of meal slots from saved structure, or use defaults
+  const mealSlots = userMealStructure && userMealStructure.length > 0
+    ? userMealStructure.map(slot => slot.name)
+    : ['breakfast', 'lunch', 'dinner', 'snacks']
+  
+  const recipesByMealType: Record<string, ScaledRecipe[]> = {}
+  for (const slot of mealSlots) {
+    recipesByMealType[slot] = []
   }
   
   if (allRecipes) {
-    for (const mealSlot of ['breakfast', 'lunch', 'dinner', 'snacks'] as const) {
+    for (const mealSlot of mealSlots) {
       const targetCalories = mealTargets[mealSlot]
       const acceptedMealTypes = mealTypeMapping[mealSlot]
       const primaryMealType = acceptedMealTypes[0]
@@ -268,26 +279,21 @@ export default async function DashboardPage() {
   
   // If there's a daily plan, get the currently selected recipe indices
   const plan = dailyPlan?.plan as DailyPlan | undefined
-  const selectedRecipeIndices: Record<string, number> = {
-    breakfast: 0,
-    lunch: 0,
-    dinner: 0,
-    snacks: 0,
+  const selectedRecipeIndices: Record<string, number> = {}
+  
+  // Initialize with 0 for all meal slots
+  for (const slot of mealSlots) {
+    selectedRecipeIndices[slot] = 0
   }
   
   // If plan exists, find the index of the planned recipe in the available recipes
   if (plan) {
-    if (plan.breakfast?.recipe_id) {
-      const idx = recipesByMealType.breakfast.findIndex(r => r.id === plan.breakfast?.recipe_id)
-      if (idx >= 0) selectedRecipeIndices.breakfast = idx
-    }
-    if (plan.lunch?.recipe_id) {
-      const idx = recipesByMealType.lunch.findIndex(r => r.id === plan.lunch?.recipe_id)
-      if (idx >= 0) selectedRecipeIndices.lunch = idx
-    }
-    if (plan.dinner?.recipe_id) {
-      const idx = recipesByMealType.dinner.findIndex(r => r.id === plan.dinner?.recipe_id)
-      if (idx >= 0) selectedRecipeIndices.dinner = idx
+    for (const slot of mealSlots) {
+      const plannedRecipeId = (plan as Record<string, any>)[slot]?.recipe_id
+      if (plannedRecipeId) {
+        const idx = recipesByMealType[slot].findIndex(r => r.id === plannedRecipeId)
+        if (idx >= 0) selectedRecipeIndices[slot] = idx
+      }
     }
   }
 

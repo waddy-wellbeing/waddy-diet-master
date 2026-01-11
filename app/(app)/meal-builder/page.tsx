@@ -96,6 +96,11 @@ export default async function MealBuilderPage({ searchParams }: PageProps) {
   const userMealStructure = profile.preferences?.meal_structure
   const mealTargets: Record<string, { calories: number; protein: number; carbs: number; fat: number }> = {}
   
+  // Build meal slots from saved structure or use defaults
+  const mealSlots = userMealStructure && userMealStructure.length > 0
+    ? userMealStructure.map(slot => slot.name)
+    : ['breakfast', 'lunch', 'dinner', 'snacks']
+  
   if (userMealStructure && userMealStructure.length > 0) {
     for (const slot of userMealStructure) {
       const pct = slot.percentage / 100
@@ -137,9 +142,16 @@ export default async function MealBuilderPage({ searchParams }: PageProps) {
   // Meal type mapping
   const mealTypeMapping: Record<string, string[]> = {
     breakfast: ['breakfast', 'smoothies'],
+    mid_morning: ['snack', 'snacks & sweetes', 'smoothies'],
     lunch: ['lunch', 'one pot', 'dinner', 'side dishes'],
+    afternoon: ['snack', 'snacks & sweetes', 'smoothies'],
     dinner: ['dinner', 'lunch', 'one pot', 'side dishes', 'breakfast'],
+    snack: ['snack', 'snacks & sweetes', 'smoothies'],
     snacks: ['snack', 'snacks & sweetes', 'smoothies'],
+    snack_1: ['snack', 'snacks & sweetes', 'smoothies'],
+    snack_2: ['snack', 'snacks & sweetes', 'smoothies'],
+    snack_3: ['snack', 'snacks & sweetes', 'smoothies'],
+    evening: ['snack', 'snacks & sweetes', 'smoothies'],
   }
 
   const minScale = 0.5
@@ -153,18 +165,18 @@ export default async function MealBuilderPage({ searchParams }: PageProps) {
   }
 
   // Process recipes for each meal type
-  const recipesByMealType: Record<string, ScaledRecipeWithIngredients[]> = {
-    breakfast: [],
-    lunch: [],
-    dinner: [],
-    snacks: [],
+  const recipesByMealType: Record<string, ScaledRecipeWithIngredients[]> = {}
+  for (const slot of mealSlots) {
+    recipesByMealType[slot] = []
   }
 
   if (allRecipes) {
-    for (const mealSlot of ['breakfast', 'lunch', 'dinner', 'snacks'] as const) {
-      const targetCalories = mealTargets[mealSlot].calories
+    for (const mealSlot of mealSlots) {
+      const targetCalories = mealTargets[mealSlot]?.calories
+      if (!targetCalories) continue  // Skip if no target found
+      
       const acceptedMealTypes = mealTypeMapping[mealSlot]
-      const primaryMealType = acceptedMealTypes[0]
+      const primaryMealType = acceptedMealTypes?.[0]
 
       const suitableRecipes: ScaledRecipeWithIngredients[] = []
 
@@ -260,8 +272,7 @@ export default async function MealBuilderPage({ searchParams }: PageProps) {
   }
 
   // Validate initial meal param
-  const validMeals = ['breakfast', 'lunch', 'dinner', 'snacks']
-  const selectedMeal = initialMeal && validMeals.includes(initialMeal) ? initialMeal : null
+  const selectedMeal = initialMeal && mealSlots.includes(initialMeal) ? initialMeal : null
 
   return (
     <MealBuilderContent
@@ -269,7 +280,7 @@ export default async function MealBuilderPage({ searchParams }: PageProps) {
       recipesByMealType={recipesByMealType}
       userId={user.id}
       userRole={profile?.role || 'user'}
-      initialMeal={selectedMeal as 'breakfast' | 'lunch' | 'dinner' | 'snacks' | null}
+      initialMeal={selectedMeal as string | null}
       todaysPlan={todaysPlan?.plan}
     />
   )

@@ -27,7 +27,7 @@ import { createClient } from '@/lib/supabase/client'
 import { saveFullDayPlan } from '@/lib/actions/daily-plans'
 import type { Profile, DailyLog, DailyPlan, DailyTotals, RecipeRecord } from '@/lib/types/nutri'
 
-type MealName = 'breakfast' | 'lunch' | 'dinner' | 'snacks'
+type MealName = string
 
 // Scaled recipe includes scale_factor and scaled_calories
 interface ScaledRecipe extends RecipeRecord {
@@ -77,13 +77,26 @@ export function DashboardContent({
   const [planSheetOpen, setPlanSheetOpen] = useState(false)
   const [planSheetDate, setPlanSheetDate] = useState<Date | null>(null)
   
+  // Build meal slot names from profile's saved structure or use defaults
+  const mealSlots = profile.preferences?.meal_structure && profile.preferences.meal_structure.length > 0
+    ? profile.preferences.meal_structure.map(slot => ({ name: slot.name, label: slot.label }))
+    : [
+        { name: 'breakfast', label: 'Breakfast' },
+        { name: 'lunch', label: 'Lunch' },
+        { name: 'dinner', label: 'Dinner' },
+        { name: 'snacks', label: 'Snacks' },
+      ]
+  
   // Track current recipe index for each meal type (for swiping)
-  const [selectedIndices, setSelectedIndices] = useState<Record<MealName, number>>({
-    breakfast: initialSelectedIndices.breakfast || 0,
-    lunch: initialSelectedIndices.lunch || 0,
-    dinner: initialSelectedIndices.dinner || 0,
-    snacks: initialSelectedIndices.snacks || 0,
-  })
+  const [selectedIndices, setSelectedIndices] = useState<Record<string, number>>(
+    () => {
+      const initial: Record<string, number> = {}
+      for (const slot of mealSlots) {
+        initial[slot.name] = initialSelectedIndices[slot.name] || 0
+      }
+      return initial
+    }
+  )
   
   // Get targets from profile
   const targets = profile.targets
@@ -282,7 +295,7 @@ export function DashboardContent({
     if (!mealLog?.items?.length) return 0
     
     // Get the recipe for this meal to calculate actual calories
-    const recipes = recipesByMealType[mealName as MealName] || []
+    const recipes = recipesByMealType[mealName] || []
     return mealLog.items.reduce((sum, item) => {
       // Find the recipe by ID
       const recipe = recipes.find(r => r.id === item.recipe_id)
@@ -295,56 +308,19 @@ export function DashboardContent({
     }, 0)
   }
 
-  const meals = [
-    {
-      name: 'breakfast' as const,
-      label: 'Breakfast',
-      targetCalories: mealTargets.breakfast,
-      consumedCalories: getLoggedCalories('breakfast'),
-      isLogged: !!log?.breakfast?.items?.length,
-      loggedRecipeName: getLoggedRecipeName(log?.breakfast),
-      recipe: getCurrentRecipe('breakfast'),
-      recipeCount: getRecipeCount('breakfast'),
-      currentIndex: selectedIndices.breakfast,
-      planSlot: plan?.breakfast,
-    },
-    {
-      name: 'lunch' as const,
-      label: 'Lunch',
-      targetCalories: mealTargets.lunch,
-      consumedCalories: getLoggedCalories('lunch'),
-      isLogged: !!log?.lunch?.items?.length,
-      loggedRecipeName: getLoggedRecipeName(log?.lunch),
-      recipe: getCurrentRecipe('lunch'),
-      recipeCount: getRecipeCount('lunch'),
-      currentIndex: selectedIndices.lunch,
-      planSlot: plan?.lunch,
-    },
-    {
-      name: 'dinner' as const,
-      label: 'Dinner',
-      targetCalories: mealTargets.dinner,
-      consumedCalories: getLoggedCalories('dinner'),
-      isLogged: !!log?.dinner?.items?.length,
-      loggedRecipeName: getLoggedRecipeName(log?.dinner),
-      recipe: getCurrentRecipe('dinner'),
-      recipeCount: getRecipeCount('dinner'),
-      currentIndex: selectedIndices.dinner,
-      planSlot: plan?.dinner,
-    },
-    {
-      name: 'snacks' as const,
-      label: 'Snacks',
-      targetCalories: mealTargets.snacks,
-      consumedCalories: getLoggedCalories('snacks'),
-      isLogged: !!log?.snacks?.items?.length,
-      loggedRecipeName: getLoggedRecipeName(log?.snacks),
-      recipe: getCurrentRecipe('snacks'),
-      recipeCount: getRecipeCount('snacks'),
-      currentIndex: selectedIndices.snacks,
-      planSlot: null,
-    },
-  ]
+  // Build meals array dynamically from mealSlots
+  const meals = mealSlots.map(slot => ({
+    name: slot.name,
+    label: slot.label,
+    targetCalories: mealTargets[slot.name],
+    consumedCalories: getLoggedCalories(slot.name),
+    isLogged: !!log?.[slot.name as keyof DailyLog]?.items?.length,
+    loggedRecipeName: getLoggedRecipeName(log?.[slot.name as keyof DailyLog]),
+    recipe: getCurrentRecipe(slot.name as MealName),
+    recipeCount: getRecipeCount(slot.name as MealName),
+    currentIndex: selectedIndices[slot.name] || 0,
+    planSlot: (plan as any)?.[slot.name],
+  }))
 
   const greeting = () => {
     const hour = new Date().getHours()
