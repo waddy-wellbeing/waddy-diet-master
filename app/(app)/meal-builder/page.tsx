@@ -92,31 +92,46 @@ export default async function MealBuilderPage({ searchParams }: PageProps) {
   const dailyCarbs = profile.targets?.carbs_g || 250
   const dailyFat = profile.targets?.fat_g || 65
   
-  const mealTargets = {
-    breakfast: { 
+  // Use user's saved meal structure if available, otherwise default percentages
+  const userMealStructure = profile.preferences?.meal_structure
+  const mealTargets: Record<string, { calories: number; protein: number; carbs: number; fat: number }> = {}
+  
+  if (userMealStructure && userMealStructure.length > 0) {
+    for (const slot of userMealStructure) {
+      const pct = slot.percentage / 100
+      mealTargets[slot.name] = { 
+        calories: Math.round(dailyCalories * pct), 
+        protein: Math.round(dailyProtein * pct),
+        carbs: Math.round(dailyCarbs * pct),
+        fat: Math.round(dailyFat * pct),
+      }
+    }
+  } else {
+    // Fallback to default distribution
+    mealTargets.breakfast = { 
       calories: Math.round(dailyCalories * 0.25), 
       protein: Math.round(dailyProtein * 0.25),
       carbs: Math.round(dailyCarbs * 0.25),
       fat: Math.round(dailyFat * 0.25),
-    },
-    lunch: { 
+    }
+    mealTargets.lunch = { 
       calories: Math.round(dailyCalories * 0.35), 
       protein: Math.round(dailyProtein * 0.35),
       carbs: Math.round(dailyCarbs * 0.35),
       fat: Math.round(dailyFat * 0.35),
-    },
-    dinner: { 
+    }
+    mealTargets.dinner = { 
       calories: Math.round(dailyCalories * 0.30), 
       protein: Math.round(dailyProtein * 0.30),
       carbs: Math.round(dailyCarbs * 0.30),
       fat: Math.round(dailyFat * 0.30),
-    },
-    snacks: { 
+    }
+    mealTargets.snacks = { 
       calories: Math.round(dailyCalories * 0.10), 
       protein: Math.round(dailyProtein * 0.10),
       carbs: Math.round(dailyCarbs * 0.10),
       fat: Math.round(dailyFat * 0.10),
-    },
+    }
   }
 
   // Meal type mapping

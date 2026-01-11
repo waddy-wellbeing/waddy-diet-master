@@ -137,11 +137,20 @@ export default async function DashboardPage() {
   const dailyCarbs = profile.targets?.carbs_g || 250
   const dailyFat = profile.targets?.fat_g || 65
   
-  const mealTargets = {
-    breakfast: Math.round(dailyCalories * 0.25),
-    lunch: Math.round(dailyCalories * 0.35),
-    dinner: Math.round(dailyCalories * 0.30),
-    snacks: Math.round(dailyCalories * 0.10),
+  // Use user's saved meal structure if available, otherwise default percentages
+  const userMealStructure = profile.preferences?.meal_structure
+  const mealTargets: Record<string, number> = {}
+  
+  if (userMealStructure && userMealStructure.length > 0) {
+    for (const slot of userMealStructure) {
+      mealTargets[slot.name] = Math.round(dailyCalories * (slot.percentage / 100))
+    }
+  } else {
+    // Fallback to default distribution
+    mealTargets.breakfast = Math.round(dailyCalories * 0.25)
+    mealTargets.lunch = Math.round(dailyCalories * 0.35)
+    mealTargets.dinner = Math.round(dailyCalories * 0.30)
+    mealTargets.snacks = Math.round(dailyCalories * 0.10)
   }
   
   // Calculate target macro percentages for filtering recipes
