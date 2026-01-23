@@ -90,6 +90,7 @@ export function DashboardContent({
   const [weekLogsMap, setWeekLogsMap] = useState(initialWeekLogsMap);
   const [streak, setStreak] = useState(initialStreak);
   const [loadingMeal, setLoadingMeal] = useState<string | null>(null); // Track which meal is being logged
+  const [loadingDayData, setLoadingDayData] = useState(false); // Track day data loading
 
   // Meal planning sheet state
   const [planSheetOpen, setPlanSheetOpen] = useState(false);
@@ -132,33 +133,43 @@ export function DashboardContent({
   // Fetch data when selected date changes
   const fetchDayData = useCallback(
     async (date: Date) => {
-      const supabase = createClient();
-      const dateStr = format(date, "yyyy-MM-dd");
+      setLoadingDayData(true);
+      try {
+        const supabase = createClient();
+        const dateStr = format(date, "yyyy-MM-dd");
 
-      // Fetch daily log
-      const { data: logData } = await supabase
-        .from("daily_logs")
-        .select("log, logged_totals")
-        .eq("user_id", profile.user_id)
-        .eq("log_date", dateStr)
-        .single();
+        // Fetch daily log
+        const { data: logData } = await supabase
+          .from("daily_logs")
+          .select("log, logged_totals")
+          .eq("user_id", profile.user_id)
+          .eq("log_date", dateStr)
+          .single();
 
-      // Fetch daily plan
-      const { data: planData } = await supabase
-        .from("daily_plans")
-        .select("plan, daily_totals")
-        .eq("user_id", profile.user_id)
-        .eq("plan_date", dateStr)
-        .single();
+        // Fetch daily plan
+        const { data: planData } = await supabase
+          .from("daily_plans")
+          .select("plan, daily_totals")
+          .eq("user_id", profile.user_id)
+          .eq("plan_date", dateStr)
+          .single();
 
-      // Set to null if no data (important for unplanned days)
-      setDailyLog(logData || null);
-      setDailyPlan(planData || null);
+        // Set to null if no data (important for unplanned days)
+        setDailyLog(logData || null);
+        setDailyPlan(planData || null);
 
-      // NOTE: We intentionally do NOT update selectedIndices here!
-      // selectedIndices is for suggested recipes (days without plans)
-      // Planned days use dailyPlan.plan directly in getCurrentRecipe()
-      // This separation prevents one day's plan from overwriting all days' displays
+        // NOTE: We intentionally do NOT update selectedIndices here!
+        // selectedIndices is for suggested recipes (days without plans)
+        // Planned days use dailyPlan.plan directly in getCurrentRecipe()
+        // This separation prevents one day's plan from overwriting all days' displays
+
+        // Wait a bit for React to re-render and images to start loading
+        await new Promise((resolve) => setTimeout(resolve, 300));
+      } catch (error) {
+        console.error("Error fetching day data:", error);
+      } finally {
+        setLoadingDayData(false);
+      }
     },
     [profile.user_id],
   );
@@ -1106,7 +1117,7 @@ export function DashboardContent({
           })()}
 
         {/* Meals Section */}
-        <section>
+        <section className="relative">
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-lg font-semibold">
               {isSelectedToday
@@ -1122,6 +1133,18 @@ export function DashboardContent({
               {isSelectedToday ? "Plan Today" : "Plan Day"}
             </Button>
           </div>
+
+          {/* Loading overlay */}
+          {loadingDayData && (
+            <div className="absolute inset-0 bg-background/80 backdrop-blur-sm rounded-lg flex items-center justify-center z-10 min-h-[400px]">
+              <div className="flex flex-col items-center gap-3">
+                <Loader2 className="h-8 w-8 animate-spin text-primary" />
+                <p className="text-sm text-muted-foreground">
+                  Loading meals...
+                </p>
+              </div>
+            </div>
+          )}
 
           <div className="space-y-3">
             {meals.map((meal) => (
