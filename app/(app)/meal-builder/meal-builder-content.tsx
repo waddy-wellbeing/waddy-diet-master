@@ -42,6 +42,7 @@ interface MealBuilderContentProps {
   userId: string
   userRole?: string
   initialMeal?: MealType | null
+  initialRecipeId?: string | null
   todaysPlan?: DailyPlan | null
 }
 
@@ -56,6 +57,7 @@ export function MealBuilderContent({
   mealTargets,
   recipesByMealType,
   initialMeal = null,
+  initialRecipeId = null,
   todaysPlan,
   userRole = 'user',
 }: MealBuilderContentProps) {
@@ -127,7 +129,14 @@ export function MealBuilderContent({
     const keys = Object.keys(recipesByMealType)
     const initial: Record<string, number> = {}
     for (const k of keys) {
-      initial[k] = getIndexForRecipeId(k as MealType, getPlanRecipeId(k as MealType))
+      // Priority: initialRecipeId (from URL) > plan recipe > default (0)
+      if (initialMeal === k && initialRecipeId) {
+        // If this is the clicked meal and we have a specific recipe ID, use it
+        initial[k] = getIndexForRecipeId(k as MealType, initialRecipeId)
+      } else {
+        // Otherwise, use the plan recipe or default
+        initial[k] = getIndexForRecipeId(k as MealType, getPlanRecipeId(k as MealType))
+      }
     }
     return initial
   })

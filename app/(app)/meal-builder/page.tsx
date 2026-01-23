@@ -40,11 +40,11 @@ function roundForMeasuring(value: number): number {
 }
 
 interface PageProps {
-  searchParams: Promise<{ meal?: string }>
+  searchParams: Promise<{ meal?: string; recipe?: string }>
 }
 
 export default async function MealBuilderPage({ searchParams }: PageProps) {
-  const { meal: initialMeal } = await searchParams
+  const { meal: initialMeal, recipe: initialRecipeId } = await searchParams
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
 
@@ -281,6 +281,7 @@ export default async function MealBuilderPage({ searchParams }: PageProps) {
       userId={user.id}
       userRole={profile?.role || 'user'}
       initialMeal={selectedMeal as string | null}
+      initialRecipeId={initialRecipeId || null}
       todaysPlan={todaysPlan?.plan}
     />
   )
