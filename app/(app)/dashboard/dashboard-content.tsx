@@ -25,9 +25,9 @@ import { useAnalytics } from '@/components/analytics/analytics-provider'
 import { buildFeatureUseEvent, buildButtonClickEvent, buildMealLogError, getCurrentPagePath } from '@/lib/utils/analytics'
 import { createClient } from '@/lib/supabase/client'
 import { saveFullDayPlan } from '@/lib/actions/daily-plans'
-import type { Profile, DailyLog, DailyPlan, DailyTotals, RecipeRecord } from '@/lib/types/nutri'
+import type { Profile, DailyLog, DailyPlan, DailyTotals, RecipeRecord, MealType } from '@/lib/types/nutri'
 
-type MealName = string
+type MealName = MealType
 
 // Scaled recipe includes scale_factor and scaled_calories
 interface ScaledRecipe extends RecipeRecord {
@@ -310,8 +310,8 @@ export function DashboardContent({
 
   // Build meals array dynamically from mealSlots
   const meals = mealSlots.map(slot => ({
-    name: slot.name,
-    label: slot.label,
+    name: slot.name as MealType,
+    label: slot.label || slot.name,
     targetCalories: mealTargets[slot.name],
     consumedCalories: getLoggedCalories(slot.name),
     isLogged: !!log?.[slot.name as keyof DailyLog]?.items?.length,
