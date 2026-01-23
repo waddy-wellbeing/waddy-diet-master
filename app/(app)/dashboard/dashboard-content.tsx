@@ -164,7 +164,7 @@ export function DashboardContent({
         // This separation prevents one day's plan from overwriting all days' displays
 
         // Wait a bit for React to re-render and images to start loading
-        await new Promise((resolve) => setTimeout(resolve, 300));
+        await new Promise((resolve) => setTimeout(resolve, 800));
       } catch (error) {
         console.error("Error fetching day data:", error);
       } finally {
