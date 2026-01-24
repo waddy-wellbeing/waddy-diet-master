@@ -327,9 +327,13 @@ export function DashboardContent({
       setWeekPlans(newPlans);
     }
 
-    // If planning for today, refresh the current day plan
-    if (planSheetDate && isDateToday(planSheetDate)) {
-      await fetchDayData(selectedDate);
+    // Always refresh the planned date's data to show updated meals immediately
+    if (planSheetDate) {
+      await fetchDayData(planSheetDate);
+      // If the planned date is the selected date, make sure we see it
+      if (format(planSheetDate, "yyyy-MM-dd") === format(selectedDate, "yyyy-MM-dd")) {
+        await fetchDayData(selectedDate);
+      }
     }
   };
 
@@ -652,6 +656,9 @@ export function DashboardContent({
     const recipes = recipesByMealType[mealType] || [];
     if (recipes.length <= 1) return; // Nothing to swap to
 
+    // Set loading state immediately
+    setLoadingMeal(mealType);
+
     const currentIdx = selectedIndices[mealType];
     let newIdx: number;
 
@@ -715,30 +722,29 @@ export function DashboardContent({
       }
     }
 
-    // Update local UI
+    // Update local UI first for instant feedback
     setSelectedIndices((prev) => ({
       ...prev,
       [mealType]: newIdx,
     }));
 
-    // Save to daily plan if it's today (regardless of logged status - always update plan)
+    // Save to daily plan if viewing today or any date with an existing plan
     const todayDateStr = format(new Date(), "yyyy-MM-dd");
     const selectedDateStr = format(selectedDate, "yyyy-MM-dd");
 
-    if (todayDateStr === selectedDateStr) {
+    if (todayDateStr === selectedDateStr || dailyPlan) {
       // Get the new recipe and save it to plan
       const newRecipe = recipes[newIdx];
       if (newRecipe) {
-        setLoadingMeal(mealType);
         try {
           const { saveMealToPlan } = await import("@/lib/actions/daily-plans");
           await saveMealToPlan({
-            date: todayDateStr,
+            date: selectedDateStr,
             mealType,
             recipeId: newRecipe.id,
             servings: newRecipe.scale_factor || 1,
           });
-          // Refresh data to show the updated plan
+          // Refresh data to show the updated plan immediately
           await fetchDayData(selectedDate);
           await fetchWeekData(selectedDate);
 
