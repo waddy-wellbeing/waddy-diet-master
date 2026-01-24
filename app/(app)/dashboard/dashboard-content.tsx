@@ -27,13 +27,14 @@ import {
 } from "@/components/dashboard/dashboard-components";
 import { MealPlanSheet } from "@/components/dashboard/meal-plan-sheet";
 import { useAnalytics } from "@/components/analytics/analytics-provider";
+import { logout } from "@/lib/utils/logout";
+import { createClient } from "@/lib/supabase/client";
 import {
   buildFeatureUseEvent,
   buildButtonClickEvent,
   buildMealLogError,
   getCurrentPagePath,
 } from "@/lib/utils/analytics";
-import { createClient } from "@/lib/supabase/client";
 import { saveFullDayPlan } from "@/lib/actions/daily-plans";
 import { getSuggestedRecipeIndex } from "@/lib/utils/meal-suggestions";
 import type {
@@ -396,8 +397,7 @@ export function DashboardContent({
 
   // Handle logout
   const handleLogout = async () => {
-    const supabase = createClient();
-    await supabase.auth.signOut();
+    await logout();
     router.push("/login");
     router.refresh();
   };

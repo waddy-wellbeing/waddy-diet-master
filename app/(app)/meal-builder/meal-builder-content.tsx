@@ -1,10 +1,10 @@
-'use client'
+"use client";
 
-import { useEffect, useMemo, useRef, useState } from 'react'
-import { useRouter } from 'next/navigation'
-import Image from 'next/image'
-import { format } from 'date-fns'
-import { motion, AnimatePresence } from 'framer-motion'
+import { useEffect, useMemo, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
+import Image from "next/image";
+import { format } from "date-fns";
+import { motion, AnimatePresence } from "framer-motion";
 import {
   ChevronLeft,
   ChevronRight,
@@ -21,37 +21,49 @@ import {
   ShoppingBasket,
   Check,
   Search,
-} from 'lucide-react'
-import { Button } from '@/components/ui/button'
-import { Badge } from '@/components/ui/badge'
-import { Input } from '@/components/ui/input'
-import { ScrollArea } from '@/components/ui/scroll-area'
-import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from '@/components/ui/sheet'
-import { ShareRecipeButton } from '@/components/recipes/share-recipe-button'
-import { cn } from '@/lib/utils'
-import { getUserIngredientSwaps, type IngredientSwapOption } from '@/lib/actions/recipes'
-import { saveMealToPlan } from '@/lib/actions/daily-plans'
-import type { DailyPlan, PlanMealSlot, PlanSnackItem } from '@/lib/types/nutri'
-import type { ScaledRecipeWithIngredients } from './page'
+} from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import {
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+  SheetDescription,
+} from "@/components/ui/sheet";
+import { ShareRecipeButton } from "@/components/recipes/share-recipe-button";
+import { cn } from "@/lib/utils";
+import {
+  getUserIngredientSwaps,
+  type IngredientSwapOption,
+} from "@/lib/actions/recipes";
+import { saveMealToPlan } from "@/lib/actions/daily-plans";
+import type { DailyPlan, PlanMealSlot, PlanSnackItem } from "@/lib/types/nutri";
+import type { ScaledRecipeWithIngredients } from "./page";
 
-type MealType = string
+type MealType = string;
 
 interface MealBuilderContentProps {
-  mealTargets: Record<MealType, { calories: number; protein: number; carbs: number; fat: number }>
-  recipesByMealType: Record<MealType, ScaledRecipeWithIngredients[]>
-  userId: string
-  userRole?: string
-  initialMeal?: MealType | null
-  initialRecipeId?: string | null
-  todaysPlan?: DailyPlan | null
+  mealTargets: Record<
+    MealType,
+    { calories: number; protein: number; carbs: number; fat: number }
+  >;
+  recipesByMealType: Record<MealType, ScaledRecipeWithIngredients[]>;
+  userId: string;
+  userRole?: string;
+  initialMeal?: MealType | null;
+  initialRecipeId?: string | null;
+  todaysPlan?: DailyPlan | null;
 }
 
 const mealLabels: Record<string, string> = {
-  breakfast: 'Breakfast',
-  lunch: 'Lunch',
-  dinner: 'Dinner',
-  snacks: 'Snacks',
-}
+  breakfast: "Breakfast",
+  lunch: "Lunch",
+  dinner: "Dinner",
+  snacks: "Snacks",
+};
 
 export function MealBuilderContent({
   mealTargets,
@@ -59,358 +71,411 @@ export function MealBuilderContent({
   initialMeal = null,
   initialRecipeId = null,
   todaysPlan,
-  userRole = 'user',
+  userRole = "user",
 }: MealBuilderContentProps) {
-  const router = useRouter()
+  const router = useRouter();
 
   type PlanMealSlotLike = PlanMealSlot & {
-    swapped_ingredients?: PlanMealSlot['swapped_ingredients']
-  }
+    swapped_ingredients?: PlanMealSlot["swapped_ingredients"];
+  };
 
-  const getPlanMealSlot = (meal: MealType): (PlanMealSlotLike | PlanSnackItem) | null => {
-    if (!todaysPlan) return null
+  const getPlanMealSlot = (
+    meal: MealType,
+  ): (PlanMealSlotLike | PlanSnackItem) | null => {
+    if (!todaysPlan) return null;
 
-    if (meal === 'snacks') {
-      const snacks = todaysPlan.snacks
-      if (Array.isArray(snacks) && snacks.length > 0) return snacks[0] || null
-      return null
+    if (meal === "snacks") {
+      const snacks = todaysPlan.snacks;
+      if (Array.isArray(snacks) && snacks.length > 0) return snacks[0] || null;
+      return null;
     }
 
-    return (todaysPlan[meal] as PlanMealSlotLike | undefined) || null
-  }
+    return (
+      (todaysPlan[
+        meal as keyof Pick<DailyPlan, "breakfast" | "lunch" | "dinner">
+      ] as PlanMealSlotLike | undefined) || null
+    );
+  };
 
   const getPlanRecipeId = (meal: MealType): string | null => {
-    const slot = getPlanMealSlot(meal)
-    return slot?.recipe_id || null
-  }
+    const slot = getPlanMealSlot(meal);
+    return slot?.recipe_id || null;
+  };
 
-  const getSwapsFromPlan = (meal: MealType): Record<string, IngredientSwapOption> => {
-    const swapsMap: Record<string, IngredientSwapOption> = {}
-    const slot = getPlanMealSlot(meal)
+  const getSwapsFromPlan = (
+    meal: MealType,
+  ): Record<string, IngredientSwapOption> => {
+    const swapsMap: Record<string, IngredientSwapOption> = {};
+    const slot = getPlanMealSlot(meal);
 
-    if (slot && 'swapped_ingredients' in slot && slot.swapped_ingredients) {
-      type SwappedIngredient = NonNullable<PlanMealSlot['swapped_ingredients']>[string]
+    if (slot && "swapped_ingredients" in slot && slot.swapped_ingredients) {
+      type SwappedIngredient = NonNullable<
+        PlanMealSlot["swapped_ingredients"]
+      >[string];
 
-      Object.entries(slot.swapped_ingredients).forEach(([originalId, swapData]) => {
-        const s = swapData as SwappedIngredient
+      Object.entries(slot.swapped_ingredients).forEach(
+        ([originalId, swapData]) => {
+          const s = swapData as SwappedIngredient;
 
-        swapsMap[originalId] = {
-          id: s.ingredient_id,
-          name: s.name,
-          name_ar: null,
-          food_group: null,
-          subgroup: null,
-          serving_size: s.quantity,
-          serving_unit: s.unit,
-          macros: {
-            calories: 0,
-            protein_g: 0,
-            carbs_g: 0,
-            fat_g: 0,
-          },
-          suggested_amount: s.quantity,
-          calorie_diff_percent: 0,
-        }
-      })
+          swapsMap[originalId] = {
+            id: s.ingredient_id,
+            name: s.name,
+            name_ar: null,
+            food_group: null,
+            subgroup: null,
+            serving_size: s.quantity,
+            serving_unit: s.unit,
+            macros: {
+              calories: 0,
+              protein_g: 0,
+              carbs_g: 0,
+              fat_g: 0,
+            },
+            suggested_amount: s.quantity,
+            calorie_diff_percent: 0,
+          };
+        },
+      );
     }
 
-    return swapsMap
-  }
+    return swapsMap;
+  };
 
   const getIndexForRecipeId = (meal: MealType, recipeId: string | null) => {
-    if (!recipeId) return 0
-    const idx = recipesByMealType[meal]?.findIndex(r => r.id === recipeId) ?? -1
-    return idx >= 0 ? idx : 0
-  }
+    if (!recipeId) return 0;
+    const idx =
+      recipesByMealType[meal]?.findIndex((r) => r.id === recipeId) ?? -1;
+    return idx >= 0 ? idx : 0;
+  };
 
   // State - initialize with initialMeal if provided
-  const [selectedMeal, setSelectedMeal] = useState<MealType | null>(initialMeal)
-  const [recipeIndices, setRecipeIndices] = useState<Record<string, number>>(() => {
-    const keys = Object.keys(recipesByMealType)
-    const initial: Record<string, number> = {}
-    for (const k of keys) {
-      // Priority: initialRecipeId (from URL) > plan recipe > default (0)
-      if (initialMeal === k && initialRecipeId) {
-        // If this is the clicked meal and we have a specific recipe ID, use it
-        initial[k] = getIndexForRecipeId(k as MealType, initialRecipeId)
-      } else {
-        // Otherwise, use the plan recipe or default
-        initial[k] = getIndexForRecipeId(k as MealType, getPlanRecipeId(k as MealType))
+  const [selectedMeal, setSelectedMeal] = useState<MealType | null>(
+    initialMeal,
+  );
+  const [recipeIndices, setRecipeIndices] = useState<Record<string, number>>(
+    () => {
+      const keys = Object.keys(recipesByMealType);
+      const initial: Record<string, number> = {};
+      for (const k of keys) {
+        // Priority: initialRecipeId (from URL) > plan recipe > default (0)
+        if (initialMeal === k && initialRecipeId) {
+          // If this is the clicked meal and we have a specific recipe ID, use it
+          initial[k] = getIndexForRecipeId(k as MealType, initialRecipeId);
+        } else {
+          // Otherwise, use the plan recipe or default
+          initial[k] = getIndexForRecipeId(
+            k as MealType,
+            getPlanRecipeId(k as MealType),
+          );
+        }
       }
-    }
-    return initial
-  })
-  const [activeTab, setActiveTab] = useState<'ingredients' | 'instructions'>('ingredients')
-  const [expandedIngredient, setExpandedIngredient] = useState<string | null>(null)
-  const [swaps, setSwaps] = useState<IngredientSwapOption[] | null>(null)
-  const [loadingSwaps, setLoadingSwaps] = useState(false)
-  const [selectedSwaps, setSelectedSwaps] = useState<Record<string, IngredientSwapOption>>(
-    initialMeal ? getSwapsFromPlan(initialMeal) : {}
-  )
-  const [swipeX, setSwipeX] = useState(0)
-  const [showMacroLabels, setShowMacroLabels] = useState(false)
-  const [showDebugInfo, setShowDebugInfo] = useState(false)
-  const [saving, setSaving] = useState(false)
-  const [swapPaginationPage, setSwapPaginationPage] = useState<Record<string, number>>({})
+      return initial;
+    },
+  );
+  const [activeTab, setActiveTab] = useState<"ingredients" | "instructions">(
+    "ingredients",
+  );
+  const [expandedIngredient, setExpandedIngredient] = useState<string | null>(
+    null,
+  );
+  const [swaps, setSwaps] = useState<IngredientSwapOption[] | null>(null);
+  const [loadingSwaps, setLoadingSwaps] = useState(false);
+  const [selectedSwaps, setSelectedSwaps] = useState<
+    Record<string, IngredientSwapOption>
+  >(initialMeal ? getSwapsFromPlan(initialMeal) : {});
+  const [swipeX, setSwipeX] = useState(0);
+  const [showMacroLabels, setShowMacroLabels] = useState(false);
+  const [showDebugInfo, setShowDebugInfo] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [swapPaginationPage, setSwapPaginationPage] = useState<
+    Record<string, number>
+  >({});
 
   // Search
-  const [searchOpen, setSearchOpen] = useState(false)
-  const [searchQuery, setSearchQuery] = useState('')
-  const [debouncedQuery, setDebouncedQuery] = useState('')
-  const searchInputRef = useRef<HTMLInputElement>(null)
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [debouncedQuery, setDebouncedQuery] = useState("");
+  const searchInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    const t = setTimeout(() => setDebouncedQuery(searchQuery.trim()), 150)
-    return () => clearTimeout(t)
-  }, [searchQuery])
+    const t = setTimeout(() => setDebouncedQuery(searchQuery.trim()), 150);
+    return () => clearTimeout(t);
+  }, [searchQuery]);
 
   useEffect(() => {
-    if (!searchOpen) return
-    const t = setTimeout(() => searchInputRef.current?.focus(), 60)
-    return () => clearTimeout(t)
-  }, [searchOpen])
+    if (!searchOpen) return;
+    const t = setTimeout(() => searchInputRef.current?.focus(), 60);
+    return () => clearTimeout(t);
+  }, [searchOpen]);
 
   const searchResults = useMemo(() => {
-    if (!selectedMeal) return []
+    if (!selectedMeal) return [];
 
-    const all = recipesByMealType[selectedMeal] || []
-    const q = debouncedQuery.trim()
+    const all = recipesByMealType[selectedMeal] || [];
+    const q = debouncedQuery.trim();
 
-    if (!q) return all.slice(0, 20)
+    if (!q) return all.slice(0, 20);
 
     // Normalize text for better matching (remove diacritics, handle both Arabic and English)
     const normalize = (text: string): string => {
-      if (!text) return ''
+      if (!text) return "";
       // Remove Arabic diacritics
       return text
-        .replace(/ً|ٌ|ٍ|َ|ُ|ِ|ّ|ْ/g, '') // Remove Arabic diacritics
+        .replace(/ً|ٌ|ٍ|َ|ُ|ِ|ّ|ْ/g, "") // Remove Arabic diacritics
         .toLowerCase()
-        .trim()
-    }
+        .trim();
+    };
 
     const score = (recipe: ScaledRecipeWithIngredients) => {
-      let s = 0
-      const qNorm = normalize(q)
-      const qLower = q.toLowerCase()
+      let s = 0;
+      const qNorm = normalize(q);
+      const qLower = q.toLowerCase();
 
       // Score recipe name (English)
-      const recipeName = recipe.name?.toLowerCase() || ''
-      const recipeNameNorm = normalize(recipe.name || '')
-      if (recipeName === qLower) s += 50
-      if (recipeNameNorm === qNorm) s += 50
-      if (recipeName.startsWith(qLower)) s += 25
-      if (recipeNameNorm.startsWith(qNorm)) s += 25
-      if (recipeName.includes(qLower)) s += 15
-      if (recipeNameNorm.includes(qNorm)) s += 15
+      const recipeName = recipe.name?.toLowerCase() || "";
+      const recipeNameNorm = normalize(recipe.name || "");
+      if (recipeName === qLower) s += 50;
+      if (recipeNameNorm === qNorm) s += 50;
+      if (recipeName.startsWith(qLower)) s += 25;
+      if (recipeNameNorm.startsWith(qNorm)) s += 25;
+      if (recipeName.includes(qLower)) s += 15;
+      if (recipeNameNorm.includes(qNorm)) s += 15;
 
       // Score tags
-      const tags = (recipe.tags || []).join(' ').toLowerCase()
-      const tagsNorm = normalize(tags)
-      if (tags.includes(qLower)) s += 6
-      if (tagsNorm.includes(qNorm)) s += 6
+      const tags = (recipe.tags || []).join(" ").toLowerCase();
+      const tagsNorm = normalize(tags);
+      if (tags.includes(qLower)) s += 6;
+      if (tagsNorm.includes(qNorm)) s += 6;
 
       // Score cuisine
-      const cuisine = (recipe.cuisine || '').toLowerCase()
-      const cuisineNorm = normalize(cuisine)
-      if (cuisine.includes(qLower)) s += 4
-      if (cuisineNorm.includes(qNorm)) s += 4
+      const cuisine = (recipe.cuisine || "").toLowerCase();
+      const cuisineNorm = normalize(cuisine);
+      if (cuisine.includes(qLower)) s += 4;
+      if (cuisineNorm.includes(qNorm)) s += 4;
 
       // Score ingredients (highest priority after recipe name)
-      const ingredientMatches = (recipe.recipe_ingredients || []).filter(i => {
-        const rawName = i.raw_name?.toLowerCase() || ''
-        const rawNameNorm = normalize(i.raw_name || '')
-        const ingredientName = i.ingredient?.name?.toLowerCase() || ''
-        const ingredientNameNorm = normalize(i.ingredient?.name || '')
-        const ingredientNameAr = i.ingredient?.name_ar?.toLowerCase() || ''
-        const ingredientNameArNorm = normalize(i.ingredient?.name_ar || '')
+      const ingredientMatches = (recipe.recipe_ingredients || []).filter(
+        (i) => {
+          const rawName = i.raw_name?.toLowerCase() || "";
+          const rawNameNorm = normalize(i.raw_name || "");
+          const ingredientName = i.ingredient?.name?.toLowerCase() || "";
+          const ingredientNameNorm = normalize(i.ingredient?.name || "");
+          const ingredientNameAr = i.ingredient?.name_ar?.toLowerCase() || "";
+          const ingredientNameArNorm = normalize(i.ingredient?.name_ar || "");
 
-        // Check for exact or partial matches in ingredient names (English and Arabic)
-        return (
-          rawName.includes(qLower) ||
-          rawNameNorm.includes(qNorm) ||
-          ingredientName.includes(qLower) ||
-          ingredientNameNorm.includes(qNorm) ||
-          ingredientNameAr.includes(qLower) ||
-          ingredientNameArNorm.includes(qNorm)
-        )
-      })
+          // Check for exact or partial matches in ingredient names (English and Arabic)
+          return (
+            rawName.includes(qLower) ||
+            rawNameNorm.includes(qNorm) ||
+            ingredientName.includes(qLower) ||
+            ingredientNameNorm.includes(qNorm) ||
+            ingredientNameAr.includes(qLower) ||
+            ingredientNameArNorm.includes(qNorm)
+          );
+        },
+      );
 
       // Boost score based on number of matching ingredients
       if (ingredientMatches.length > 0) {
-        s += ingredientMatches.length * 5 // 5 points per matching ingredient
+        s += ingredientMatches.length * 5; // 5 points per matching ingredient
       }
 
-      return s
-    }
+      return s;
+    };
 
     return all
-      .map(r => ({ r, s: score(r) }))
-      .filter(x => x.s > 0)
+      .map((r) => ({ r, s: score(r) }))
+      .filter((x) => x.s > 0)
       .sort((a, b) => b.s - a.s)
       .slice(0, 50)
-      .map(x => x.r)
-  }, [debouncedQuery, recipesByMealType, selectedMeal])
+      .map((x) => x.r);
+  }, [debouncedQuery, recipesByMealType, selectedMeal]);
 
   const getMealLabel = (meal?: string | null) => {
-    if (!meal) return 'recipes'
-    return mealLabels[meal] || meal.replace('_', ' ').replace(/\b\w/g, c => c.toUpperCase())
-  }
+    if (!meal) return "recipes";
+    return (
+      mealLabels[meal] ||
+      meal.replace("_", " ").replace(/\b\w/g, (c) => c.toUpperCase())
+    );
+  };
 
   const renderHighlighted = (text: string, query: string) => {
-    if (!query || !text) return text
+    if (!query || !text) return text;
 
     // Normalize text for matching (remove diacritics)
     const normalize = (str: string): string => {
       return str
-        .replace(/ً|ٌ|ٍ|َ|ُ|ِ|ّ|ْ/g, '') // Remove Arabic diacritics
+        .replace(/ً|ٌ|ٍ|َ|ُ|ِ|ّ|ْ/g, "") // Remove Arabic diacritics
         .toLowerCase()
-        .trim()
-    }
+        .trim();
+    };
 
-    const lower = text.toLowerCase()
-    const q = query.toLowerCase()
-    const qNorm = normalize(query)
-    const textNorm = normalize(text)
+    const lower = text.toLowerCase();
+    const q = query.toLowerCase();
+    const qNorm = normalize(query);
+    const textNorm = normalize(text);
 
     // Try exact match first
-    let idx = lower.indexOf(q)
+    let idx = lower.indexOf(q);
 
     // If no match, try with normalized text (handles Arabic diacritics)
     if (idx < 0 && (textNorm !== lower || qNorm !== q)) {
-      const normIdx = textNorm.indexOf(qNorm)
+      const normIdx = textNorm.indexOf(qNorm);
       // If normalized match found, highlight the corresponding part in original text
       // This is approximate - we highlight based on character position
       if (normIdx >= 0) {
-        idx = Math.min(normIdx, text.length - query.length)
+        idx = Math.min(normIdx, text.length - query.length);
       }
     }
 
-    if (idx < 0) return text
+    if (idx < 0) return text;
 
-    const before = text.slice(0, idx)
-    const match = text.slice(idx, idx + query.length)
-    const after = text.slice(idx + query.length)
+    const before = text.slice(0, idx);
+    const match = text.slice(idx, idx + query.length);
+    const after = text.slice(idx + query.length);
 
     return (
       <>
         {before}
-        <span className="rounded bg-primary/15 px-1 text-primary font-medium">{match}</span>
+        <span className="rounded bg-primary/15 px-1 text-primary font-medium">
+          {match}
+        </span>
         {after}
       </>
-    )
-  }
+    );
+  };
 
   const jumpToRecipe = (meal: MealType, recipeId: string) => {
-    const idx = recipesByMealType[meal]?.findIndex(r => r.id === recipeId) ?? -1
-    if (idx < 0) return
+    const idx =
+      recipesByMealType[meal]?.findIndex((r) => r.id === recipeId) ?? -1;
+    if (idx < 0) return;
 
-    setRecipeIndices(prev => ({ ...prev, [meal]: idx }))
-    setExpandedIngredient(null)
-    setActiveTab('ingredients')
-    setSelectedSwaps({})
-  }
-  
-  const SWAPS_PER_PAGE = 5
-  
+    setRecipeIndices((prev) => ({ ...prev, [meal]: idx }));
+    setExpandedIngredient(null);
+    setActiveTab("ingredients");
+    setSelectedSwaps({});
+  };
+
+  const SWAPS_PER_PAGE = 5;
+
   // Get current recipe for selected meal
-  const currentRecipe = selectedMeal 
-    ? (recipesByMealType[selectedMeal] || [])[recipeIndices[selectedMeal] || 0] 
-    : null
-  const totalRecipes = selectedMeal ? (recipesByMealType[selectedMeal] || []).length : 0
+  const currentRecipe = selectedMeal
+    ? (recipesByMealType[selectedMeal] || [])[recipeIndices[selectedMeal] || 0]
+    : null;
+  const totalRecipes = selectedMeal
+    ? (recipesByMealType[selectedMeal] || []).length
+    : 0;
 
   // Handlers
   const handleSelectMeal = (meal: MealType) => {
-    setSelectedMeal(meal)
-    setActiveTab('ingredients')
-    setExpandedIngredient(null)
+    setSelectedMeal(meal);
+    setActiveTab("ingredients");
+    setExpandedIngredient(null);
 
     // If this meal is already in today's plan, restore its swaps when opening it.
     // If the user later switches recipes, we clear swaps.
-    setSelectedSwaps(getSwapsFromPlan(meal))
-  }
+    setSelectedSwaps(getSwapsFromPlan(meal));
+  };
 
   const handleBack = () => {
-    setSelectedMeal(null)
-    setExpandedIngredient(null)
-    setSelectedSwaps({})
-    setSearchOpen(false)
-    setSearchQuery('')
-    setDebouncedQuery('')
-  }
+    setSelectedMeal(null);
+    setExpandedIngredient(null);
+    setSelectedSwaps({});
+    setSearchOpen(false);
+    setSearchQuery("");
+    setDebouncedQuery("");
+  };
 
   const handleNextRecipe = () => {
-    if (!selectedMeal) return
-    setRecipeIndices(prev => ({
+    if (!selectedMeal) return;
+    setRecipeIndices((prev) => ({
       ...prev,
       [selectedMeal]: (prev[selectedMeal] + 1) % totalRecipes,
-    }))
-    setSelectedSwaps({})
-    setExpandedIngredient(null)
-  }
+    }));
+    setSelectedSwaps({});
+    setExpandedIngredient(null);
+  };
 
   const handlePrevRecipe = () => {
-    if (!selectedMeal) return
-    setRecipeIndices(prev => ({
+    if (!selectedMeal) return;
+    setRecipeIndices((prev) => ({
       ...prev,
       [selectedMeal]: (prev[selectedMeal] - 1 + totalRecipes) % totalRecipes,
-    }))
-    setSelectedSwaps({})
-    setExpandedIngredient(null)
-  }
+    }));
+    setSelectedSwaps({});
+    setExpandedIngredient(null);
+  };
 
-  const handleToggleSwaps = async (ingredient: NonNullable<typeof currentRecipe>['recipe_ingredients'][0]) => {
-    if (!ingredient.ingredient_id) return
-    
+  const handleToggleSwaps = async (
+    ingredient: NonNullable<typeof currentRecipe>["recipe_ingredients"][0],
+  ) => {
+    if (!ingredient.ingredient_id) return;
+
     if (expandedIngredient === ingredient.id) {
-      setExpandedIngredient(null)
-      return
+      setExpandedIngredient(null);
+      return;
     }
-    
-    setExpandedIngredient(ingredient.id)
-    setLoadingSwaps(true)
-    
+
+    setExpandedIngredient(ingredient.id);
+    setLoadingSwaps(true);
+
     const { data } = await getUserIngredientSwaps({
       ingredientId: ingredient.ingredient_id,
       targetAmount: ingredient.scaled_quantity || ingredient.quantity || 100,
-      targetUnit: ingredient.unit || 'g',
-    })
-    
-    setSwaps(data)
-    setLoadingSwaps(false)
-  }
+      targetUnit: ingredient.unit || "g",
+    });
 
-  const handleSelectSwap = (ingredientId: string, swap: IngredientSwapOption) => {
-    setSelectedSwaps(prev => ({ ...prev, [ingredientId]: swap }))
-    setExpandedIngredient(null)
+    setSwaps(data);
+    setLoadingSwaps(false);
+  };
+
+  const handleSelectSwap = (
+    ingredientId: string,
+    swap: IngredientSwapOption,
+  ) => {
+    setSelectedSwaps((prev) => ({ ...prev, [ingredientId]: swap }));
+    setExpandedIngredient(null);
     // Toast-like feedback (could be extended to show actual toast)
-    console.log(`Swapped ingredient for ${ingredientId} to ${swap.name}`)
-  }
+    console.log(`Swapped ingredient for ${ingredientId} to ${swap.name}`);
+  };
 
   const handleClearSwap = (ingredientId: string) => {
-    setSelectedSwaps(prev => {
-      const updated = { ...prev }
-      delete updated[ingredientId]
-      return updated
-    })
-  }
+    setSelectedSwaps((prev) => {
+      const updated = { ...prev };
+      delete updated[ingredientId];
+      return updated;
+    });
+  };
 
   const handleSaveMeal = async () => {
     if (!selectedMeal || !currentRecipe) {
-      console.error('Missing meal or recipe:', { selectedMeal, hasRecipe: !!currentRecipe })
-      return
+      console.error("Missing meal or recipe:", {
+        selectedMeal,
+        hasRecipe: !!currentRecipe,
+      });
+      return;
     }
-    
-    console.log('Saving meal:', {
+
+    console.log("Saving meal:", {
       meal: selectedMeal,
       recipeId: currentRecipe.id,
       recipeName: currentRecipe.name,
       servings: currentRecipe.scale_factor,
-    })
-    
-    setSaving(true)
-    
+    });
+
+    setSaving(true);
+
     // Prepare swapped ingredients data
-    const swappedIngredients: Record<string, { ingredient_id: string; name: string; name_ar?: string; quantity: number; unit: string }> = {}
+    const swappedIngredients: Record<
+      string,
+      {
+        ingredient_id: string;
+        name: string;
+        name_ar?: string;
+        quantity: number;
+        unit: string;
+      }
+    > = {};
     Object.entries(selectedSwaps).forEach(([ingredientId, swap]) => {
       swappedIngredients[ingredientId] = {
         ingredient_id: swap.id,
@@ -418,26 +483,29 @@ export function MealBuilderContent({
         name_ar: swap.name_ar || undefined,
         quantity: swap.suggested_amount,
         unit: swap.serving_unit,
-      }
-    })
-    
+      };
+    });
+
     const result = await saveMealToPlan({
-      date: format(new Date(), 'yyyy-MM-dd'),
-      mealType: selectedMeal,
+      date: format(new Date(), "yyyy-MM-dd"),
+      mealType: selectedMeal as "breakfast" | "lunch" | "dinner" | "snacks",
       recipeId: currentRecipe.id,
       servings: currentRecipe.scale_factor,
-      swappedIngredients: Object.keys(swappedIngredients).length > 0 ? swappedIngredients : undefined,
-    })
-    
-    setSaving(false)
-    
+      swappedIngredients:
+        Object.keys(swappedIngredients).length > 0
+          ? swappedIngredients
+          : undefined,
+    });
+
+    setSaving(false);
+
     if (result.success) {
       // Redirect to dashboard to show the saved meal
-      router.push('/dashboard')
+      router.push("/dashboard");
     } else {
-      alert(result.error || "Failed to save meal. Please try again.")
+      alert(result.error || "Failed to save meal. Please try again.");
     }
-  }
+  };
 
   // Meal Selection View
   if (!selectedMeal) {
@@ -446,15 +514,22 @@ export function MealBuilderContent({
         {/* Header */}
         <div className="px-4 pt-6 pb-4">
           <h1 className="text-2xl font-bold">Meal Builder</h1>
-          <p className="text-muted-foreground text-sm">Tap a meal to customize</p>
+          <p className="text-muted-foreground text-sm">
+            Tap a meal to customize
+          </p>
         </div>
 
         {/* Meal Cards Grid */}
         <div className="px-4 grid grid-cols-2 gap-3">
           {(Object.keys(recipesByMealType) as string[]).map((meal) => {
-            const recipes = recipesByMealType[meal] || []
-            const firstRecipe = recipes[recipeIndices[meal] || 0]
-            const target = mealTargets[meal] || { calories: 0, protein: 0, carbs: 0, fat: 0 }
+            const recipes = recipesByMealType[meal] || [];
+            const firstRecipe = recipes[recipeIndices[meal] || 0];
+            const target = mealTargets[meal] || {
+              calories: 0,
+              protein: 0,
+              carbs: 0,
+              fat: 0,
+            };
 
             return (
               <div
@@ -464,9 +539,9 @@ export function MealBuilderContent({
                 className="relative aspect-[4/5] rounded-2xl overflow-hidden group cursor-pointer active:scale-[0.97] transition-transform duration-75"
                 onClick={() => handleSelectMeal(meal)}
                 onKeyDown={(e) => {
-                  if (e.key === 'Enter' || e.key === ' ') {
-                    e.preventDefault()
-                    handleSelectMeal(meal)
+                  if (e.key === "Enter" || e.key === " ") {
+                    e.preventDefault();
+                    handleSelectMeal(meal);
                   }
                 }}
               >
@@ -479,7 +554,7 @@ export function MealBuilderContent({
                       fill
                       sizes="(max-width: 768px) 50vw, 25vw"
                       className="object-cover"
-                      priority={meal === 'breakfast' || meal === 'lunch'}
+                      priority={meal === "breakfast" || meal === "lunch"}
                     />
                   ) : (
                     <div className="w-full h-full bg-gradient-to-br from-primary/30 to-primary/10 flex items-center justify-center">
@@ -493,10 +568,15 @@ export function MealBuilderContent({
 
                 {/* Content */}
                 <div className="absolute inset-x-0 bottom-0 p-3 text-left text-white">
-                  <h3 className="font-bold text-lg">{mealLabels[meal] || meal.replace('_', ' ').replace(/\b\w/g, c => c.toUpperCase())}</h3>
+                  <h3 className="font-bold text-lg">
+                    {mealLabels[meal] ||
+                      meal
+                        .replace("_", " ")
+                        .replace(/\b\w/g, (c) => c.toUpperCase())}
+                  </h3>
                   <div className="flex items-center text-xs text-white/80 mt-1">
                     <div className="flex items-center gap-2 overflow-hidden">
-                      <motion.div 
+                      <motion.div
                         className="flex items-center gap-1 shrink-0"
                         layout
                         transition={{ duration: 0.2 }}
@@ -507,7 +587,7 @@ export function MealBuilderContent({
                           {showMacroLabels && (
                             <motion.span
                               initial={{ width: 0, opacity: 0 }}
-                              animate={{ width: 'auto', opacity: 1 }}
+                              animate={{ width: "auto", opacity: 1 }}
                               exit={{ width: 0, opacity: 0 }}
                               transition={{ duration: 0.2 }}
                               className="text-white/60 overflow-hidden whitespace-nowrap"
@@ -518,7 +598,7 @@ export function MealBuilderContent({
                         </AnimatePresence>
                       </motion.div>
                       <span className="text-white/40">•</span>
-                      <motion.div 
+                      <motion.div
                         className="flex items-center gap-1 shrink-0"
                         layout
                         transition={{ duration: 0.2 }}
@@ -529,7 +609,7 @@ export function MealBuilderContent({
                           {showMacroLabels && (
                             <motion.span
                               initial={{ width: 0, opacity: 0 }}
-                              animate={{ width: 'auto', opacity: 1 }}
+                              animate={{ width: "auto", opacity: 1 }}
                               exit={{ width: 0, opacity: 0 }}
                               transition={{ duration: 0.2 }}
                               className="text-white/60 overflow-hidden whitespace-nowrap"
@@ -540,7 +620,7 @@ export function MealBuilderContent({
                         </AnimatePresence>
                       </motion.div>
                       <span className="text-white/40">•</span>
-                      <motion.div 
+                      <motion.div
                         className="flex items-center gap-1 shrink-0"
                         layout
                         transition={{ duration: 0.2 }}
@@ -551,7 +631,7 @@ export function MealBuilderContent({
                           {showMacroLabels && (
                             <motion.span
                               initial={{ width: 0, opacity: 0 }}
-                              animate={{ width: 'auto', opacity: 1 }}
+                              animate={{ width: "auto", opacity: 1 }}
                               exit={{ width: 0, opacity: 0 }}
                               transition={{ duration: 0.2 }}
                               className="text-white/60 overflow-hidden whitespace-nowrap"
@@ -562,7 +642,7 @@ export function MealBuilderContent({
                         </AnimatePresence>
                       </motion.div>
                       <span className="text-white/40">•</span>
-                      <motion.div 
+                      <motion.div
                         className="flex items-center gap-1 shrink-0"
                         layout
                         transition={{ duration: 0.2 }}
@@ -573,7 +653,7 @@ export function MealBuilderContent({
                           {showMacroLabels && (
                             <motion.span
                               initial={{ width: 0, opacity: 0 }}
-                              animate={{ width: 'auto', opacity: 1 }}
+                              animate={{ width: "auto", opacity: 1 }}
                               exit={{ width: 0, opacity: 0 }}
                               transition={{ duration: 0.2 }}
                               className="text-white/60 overflow-hidden whitespace-nowrap"
@@ -586,8 +666,8 @@ export function MealBuilderContent({
                     </div>
                     <button
                       onClick={(e) => {
-                        e.stopPropagation()
-                        setShowMacroLabels(!showMacroLabels)
+                        e.stopPropagation();
+                        setShowMacroLabels(!showMacroLabels);
                       }}
                       className="ml-2 p-1 rounded-full bg-white/10 hover:bg-white/20 transition-colors shrink-0"
                     >
@@ -604,11 +684,11 @@ export function MealBuilderContent({
                   <ChevronRight className="w-4 h-4 text-white" />
                 </div>
               </div>
-            )
+            );
           })}
         </div>
       </div>
-    )
+    );
   }
 
   // Recipe Builder View
@@ -623,33 +703,51 @@ export function MealBuilderContent({
           <ChefHat className="w-16 h-16 mx-auto text-muted-foreground mb-4" />
           <h3 className="font-semibold text-lg">No recipes available</h3>
           <p className="text-muted-foreground text-sm">
-            No recipes match your {getMealLabel(selectedMeal).toLowerCase()} calorie target.
+            No recipes match your {getMealLabel(selectedMeal).toLowerCase()}{" "}
+            calorie target.
           </p>
         </div>
       </div>
-    )
+    );
   }
 
-  const mainIngredients = currentRecipe.recipe_ingredients.filter(i => !i.is_spice)
-  const spices = currentRecipe.recipe_ingredients.filter(i => i.is_spice)
-  const scaledProtein = Math.round((currentRecipe.nutrition_per_serving?.protein_g || 0) * currentRecipe.scale_factor)
-  const scaledCarbs = Math.round((currentRecipe.nutrition_per_serving?.carbs_g || 0) * currentRecipe.scale_factor)
-  const scaledFat = Math.round((currentRecipe.nutrition_per_serving?.fat_g || 0) * currentRecipe.scale_factor)
+  const mainIngredients = currentRecipe.recipe_ingredients.filter(
+    (i) => !i.is_spice,
+  );
+  const spices = currentRecipe.recipe_ingredients.filter((i) => i.is_spice);
+  const scaledProtein = Math.round(
+    (currentRecipe.nutrition_per_serving?.protein_g || 0) *
+      currentRecipe.scale_factor,
+  );
+  const scaledCarbs = Math.round(
+    (currentRecipe.nutrition_per_serving?.carbs_g || 0) *
+      currentRecipe.scale_factor,
+  );
+  const scaledFat = Math.round(
+    (currentRecipe.nutrition_per_serving?.fat_g || 0) *
+      currentRecipe.scale_factor,
+  );
 
   // Swipe handlers for recipe navigation
-  const handleDragEnd = (event: MouseEvent | TouchEvent | PointerEvent, info: { offset: { x: number }; velocity: { x: number } }) => {
-    const threshold = 50
-    const velocityThreshold = 300
-    
-    if (Math.abs(info.offset.x) > threshold || Math.abs(info.velocity.x) > velocityThreshold) {
+  const handleDragEnd = (
+    event: MouseEvent | TouchEvent | PointerEvent,
+    info: { offset: { x: number }; velocity: { x: number } },
+  ) => {
+    const threshold = 50;
+    const velocityThreshold = 300;
+
+    if (
+      Math.abs(info.offset.x) > threshold ||
+      Math.abs(info.velocity.x) > velocityThreshold
+    ) {
       if (info.offset.x > 0) {
-        handlePrevRecipe()
+        handlePrevRecipe();
       } else {
-        handleNextRecipe()
+        handleNextRecipe();
       }
     }
-    setSwipeX(0)
-  }
+    setSwipeX(0);
+  };
 
   return (
     <div className="min-h-screen bg-background pb-24">
@@ -676,7 +774,8 @@ export function MealBuilderContent({
               <div className="mt-2 text-xs text-muted-foreground">
                 {debouncedQuery ? (
                   <span>
-                    {searchResults.length} result{searchResults.length === 1 ? '' : 's'}
+                    {searchResults.length} result
+                    {searchResults.length === 1 ? "" : "s"}
                   </span>
                 ) : (
                   <span>Showing top picks</span>
@@ -691,29 +790,41 @@ export function MealBuilderContent({
                 <div className="text-center py-12">
                   <ChefHat className="w-12 h-12 mx-auto text-muted-foreground/50 mb-3" />
                   <p className="text-sm font-medium">No matches</p>
-                  <p className="text-xs text-muted-foreground mt-1">Try a different keyword.</p>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Try a different keyword.
+                  </p>
                 </div>
               ) : (
                 searchResults.map((r) => {
-                  const currentId = selectedMeal ? recipesByMealType[selectedMeal][recipeIndices[selectedMeal]]?.id : null
-                  const isCurrent = !!currentId && currentId === r.id
+                  const currentId = selectedMeal
+                    ? recipesByMealType[selectedMeal][
+                        recipeIndices[selectedMeal]
+                      ]?.id
+                    : null;
+                  const isCurrent = !!currentId && currentId === r.id;
 
-                  const protein = Math.round((r.nutrition_per_serving?.protein_g || 0) * r.scale_factor)
-                  const carbs = Math.round((r.nutrition_per_serving?.carbs_g || 0) * r.scale_factor)
-                  const fat = Math.round((r.nutrition_per_serving?.fat_g || 0) * r.scale_factor)
+                  const protein = Math.round(
+                    (r.nutrition_per_serving?.protein_g || 0) * r.scale_factor,
+                  );
+                  const carbs = Math.round(
+                    (r.nutrition_per_serving?.carbs_g || 0) * r.scale_factor,
+                  );
+                  const fat = Math.round(
+                    (r.nutrition_per_serving?.fat_g || 0) * r.scale_factor,
+                  );
 
                   return (
                     <button
                       key={r.id}
                       className={cn(
-                        'w-full flex items-center gap-3 rounded-xl border p-3 text-left transition-colors active:scale-[0.99]',
-                        'hover:bg-muted/40',
-                        isCurrent && 'border-primary bg-primary/5'
+                        "w-full flex items-center gap-3 rounded-xl border p-3 text-left transition-colors active:scale-[0.99]",
+                        "hover:bg-muted/40",
+                        isCurrent && "border-primary bg-primary/5",
                       )}
                       onClick={() => {
-                        if (!selectedMeal) return
-                        jumpToRecipe(selectedMeal, r.id)
-                        setSearchOpen(false)
+                        if (!selectedMeal) return;
+                        jumpToRecipe(selectedMeal, r.id);
+                        setSearchOpen(false);
                       }}
                     >
                       <div className="relative w-14 h-14 rounded-lg overflow-hidden bg-muted flex-shrink-0">
@@ -765,7 +876,7 @@ export function MealBuilderContent({
 
                       <ChevronRight className="w-4 h-4 text-muted-foreground flex-shrink-0" />
                     </button>
-                  )
+                  );
                 })
               )}
             </div>
@@ -774,9 +885,9 @@ export function MealBuilderContent({
       </Sheet>
 
       {/* Hero Section with Recipe Image - Swipeable */}
-      <motion.div 
+      <motion.div
         className="relative w-full bg-gradient-to-br from-muted to-muted/50 cursor-grab active:cursor-grabbing touch-pan-y overflow-hidden"
-        style={{ aspectRatio: '4/3', x: swipeX * 0.3 }}
+        style={{ aspectRatio: "4/3", x: swipeX * 0.3 }}
         drag="x"
         dragConstraints={{ left: 0, right: 0 }}
         dragElastic={0.2}
@@ -804,37 +915,53 @@ export function MealBuilderContent({
           </>
         ) : (
           <div className="w-full h-full bg-gradient-to-br from-primary/25 via-primary/15 to-muted flex items-center justify-center relative">
-            <div className="absolute inset-0 opacity-30 pointer-events-none" style={{
-              backgroundImage: 'radial-gradient(circle at 30% 50%, rgba(0,0,0,0.1) 0%, transparent 50%)',
-            }} />
+            <div
+              className="absolute inset-0 opacity-30 pointer-events-none"
+              style={{
+                backgroundImage:
+                  "radial-gradient(circle at 30% 50%, rgba(0,0,0,0.1) 0%, transparent 50%)",
+              }}
+            />
             <ChefHat className="w-24 h-24 text-primary/40" />
           </div>
         )}
-        
+
         {/* Swipe indicators - Enhanced visibility */}
         {totalRecipes > 1 && (
           <>
-            <motion.div 
+            <motion.div
               className="absolute left-3 top-1/2 -translate-y-1/2 flex items-center gap-2 text-sm text-white/80 pointer-events-none"
-              animate={{ opacity: swipeX > 30 ? 1 : 0.3, x: swipeX > 30 ? 5 : 0 }}
+              animate={{
+                opacity: swipeX > 30 ? 1 : 0.3,
+                x: swipeX > 30 ? 5 : 0,
+              }}
             >
-              <motion.div animate={{ x: swipeX > 30 ? -2 : 0 }} transition={{ duration: 0.1 }}>
+              <motion.div
+                animate={{ x: swipeX > 30 ? -2 : 0 }}
+                transition={{ duration: 0.1 }}
+              >
                 <ChevronLeft className="w-6 h-6" />
               </motion.div>
               <span className="hidden sm:inline font-medium">Previous</span>
             </motion.div>
-            <motion.div 
+            <motion.div
               className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center gap-2 text-sm text-white/80 pointer-events-none"
-              animate={{ opacity: swipeX < -30 ? 1 : 0.3, x: swipeX < -30 ? -5 : 0 }}
+              animate={{
+                opacity: swipeX < -30 ? 1 : 0.3,
+                x: swipeX < -30 ? -5 : 0,
+              }}
             >
               <span className="hidden sm:inline font-medium">Next</span>
-              <motion.div animate={{ x: swipeX < -30 ? 2 : 0 }} transition={{ duration: 0.1 }}>
+              <motion.div
+                animate={{ x: swipeX < -30 ? 2 : 0 }}
+                transition={{ duration: 0.1 }}
+              >
                 <ChevronRight className="w-6 h-6" />
               </motion.div>
             </motion.div>
           </>
         )}
-        
+
         {/* Back button - Enhanced styling */}
         <motion.button
           onClick={handleBack}
@@ -862,9 +989,9 @@ export function MealBuilderContent({
             whileHover={{ scale: 1.08 }}
             whileTap={{ scale: 0.95 }}
             onClick={() => {
-              setSearchOpen(true)
-              setSearchQuery('')
-              setDebouncedQuery('')
+              setSearchOpen(true);
+              setSearchQuery("");
+              setDebouncedQuery("");
             }}
             className="w-11 h-11 rounded-full bg-white dark:bg-background backdrop-blur-md hover:bg-gray-100 dark:hover:bg-background/90 flex items-center justify-center border-2 border-gray-200 dark:border-border/40 shadow-lg"
             aria-label="Search recipes"
@@ -872,7 +999,7 @@ export function MealBuilderContent({
             <Search className="w-5 h-5 text-gray-700 dark:text-foreground" />
           </motion.button>
 
-          <motion.div 
+          <motion.div
             initial={{ opacity: 0, scale: 0.8 }}
             animate={{ opacity: 1, scale: 1 }}
             className="px-3 py-1.5 rounded-full bg-white dark:bg-background/85 backdrop-blur-md text-sm font-semibold border-2 border-gray-200 dark:border-border/40 shadow-lg"
@@ -891,17 +1018,19 @@ export function MealBuilderContent({
             <Badge variant="secondary" className="mb-3 shadow-md">
               {getMealLabel(selectedMeal)}
             </Badge>
-            <h1 className="text-3xl font-bold font-arabic text-white drop-shadow-lg mb-2">{currentRecipe.name}</h1>
+            <h1 className="text-3xl font-bold font-arabic text-white drop-shadow-lg mb-2">
+              {currentRecipe.name}
+            </h1>
           </motion.div>
-          
-          <motion.div 
+
+          <motion.div
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.15 }}
             className="flex items-center mt-3 text-sm pointer-events-auto"
           >
             <div className="flex items-center gap-4 bg-background/70 backdrop-blur-md rounded-lg px-3 py-2 border border-border/30">
-              <motion.div 
+              <motion.div
                 className="flex items-center gap-1.5 font-semibold text-primary"
                 layout
                 transition={{ duration: 0.2 }}
@@ -912,7 +1041,7 @@ export function MealBuilderContent({
                   {showMacroLabels && (
                     <motion.span
                       initial={{ width: 0, opacity: 0 }}
-                      animate={{ width: 'auto', opacity: 1 }}
+                      animate={{ width: "auto", opacity: 1 }}
                       exit={{ width: 0, opacity: 0 }}
                       transition={{ duration: 0.2 }}
                       className="font-normal text-muted-foreground overflow-hidden whitespace-nowrap"
@@ -923,7 +1052,7 @@ export function MealBuilderContent({
                 </AnimatePresence>
               </motion.div>
               <div className="h-4 w-px bg-border/30" />
-              <motion.div 
+              <motion.div
                 className="flex items-center gap-1.5 text-foreground"
                 layout
                 transition={{ duration: 0.2 }}
@@ -934,7 +1063,7 @@ export function MealBuilderContent({
                   {showMacroLabels && (
                     <motion.span
                       initial={{ width: 0, opacity: 0 }}
-                      animate={{ width: 'auto', opacity: 1 }}
+                      animate={{ width: "auto", opacity: 1 }}
                       exit={{ width: 0, opacity: 0 }}
                       transition={{ duration: 0.2 }}
                       className="text-muted-foreground overflow-hidden whitespace-nowrap"
@@ -945,7 +1074,7 @@ export function MealBuilderContent({
                 </AnimatePresence>
               </motion.div>
               <div className="h-4 w-px bg-border/30" />
-              <motion.div 
+              <motion.div
                 className="flex items-center gap-1.5 text-foreground"
                 layout
                 transition={{ duration: 0.2 }}
@@ -956,7 +1085,7 @@ export function MealBuilderContent({
                   {showMacroLabels && (
                     <motion.span
                       initial={{ width: 0, opacity: 0 }}
-                      animate={{ width: 'auto', opacity: 1 }}
+                      animate={{ width: "auto", opacity: 1 }}
                       exit={{ width: 0, opacity: 0 }}
                       transition={{ duration: 0.2 }}
                       className="text-muted-foreground overflow-hidden whitespace-nowrap"
@@ -967,7 +1096,7 @@ export function MealBuilderContent({
                 </AnimatePresence>
               </motion.div>
               <div className="h-4 w-px bg-border/30" />
-              <motion.div 
+              <motion.div
                 className="flex items-center gap-1.5 text-foreground"
                 layout
                 transition={{ duration: 0.2 }}
@@ -978,7 +1107,7 @@ export function MealBuilderContent({
                   {showMacroLabels && (
                     <motion.span
                       initial={{ width: 0, opacity: 0 }}
-                      animate={{ width: 'auto', opacity: 1 }}
+                      animate={{ width: "auto", opacity: 1 }}
                       exit={{ width: 0, opacity: 0 }}
                       transition={{ duration: 0.2 }}
                       className="text-muted-foreground overflow-hidden whitespace-nowrap"
@@ -997,9 +1126,9 @@ export function MealBuilderContent({
             >
               <Info className="w-4 h-4 text-muted-foreground" />
             </motion.button>
-            
+
             {/* Admin Debug Button */}
-            {(userRole === 'admin' || userRole === 'moderator') && (
+            {(userRole === "admin" || userRole === "moderator") && (
               <motion.button
                 whileHover={{ scale: 1.1 }}
                 whileTap={{ scale: 0.95 }}
@@ -1011,81 +1140,122 @@ export function MealBuilderContent({
               </motion.button>
             )}
           </motion.div>
-          
+
           {/* Debug Info (Admin Only) */}
-          {showDebugInfo && (userRole === 'admin' || userRole === 'moderator') && (() => {
-            const target = mealTargets[selectedMeal]
-            const proteinDiff = scaledProtein - target.protein
-            const carbsDiff = scaledCarbs - target.carbs
-            const proteinOnTrack = Math.abs(proteinDiff) <= 5
-            const carbsOnTrack = Math.abs(carbsDiff) <= 10
-            const allOnTrack = proteinOnTrack && carbsOnTrack
-            
-            // Calculate macro quality rating
-            const macroScore = currentRecipe.macro_similarity_score || 0
-            const macroQuality = macroScore >= 80 
-              ? { label: '✨ Excellent', color: 'text-green-600' }
-              : macroScore >= 60 
-                ? { label: '✅ Good', color: 'text-blue-600' }
-                : macroScore >= 40 
-                  ? { label: '⚠️ Acceptable', color: 'text-amber-600' }
-                  : { label: '❌ Poor', color: 'text-red-600' }
-            
-            return (
-              <motion.div
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.2 }}
-                className="mt-2 p-3 rounded-lg bg-red-500/10 border border-red-500/30"
-              >
-                <div className="text-xs space-y-2">
-                  <div className="font-semibold text-red-600 mb-2">🐛 Debug Info (Admin Only)</div>
-                  
-                  {/* Macro Match Quality */}
-                  <div className="pb-2 border-b border-red-500/30">
-                    <div className="flex items-center justify-between text-[11px]">
-                      <span className="text-muted-foreground font-semibold">Macro Match Quality:</span>
-                      <span className={cn("font-semibold", macroQuality.color)}>
-                        {macroQuality.label} ({macroScore})
-                      </span>
+          {showDebugInfo &&
+            (userRole === "admin" || userRole === "moderator") &&
+            (() => {
+              const target = mealTargets[selectedMeal];
+              const proteinDiff = scaledProtein - target.protein;
+              const carbsDiff = scaledCarbs - target.carbs;
+              const proteinOnTrack = Math.abs(proteinDiff) <= 5;
+              const carbsOnTrack = Math.abs(carbsDiff) <= 10;
+              const allOnTrack = proteinOnTrack && carbsOnTrack;
+
+              // Calculate macro quality rating
+              const macroScore = currentRecipe.macro_similarity_score || 0;
+              const macroQuality =
+                macroScore >= 80
+                  ? { label: "✨ Excellent", color: "text-green-600" }
+                  : macroScore >= 60
+                    ? { label: "✅ Good", color: "text-blue-600" }
+                    : macroScore >= 40
+                      ? { label: "⚠️ Acceptable", color: "text-amber-600" }
+                      : { label: "❌ Poor", color: "text-red-600" };
+
+              return (
+                <motion.div
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: 0.2 }}
+                  className="mt-2 p-3 rounded-lg bg-red-500/10 border border-red-500/30"
+                >
+                  <div className="text-xs space-y-2">
+                    <div className="font-semibold text-red-600 mb-2">
+                      🐛 Debug Info (Admin Only)
                     </div>
-                    <div className="text-[9px] text-muted-foreground mt-0.5">
-                      How well this recipe&apos;s macros match your daily targets
+
+                    {/* Macro Match Quality */}
+                    <div className="pb-2 border-b border-red-500/30">
+                      <div className="flex items-center justify-between text-[11px]">
+                        <span className="text-muted-foreground font-semibold">
+                          Macro Match Quality:
+                        </span>
+                        <span
+                          className={cn("font-semibold", macroQuality.color)}
+                        >
+                          {macroQuality.label} ({macroScore})
+                        </span>
+                      </div>
+                      <div className="text-[9px] text-muted-foreground mt-0.5">
+                        How well this recipe&apos;s macros match your daily
+                        targets
+                      </div>
                     </div>
-                  </div>
-                  
-                  {/* Target Details */}
-                  <div className="grid grid-cols-2 gap-2 text-[10px]">
-                    <div>
-                      <div className="text-muted-foreground">Target Calories:</div>
-                      <div className="font-semibold">{target.calories} kcal</div>
-                    </div>
-                    <div>
-                      <div className="text-muted-foreground">Target Protein:</div>
-                      <div className="font-semibold">{target.protein}g ({proteinOnTrack ? '✓' : proteinDiff > 0 ? '+' + proteinDiff : proteinDiff}g)</div>
-                    </div>
-                    <div>
-                      <div className="text-muted-foreground">Target Carbs:</div>
-                      <div className="font-semibold">{target.carbs}g ({carbsOnTrack ? '✓' : carbsDiff > 0 ? '+' + carbsDiff : carbsDiff}g)</div>
-                    </div>
-                    <div>
-                      <div className="text-muted-foreground">Target Fat:</div>
-                      <div className="font-semibold">{target.fat}g</div>
-                    </div>
-                    <div className="col-span-2">
-                      <div className="text-muted-foreground">Macro Tolerance Status:</div>
-                      <div className={cn(
-                        "font-semibold",
-                        allOnTrack ? "text-green-600" : "text-amber-600"
-                      )}>
-                        {allOnTrack ? '✓ Within Tolerance' : '⚠ Outside Tolerance'} (±5g P, ±10g C)
+
+                    {/* Target Details */}
+                    <div className="grid grid-cols-2 gap-2 text-[10px]">
+                      <div>
+                        <div className="text-muted-foreground">
+                          Target Calories:
+                        </div>
+                        <div className="font-semibold">
+                          {target.calories} kcal
+                        </div>
+                      </div>
+                      <div>
+                        <div className="text-muted-foreground">
+                          Target Protein:
+                        </div>
+                        <div className="font-semibold">
+                          {target.protein}g (
+                          {proteinOnTrack
+                            ? "✓"
+                            : proteinDiff > 0
+                              ? "+" + proteinDiff
+                              : proteinDiff}
+                          g)
+                        </div>
+                      </div>
+                      <div>
+                        <div className="text-muted-foreground">
+                          Target Carbs:
+                        </div>
+                        <div className="font-semibold">
+                          {target.carbs}g (
+                          {carbsOnTrack
+                            ? "✓"
+                            : carbsDiff > 0
+                              ? "+" + carbsDiff
+                              : carbsDiff}
+                          g)
+                        </div>
+                      </div>
+                      <div>
+                        <div className="text-muted-foreground">Target Fat:</div>
+                        <div className="font-semibold">{target.fat}g</div>
+                      </div>
+                      <div className="col-span-2">
+                        <div className="text-muted-foreground">
+                          Macro Tolerance Status:
+                        </div>
+                        <div
+                          className={cn(
+                            "font-semibold",
+                            allOnTrack ? "text-green-600" : "text-amber-600",
+                          )}
+                        >
+                          {allOnTrack
+                            ? "✓ Within Tolerance"
+                            : "⚠ Outside Tolerance"}{" "}
+                          (±5g P, ±10g C)
+                        </div>
                       </div>
                     </div>
                   </div>
-                </div>
-              </motion.div>
-            )
-          })()}
+                </motion.div>
+              );
+            })()}
         </div>
       </motion.div>
 
@@ -1106,11 +1276,11 @@ export function MealBuilderContent({
           <button
             className={cn(
               "flex-1 py-3 text-sm font-medium flex items-center justify-center gap-2 border-b-2 transition-colors",
-              activeTab === 'ingredients' 
-                ? "border-primary text-primary" 
-                : "border-transparent text-muted-foreground"
+              activeTab === "ingredients"
+                ? "border-primary text-primary"
+                : "border-transparent text-muted-foreground",
             )}
-            onClick={() => setActiveTab('ingredients')}
+            onClick={() => setActiveTab("ingredients")}
           >
             <ShoppingBasket className="w-4 h-4" />
             Ingredients
@@ -1118,11 +1288,11 @@ export function MealBuilderContent({
           <button
             className={cn(
               "flex-1 py-3 text-sm font-medium flex items-center justify-center gap-2 border-b-2 transition-colors",
-              activeTab === 'instructions' 
-                ? "border-primary text-primary" 
-                : "border-transparent text-muted-foreground"
+              activeTab === "instructions"
+                ? "border-primary text-primary"
+                : "border-transparent text-muted-foreground",
             )}
-            onClick={() => setActiveTab('instructions')}
+            onClick={() => setActiveTab("instructions")}
           >
             <List className="w-4 h-4" />
             Instructions
@@ -1132,8 +1302,8 @@ export function MealBuilderContent({
 
       {/* Save to Plan Button */}
       <div className="px-4 pt-4 pb-2">
-        <Button 
-          onClick={handleSaveMeal} 
+        <Button
+          onClick={handleSaveMeal}
           disabled={saving}
           className="w-full h-12 text-base font-semibold"
           size="lg"
@@ -1154,7 +1324,7 @@ export function MealBuilderContent({
 
       {/* Tab Content */}
       <AnimatePresence mode="wait">
-        {activeTab === 'ingredients' ? (
+        {activeTab === "ingredients" ? (
           <motion.div
             key="ingredients"
             initial={{ opacity: 0, x: -20 }}
@@ -1172,18 +1342,29 @@ export function MealBuilderContent({
                 <div className="flex items-start justify-between">
                   <div>
                     <p className="text-sm font-semibold text-primary mb-2">
-                      🔄 {Object.keys(selectedSwaps).length} ingredient swap{Object.keys(selectedSwaps).length > 1 ? 's' : ''} active
+                      🔄 {Object.keys(selectedSwaps).length} ingredient swap
+                      {Object.keys(selectedSwaps).length > 1 ? "s" : ""} active
                     </p>
                     <div className="space-y-1">
                       {Object.entries(selectedSwaps).map(([ingredId, swap]) => {
-                        const original = mainIngredients.find(i => i.id === ingredId)
+                        const original = mainIngredients.find(
+                          (i) => i.id === ingredId,
+                        );
                         return (
-                          <div key={ingredId} className="text-xs text-muted-foreground">
-                            <span className="line-through">{original?.ingredient?.name_ar || original?.ingredient?.name}</span>
+                          <div
+                            key={ingredId}
+                            className="text-xs text-muted-foreground"
+                          >
+                            <span className="line-through">
+                              {original?.ingredient?.name_ar ||
+                                original?.ingredient?.name}
+                            </span>
                             <span className="mx-1">→</span>
-                            <span className="font-medium text-primary">{swap.name_ar || swap.name}</span>
+                            <span className="font-medium text-primary">
+                              {swap.name_ar || swap.name}
+                            </span>
                           </div>
-                        )
+                        );
                       })}
                     </div>
                   </div>
@@ -1202,30 +1383,34 @@ export function MealBuilderContent({
             {/* Main Ingredients */}
             <div className="space-y-2">
               {mainIngredients.map((ingredient) => {
-                const swap = selectedSwaps[ingredient.id]
-                const isExpanded = expandedIngredient === ingredient.id
-                
+                const swap = selectedSwaps[ingredient.id];
+                const isExpanded = expandedIngredient === ingredient.id;
+
                 return (
                   <div key={ingredient.id}>
                     <button
                       className={cn(
                         "w-full flex items-center justify-between p-3 rounded-xl transition-all",
-                        ingredient.ingredient_id 
-                          ? "bg-muted/50 hover:bg-muted active:scale-[0.99]" 
+                        ingredient.ingredient_id
+                          ? "bg-muted/50 hover:bg-muted active:scale-[0.99]"
                           : "bg-muted/30",
                         isExpanded && "ring-2 ring-primary",
-                        swap && "bg-gradient-to-r from-primary/10 to-primary/5 border-l-2 border-primary"
+                        swap &&
+                          "bg-gradient-to-r from-primary/10 to-primary/5 border-l-2 border-primary",
                       )}
-                      onClick={() => ingredient.ingredient_id && handleToggleSwaps(ingredient)}
+                      onClick={() =>
+                        ingredient.ingredient_id &&
+                        handleToggleSwaps(ingredient)
+                      }
                       disabled={!ingredient.ingredient_id}
                     >
                       <div className="flex-1 text-left">
                         {swap ? (
-                          <motion.div 
+                          <motion.div
                             className="flex items-center gap-2"
                             initial={{ opacity: 0, x: -10 }}
                             animate={{ opacity: 1, x: 0 }}
-                            transition={{ type: 'spring', stiffness: 200 }}
+                            transition={{ type: "spring", stiffness: 200 }}
                           >
                             <div className="flex-1">
                               <div className="flex items-center gap-2">
@@ -1234,21 +1419,23 @@ export function MealBuilderContent({
                                 </span>
                               </div>
                               <p className="text-xs text-muted-foreground mt-1">
-                                Replaces: {ingredient.ingredient?.name_ar || ingredient.ingredient?.name}
+                                Replaces:{" "}
+                                {ingredient.ingredient?.name_ar ||
+                                  ingredient.ingredient?.name}
                               </p>
                             </div>
                             <div
                               onClick={(e) => {
-                                e.stopPropagation()
-                                handleClearSwap(ingredient.id)
+                                e.stopPropagation();
+                                handleClearSwap(ingredient.id);
                               }}
                               role="button"
                               tabIndex={0}
                               onKeyDown={(e) => {
-                                if (e.key === 'Enter' || e.key === ' ') {
-                                  e.stopPropagation()
-                                  e.preventDefault()
-                                  handleClearSwap(ingredient.id)
+                                if (e.key === "Enter" || e.key === " ") {
+                                  e.stopPropagation();
+                                  e.preventDefault();
+                                  handleClearSwap(ingredient.id);
                                 }
                               }}
                               className="p-1.5 hover:bg-destructive/20 rounded-full cursor-pointer transition-colors flex-shrink-0"
@@ -1258,37 +1445,48 @@ export function MealBuilderContent({
                             </div>
                           </motion.div>
                         ) : (
-                          <span className={cn(
-                            "font-arabic",
-                            ingredient.is_optional && "text-muted-foreground"
-                          )}>
-                            {ingredient.ingredient?.name_ar || ingredient.ingredient?.name || ingredient.raw_name}
+                          <span
+                            className={cn(
+                              "font-arabic",
+                              ingredient.is_optional && "text-muted-foreground",
+                            )}
+                          >
+                            {ingredient.ingredient?.name_ar ||
+                              ingredient.ingredient?.name ||
+                              ingredient.raw_name}
                             {ingredient.is_optional && (
-                              <span className="text-xs ml-1 text-muted-foreground">(optional)</span>
+                              <span className="text-xs ml-1 text-muted-foreground">
+                                (optional)
+                              </span>
                             )}
                           </span>
                         )}
                       </div>
                       <div className="flex items-center gap-2">
                         <span className="text-sm font-mono text-muted-foreground">
-                          {swap?.suggested_amount || ingredient.scaled_quantity || ingredient.quantity || '—'}
-                          {swap?.serving_unit || ingredient.unit || ''}
+                          {swap?.suggested_amount ||
+                            ingredient.scaled_quantity ||
+                            ingredient.quantity ||
+                            "—"}
+                          {swap?.serving_unit || ingredient.unit || ""}
                         </span>
                         {ingredient.ingredient_id && (
-                          <RefreshCw className={cn(
-                            "w-4 h-4 text-muted-foreground transition-transform",
-                            isExpanded && "rotate-180 text-primary"
-                          )} />
+                          <RefreshCw
+                            className={cn(
+                              "w-4 h-4 text-muted-foreground transition-transform",
+                              isExpanded && "rotate-180 text-primary",
+                            )}
+                          />
                         )}
                       </div>
                     </button>
-                    
+
                     {/* Swaps Panel */}
                     <AnimatePresence>
                       {isExpanded && (
                         <motion.div
                           initial={{ height: 0, opacity: 0 }}
-                          animate={{ height: 'auto', opacity: 1 }}
+                          animate={{ height: "auto", opacity: 1 }}
                           exit={{ height: 0, opacity: 0 }}
                           className="overflow-hidden"
                         >
@@ -1305,29 +1503,59 @@ export function MealBuilderContent({
                                   </p>
                                   {swaps.length > SWAPS_PER_PAGE && (
                                     <span className="text-xs text-muted-foreground">
-                                      {(swapPaginationPage[ingredient.id] || 0) * SWAPS_PER_PAGE + 1}–{Math.min((swapPaginationPage[ingredient.id] || 0) * SWAPS_PER_PAGE + SWAPS_PER_PAGE, swaps.length)} of {swaps.length}
+                                      {(swapPaginationPage[ingredient.id] ||
+                                        0) *
+                                        SWAPS_PER_PAGE +
+                                        1}
+                                      –
+                                      {Math.min(
+                                        (swapPaginationPage[ingredient.id] ||
+                                          0) *
+                                          SWAPS_PER_PAGE +
+                                          SWAPS_PER_PAGE,
+                                        swaps.length,
+                                      )}{" "}
+                                      of {swaps.length}
                                     </span>
                                   )}
                                 </div>
                                 {(() => {
-                                  const page = swapPaginationPage[ingredient.id] || 0
-                                  const startIdx = page * SWAPS_PER_PAGE
-                                  const endIdx = startIdx + SWAPS_PER_PAGE
-                                  const paginatedSwaps = swaps.slice(startIdx, endIdx)
-                                  const totalPages = Math.ceil(swaps.length / SWAPS_PER_PAGE)
+                                  const page =
+                                    swapPaginationPage[ingredient.id] || 0;
+                                  const startIdx = page * SWAPS_PER_PAGE;
+                                  const endIdx = startIdx + SWAPS_PER_PAGE;
+                                  const paginatedSwaps = swaps.slice(
+                                    startIdx,
+                                    endIdx,
+                                  );
+                                  const totalPages = Math.ceil(
+                                    swaps.length / SWAPS_PER_PAGE,
+                                  );
 
                                   return (
                                     <div className="space-y-2">
                                       {paginatedSwaps.map((s, idx) => {
-                                        const swapMacros = s.macros || { calories: 0, protein_g: 0, carbs_g: 0, fat_g: 0 }
-                                        
-                                        const swapProtein = Math.round((swapMacros.protein_g ?? 0) * 10) / 10
-                                        const proteinSimilar = swapProtein >= 10 // High protein if >= 10g
-                                        
-                                        const caloriesDiff = Math.round(swapMacros.calories ?? 0)
-                                        const isHealthier = (swapMacros.calories ?? 0) < 100
-                                        const isHighProtein = swapProtein >= 15
-                                        
+                                        const swapMacros = s.macros || {
+                                          calories: 0,
+                                          protein_g: 0,
+                                          carbs_g: 0,
+                                          fat_g: 0,
+                                        };
+
+                                        const swapProtein =
+                                          Math.round(
+                                            (swapMacros.protein_g ?? 0) * 10,
+                                          ) / 10;
+                                        const proteinSimilar =
+                                          swapProtein >= 10; // High protein if >= 10g
+
+                                        const caloriesDiff = Math.round(
+                                          swapMacros.calories ?? 0,
+                                        );
+                                        const isHealthier =
+                                          (swapMacros.calories ?? 0) < 100;
+                                        const isHighProtein = swapProtein >= 15;
+
                                         return (
                                           <motion.button
                                             key={s.id}
@@ -1337,11 +1565,19 @@ export function MealBuilderContent({
                                             className={cn(
                                               "w-full flex items-start gap-3 p-3 rounded-lg transition-all active:scale-95",
                                               "bg-background/60 hover:bg-background border border-border/50",
-                                              proteinSimilar && "border-primary/40 hover:bg-primary/5 ring-1 ring-primary/20",
-                                              isHealthier && !proteinSimilar && "border-green-400/40 hover:bg-green-500/5",
-                                              isHighProtein && !isHealthier && !proteinSimilar && "border-blue-400/40 hover:bg-blue-500/5",
+                                              proteinSimilar &&
+                                                "border-primary/40 hover:bg-primary/5 ring-1 ring-primary/20",
+                                              isHealthier &&
+                                                !proteinSimilar &&
+                                                "border-green-400/40 hover:bg-green-500/5",
+                                              isHighProtein &&
+                                                !isHealthier &&
+                                                !proteinSimilar &&
+                                                "border-blue-400/40 hover:bg-blue-500/5",
                                             )}
-                                            onClick={() => handleSelectSwap(ingredient.id, s)}
+                                            onClick={() =>
+                                              handleSelectSwap(ingredient.id, s)
+                                            }
                                           >
                                             <div className="flex-1 min-w-0">
                                               <div className="flex items-center gap-2 mb-1">
@@ -1353,33 +1589,51 @@ export function MealBuilderContent({
                                                     ⚡ Similar Protein
                                                   </span>
                                                 )}
-                                                {isHealthier && !proteinSimilar && (
-                                                  <span className="text-[10px] font-semibold text-green-600 bg-green-100 px-1.5 py-0.5 rounded whitespace-nowrap">
-                                                    💚 Low Cal
-                                                  </span>
-                                                )}
-                                                {isHighProtein && !isHealthier && !proteinSimilar && (
-                                                  <span className="text-[10px] font-semibold text-blue-600 bg-blue-100 px-1.5 py-0.5 rounded whitespace-nowrap">
-                                                    💪 High Protein
-                                                  </span>
-                                                )}
+                                                {isHealthier &&
+                                                  !proteinSimilar && (
+                                                    <span className="text-[10px] font-semibold text-green-600 bg-green-100 px-1.5 py-0.5 rounded whitespace-nowrap">
+                                                      💚 Low Cal
+                                                    </span>
+                                                  )}
+                                                {isHighProtein &&
+                                                  !isHealthier &&
+                                                  !proteinSimilar && (
+                                                    <span className="text-[10px] font-semibold text-blue-600 bg-blue-100 px-1.5 py-0.5 rounded whitespace-nowrap">
+                                                      💪 High Protein
+                                                    </span>
+                                                  )}
                                               </div>
                                               <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                                                <span className="font-mono">{s.suggested_amount}{s.serving_unit}</span>
+                                                <span className="font-mono">
+                                                  {s.suggested_amount}
+                                                  {s.serving_unit}
+                                                </span>
                                                 <span>•</span>
-                                                <span className={cn(
-                                                  'font-medium',
-                                                  isHealthier ? 'text-green-600' : isHighProtein ? 'text-blue-600' : 'text-foreground'
-                                                )}>
+                                                <span
+                                                  className={cn(
+                                                    "font-medium",
+                                                    isHealthier
+                                                      ? "text-green-600"
+                                                      : isHighProtein
+                                                        ? "text-blue-600"
+                                                        : "text-foreground",
+                                                  )}
+                                                >
                                                   {caloriesDiff} kcal
                                                 </span>
                                                 {swapProtein > 0 && (
                                                   <>
                                                     <span>•</span>
-                                                    <span className={cn(
-                                                      'font-medium',
-                                                      isHighProtein ? 'text-blue-600' : proteinSimilar ? 'text-primary' : 'text-muted-foreground'
-                                                    )}>
+                                                    <span
+                                                      className={cn(
+                                                        "font-medium",
+                                                        isHighProtein
+                                                          ? "text-blue-600"
+                                                          : proteinSimilar
+                                                            ? "text-primary"
+                                                            : "text-muted-foreground",
+                                                      )}
+                                                    >
                                                       P: {swapProtein}g
                                                     </span>
                                                   </>
@@ -1390,9 +1644,9 @@ export function MealBuilderContent({
                                               <ChevronRight className="w-4 h-4" />
                                             </div>
                                           </motion.button>
-                                        )
+                                        );
                                       })}
-                                      
+
                                       {/* Pagination Controls */}
                                       {totalPages > 1 && (
                                         <div className="flex items-center justify-between gap-2 mt-3 pt-2 border-t border-border/30">
@@ -1401,44 +1655,63 @@ export function MealBuilderContent({
                                             variant="ghost"
                                             className="h-7 px-2 text-xs"
                                             disabled={page === 0}
-                                            onClick={() => setSwapPaginationPage(prev => ({
-                                              ...prev,
-                                              [ingredient.id]: Math.max(0, (prev[ingredient.id] || 0) - 1)
-                                            }))}
+                                            onClick={() =>
+                                              setSwapPaginationPage((prev) => ({
+                                                ...prev,
+                                                [ingredient.id]: Math.max(
+                                                  0,
+                                                  (prev[ingredient.id] || 0) -
+                                                    1,
+                                                ),
+                                              }))
+                                            }
                                           >
                                             <ChevronLeft className="w-3 h-3 mr-1" />
                                             Prev
                                           </Button>
-                                          
+
                                           <div className="flex items-center gap-1">
-                                            {Array.from({ length: totalPages }, (_, i) => (
-                                              <button
-                                                key={i}
-                                                onClick={() => setSwapPaginationPage(prev => ({
-                                                  ...prev,
-                                                  [ingredient.id]: i
-                                                }))}
-                                                className={cn(
-                                                  "w-6 h-6 rounded text-[10px] font-medium transition-colors",
-                                                  page === i
-                                                    ? "bg-primary text-primary-foreground"
-                                                    : "bg-muted hover:bg-muted/80 text-muted-foreground"
-                                                )}
-                                              >
-                                                {i + 1}
-                                              </button>
-                                            ))}
+                                            {Array.from(
+                                              { length: totalPages },
+                                              (_, i) => (
+                                                <button
+                                                  key={i}
+                                                  onClick={() =>
+                                                    setSwapPaginationPage(
+                                                      (prev) => ({
+                                                        ...prev,
+                                                        [ingredient.id]: i,
+                                                      }),
+                                                    )
+                                                  }
+                                                  className={cn(
+                                                    "w-6 h-6 rounded text-[10px] font-medium transition-colors",
+                                                    page === i
+                                                      ? "bg-primary text-primary-foreground"
+                                                      : "bg-muted hover:bg-muted/80 text-muted-foreground",
+                                                  )}
+                                                >
+                                                  {i + 1}
+                                                </button>
+                                              ),
+                                            )}
                                           </div>
-                                          
+
                                           <Button
                                             size="sm"
                                             variant="ghost"
                                             className="h-7 px-2 text-xs"
                                             disabled={page === totalPages - 1}
-                                            onClick={() => setSwapPaginationPage(prev => ({
-                                              ...prev,
-                                              [ingredient.id]: Math.min(totalPages - 1, (prev[ingredient.id] || 0) + 1)
-                                            }))}
+                                            onClick={() =>
+                                              setSwapPaginationPage((prev) => ({
+                                                ...prev,
+                                                [ingredient.id]: Math.min(
+                                                  totalPages - 1,
+                                                  (prev[ingredient.id] || 0) +
+                                                    1,
+                                                ),
+                                              }))
+                                            }
                                           >
                                             Next
                                             <ChevronRight className="w-3 h-3 ml-1" />
@@ -1446,7 +1719,7 @@ export function MealBuilderContent({
                                         </div>
                                       )}
                                     </div>
-                                  )
+                                  );
                                 })()}
                               </div>
                             ) : (
@@ -1459,7 +1732,7 @@ export function MealBuilderContent({
                       )}
                     </AnimatePresence>
                   </div>
-                )
+                );
               })}
             </div>
 
@@ -1476,10 +1749,13 @@ export function MealBuilderContent({
                       variant="outline"
                       className="font-arabic py-1.5 px-3"
                     >
-                      {spice.ingredient?.name_ar || spice.ingredient?.name || spice.raw_name}
+                      {spice.ingredient?.name_ar ||
+                        spice.ingredient?.name ||
+                        spice.raw_name}
                       {spice.scaled_quantity && (
                         <span className="ml-1.5 opacity-60 font-mono text-[10px]">
-                          {spice.scaled_quantity}{spice.unit}
+                          {spice.scaled_quantity}
+                          {spice.unit}
                         </span>
                       )}
                     </Badge>
@@ -1510,12 +1786,14 @@ export function MealBuilderContent({
             ) : (
               <div className="text-center py-12">
                 <List className="w-12 h-12 mx-auto text-muted-foreground/50 mb-3" />
-                <p className="text-muted-foreground">No instructions available</p>
+                <p className="text-muted-foreground">
+                  No instructions available
+                </p>
               </div>
             )}
           </motion.div>
         )}
       </AnimatePresence>
     </div>
-  )
+  );
 }
