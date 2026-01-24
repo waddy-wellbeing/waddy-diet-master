@@ -25,6 +25,8 @@ import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { cn } from "@/lib/utils";
+import { RecipePickerSheet } from "@/components/dashboard/recipe-picker-sheet";
+import { toast } from "sonner";
 import {
   AdminUserProfile,
   AdminUserPlan,
@@ -32,6 +34,8 @@ import {
   searchUsers,
   getUserPlans,
   getDayPlan,
+  updateUserMeal,
+  getAllRecipes,
 } from "@/lib/actions/admin-plans";
 
 interface PlansContentProps {
@@ -115,11 +119,13 @@ function MealCard({
   recipe,
   servings,
   onEdit,
+  isLoading,
 }: {
   mealType: string;
   recipe: AdminRecipeInfo | null;
   servings: number;
   onEdit?: () => void;
+  isLoading?: boolean;
 }) {
   const mealEmoji: Record<string, string> = {
     breakfast: "🌅",
@@ -145,7 +151,12 @@ function MealCard({
   }
 
   return (
-    <Card>
+    <Card className="relative">
+      {isLoading && (
+        <div className="absolute inset-0 bg-background/80 backdrop-blur-sm z-10 flex items-center justify-center rounded-lg">
+          <Loader2 className="h-6 w-6 animate-spin text-primary" />
+        </div>
+      )}
       <CardContent className="p-3">
         <div className="flex items-center gap-3">
           {recipe.image_url ? (
@@ -181,6 +192,7 @@ function MealCard({
             variant="ghost"
             className="h-8 w-8"
             onClick={onEdit}
+            disabled={isLoading}
           >
             <Edit2 className="h-4 w-4" />
           </Button>
@@ -195,10 +207,14 @@ function DayPlanView({
   date,
   plan,
   recipes,
+  onEditMeal,
+  loadingMealKey,
 }: {
   date: Date;
   plan: AdminUserPlan | null;
   recipes: Record<string, AdminRecipeInfo>;
+  onEditMeal?: (mealType: string, snackIndex?: number) => void;
+  loadingMealKey?: string | null;
 }) {
   const dateStr = date.toISOString().split("T")[0];
   const isToday = dateStr === new Date().toISOString().split("T")[0];
@@ -254,19 +270,22 @@ function DayPlanView({
           mealType="breakfast"
           recipe={breakfast.recipe}
           servings={breakfast.servings}
-          onEdit={() => console.log("Edit breakfast")}
+          onEdit={() => onEditMeal?.("breakfast")}
+          isLoading={loadingMealKey === "breakfast"}
         />
         <MealCard
           mealType="lunch"
           recipe={lunch.recipe}
           servings={lunch.servings}
-          onEdit={() => console.log("Edit lunch")}
+          onEdit={() => onEditMeal?.("lunch")}
+          isLoading={loadingMealKey === "lunch"}
         />
         <MealCard
           mealType="dinner"
           recipe={dinner.recipe}
           servings={dinner.servings}
-          onEdit={() => console.log("Edit dinner")}
+          onEdit={() => onEditMeal?.("dinner")}
+          isLoading={loadingMealKey === "dinner"}
         />
         {snacks.length > 0 && (
           <div className="mt-2 pt-2 border-t">
@@ -280,7 +299,8 @@ function DayPlanView({
                   mealType="snacks"
                   recipe={snack.recipe}
                   servings={snack.servings}
-                  onEdit={() => console.log(`Edit snack ${index}`)}
+                  onEdit={() => onEditMeal?.("snacks", index)}
+                  isLoading={loadingMealKey === `snacks-${index}`}
                 />
               ))}
             </div>
@@ -305,6 +325,13 @@ export function PlansContent({ initialUsers }: PlansContentProps) {
   const [currentWeek, setCurrentWeek] = useState(new Date());
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [loadingDate, setLoadingDate] = useState(false);
+
+  // Recipe picker state
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const [allRecipes, setAllRecipes] = useState<any[]>([]);
+  const [activeMealType, setActiveMealType] = useState<string | null>(null);
+  const [activeSnackIndex, setActiveSnackIndex] = useState<number | null>(null);
+  const [loadingMealKey, setLoadingMealKey] = useState<string | null>(null);
 
   // Helper: Save session state to localStorage
   const saveSessionState = useCallback(
@@ -365,6 +392,17 @@ export function PlansContent({ initialUsers }: PlansContentProps) {
     saveSessionState,
   ]);
 
+  // Fetch all recipes for the picker
+  useEffect(() => {
+    const fetchRecipes = async () => {
+      const result = await getAllRecipes();
+      if (result.success && result.data) {
+        setAllRecipes(result.data);
+      }
+    };
+    fetchRecipes();
+  }, []);
+
   // Debounced search
   useEffect(() => {
     const timer = setTimeout(async () => {
@@ -417,6 +455,62 @@ export function PlansContent({ initialUsers }: PlansContentProps) {
   const getPlanForDate = (date: Date): AdminUserPlan | null => {
     const dateStr = date.toISOString().split("T")[0];
     return userPlans.find((p) => p.plan_date === dateStr) || null;
+  };
+
+  // Handle edit meal - opens recipe picker
+  const handleEditMeal = (mealType: string, snackIndex?: number) => {
+    setActiveMealType(mealType);
+    setActiveSnackIndex(snackIndex ?? null);
+    setPickerOpen(true);
+  };
+
+  // Handle recipe selected from picker
+  const handleRecipeSelected = async (recipeId: string) => {
+    if (!selectedUser || !activeMealType) return;
+
+    const dateStr = selectedDate.toISOString().split("T")[0];
+    const mealKey =
+      activeSnackIndex !== null ? `snacks-${activeSnackIndex}` : activeMealType;
+
+    setLoadingMealKey(mealKey);
+    setPickerOpen(false);
+
+    try {
+      // Update via server action
+      const result = await updateUserMeal({
+        userId: selectedUser.user_id,
+        planDate: dateStr,
+        mealType: activeMealType,
+        recipeId,
+        snackIndex: activeSnackIndex,
+      });
+
+      if (!result.success) {
+        toast.error(result.error || "Failed to update meal", { duration: 3000 });
+      } else {
+        toast.success("Meal updated successfully", { duration: 3000 });
+
+        // Refresh the plan data immediately
+        const refreshResult = await getDayPlan(selectedUser.user_id, dateStr);
+        if (refreshResult.success && refreshResult.data && refreshResult.data.plan) {
+          setUserPlans((prev) => {
+            const filtered = prev.filter((p) => p.plan_date !== dateStr);
+            return [...filtered, refreshResult.data!.plan!];
+          });
+          setRecipes((prev) => ({
+            ...prev,
+            ...refreshResult.data!.recipes,
+          }));
+        }
+      }
+    } catch (error) {
+      console.error("Error updating meal:", error);
+      toast.error("Failed to update meal", { duration: 3000 });
+    } finally {
+      setLoadingMealKey(null);
+      setActiveMealType(null);
+      setActiveSnackIndex(null);
+    }
   };
 
   const weekDates = getWeekDates(currentWeek);
@@ -618,12 +712,23 @@ export function PlansContent({ initialUsers }: PlansContentProps) {
                   date={selectedDate}
                   plan={getPlanForDate(selectedDate)}
                   recipes={recipes}
+                  onEditMeal={handleEditMeal}
+                  loadingMealKey={loadingMealKey}
                 />
               </CardContent>
             </Card>
           </>
         )}
       </div>
+
+      {/* Recipe Picker Sheet */}
+      <RecipePickerSheet
+        open={pickerOpen}
+        onOpenChange={setPickerOpen}
+        recipes={allRecipes}
+        onRecipeSelected={handleRecipeSelected}
+        mealType={activeMealType as any}
+      />
     </div>
   );
 }

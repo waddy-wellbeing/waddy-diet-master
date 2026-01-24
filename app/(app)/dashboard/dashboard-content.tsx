@@ -331,7 +331,10 @@ export function DashboardContent({
     if (planSheetDate) {
       await fetchDayData(planSheetDate);
       // If the planned date is the selected date, make sure we see it
-      if (format(planSheetDate, "yyyy-MM-dd") === format(selectedDate, "yyyy-MM-dd")) {
+      if (
+        format(planSheetDate, "yyyy-MM-dd") ===
+        format(selectedDate, "yyyy-MM-dd")
+      ) {
         await fetchDayData(selectedDate);
       }
     }

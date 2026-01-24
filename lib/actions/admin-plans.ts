@@ -54,6 +54,7 @@ export async function getRecentUsers(limit = 20): Promise<{
     const { data, error } = await supabase
       .from('profiles')
       .select('user_id, name, email, basic_info, created_at, role')
+      .eq('role', 'client')
       .order('created_at', { ascending: false })
       .limit(limit)
 
@@ -318,3 +319,103 @@ export async function getDayPlan(userId: string, planDate: string): Promise<{
   }
 }
 
+/**
+ * Update a specific meal in a user's plan (admin action)
+ */
+export async function updateUserMeal({
+  userId,
+  planDate,
+  mealType,
+  recipeId,
+  snackIndex,
+}: {
+  userId: string
+  planDate: string
+  mealType: string
+  recipeId: string
+  snackIndex?: number | null
+}): Promise<{
+  success: boolean
+  error?: string
+}> {
+  try {
+    const supabase = createAdminClient()
+
+    // Get existing plan
+    const { data: existingPlan } = await supabase
+      .from('daily_plans')
+      .select('plan, daily_totals')
+      .eq('user_id', userId)
+      .eq('plan_date', planDate)
+      .maybeSingle()
+
+    // Build updated plan
+    const currentPlan = (existingPlan?.plan as any) || {}
+    const updatedPlan = { ...currentPlan }
+
+    // Update the specific meal
+    if (mealType === 'snacks' && snackIndex !== null && snackIndex !== undefined) {
+      // Update specific snack in array
+      const snacks = Array.isArray(updatedPlan.snacks) ? [...updatedPlan.snacks] : []
+      snacks[snackIndex] = { recipe_id: recipeId, servings: 1 }
+      updatedPlan.snacks = snacks
+    } else {
+      // Update breakfast/lunch/dinner
+      updatedPlan[mealType] = { recipe_id: recipeId, servings: 1 }
+    }
+
+    // Save to database with conflict resolution on user_id + plan_date
+    const { error } = await supabase
+      .from('daily_plans')
+      .upsert(
+        {
+          user_id: userId,
+          plan_date: planDate,
+          plan: updatedPlan,
+        },
+        {
+          onConflict: 'user_id,plan_date', // Specify unique constraint columns
+        }
+      )
+
+    if (error) {
+      console.error('Error updating meal:', error)
+      return { success: false, error: error.message }
+    }
+
+    return { success: true }
+  } catch (error) {
+    console.error('Error in updateUserMeal:', error)
+    return { success: false, error: 'Failed to update meal' }
+  }
+}
+
+/**
+ * Fetch all public recipes for admin recipe picker
+ */
+export async function getAllRecipes(): Promise<{
+  success: boolean
+  data?: any[]
+  error?: string
+}> {
+  try {
+    const supabase = createAdminClient()
+    
+    const { data, error } = await supabase
+      .from('recipes')
+      .select('*')
+      .eq('is_public', true)
+      .not('nutrition_per_serving', 'is', null)
+      .order('name')
+
+    if (error) {
+      console.error('Error fetching recipes:', error)
+      return { success: false, error: error.message }
+    }
+
+    return { success: true, data }
+  } catch (error) {
+    console.error('Error in getAllRecipes:', error)
+    return { success: false, error: 'Failed to fetch recipes' }
+  }
+}
