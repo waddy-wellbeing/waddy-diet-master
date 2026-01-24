@@ -486,13 +486,19 @@ export function PlansContent({ initialUsers }: PlansContentProps) {
       });
 
       if (!result.success) {
-        toast.error(result.error || "Failed to update meal", { duration: 3000 });
+        toast.error(result.error || "Failed to update meal", {
+          duration: 3000,
+        });
       } else {
         toast.success("Meal updated successfully", { duration: 3000 });
 
         // Refresh the plan data immediately
         const refreshResult = await getDayPlan(selectedUser.user_id, dateStr);
-        if (refreshResult.success && refreshResult.data && refreshResult.data.plan) {
+        if (
+          refreshResult.success &&
+          refreshResult.data &&
+          refreshResult.data.plan
+        ) {
           setUserPlans((prev) => {
             const filtered = prev.filter((p) => p.plan_date !== dateStr);
             return [...filtered, refreshResult.data!.plan!];
