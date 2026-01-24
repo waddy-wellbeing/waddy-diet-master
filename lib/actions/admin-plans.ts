@@ -391,6 +391,69 @@ export async function updateUserMeal({
 }
 
 /**
+ * Create a full day plan for an unplanned day (admin action)
+ */
+export async function createDayPlan({
+  userId,
+  planDate,
+  meals,
+}: {
+  userId: string
+  planDate: string
+  meals: {
+    breakfast?: string
+    lunch?: string
+    dinner?: string
+    snacks?: string[]
+  }
+}): Promise<{
+  success: boolean
+  error?: string
+}> {
+  try {
+    const supabase = createAdminClient()
+
+    // Build the plan object
+    const plan: AdminUserPlan['plan'] = {}
+    
+    if (meals.breakfast) {
+      plan.breakfast = { recipe_id: meals.breakfast, servings: 1 }
+    }
+    
+    if (meals.lunch) {
+      plan.lunch = { recipe_id: meals.lunch, servings: 1 }
+    }
+    
+    if (meals.dinner) {
+      plan.dinner = { recipe_id: meals.dinner, servings: 1 }
+    }
+    
+    if (meals.snacks && meals.snacks.length > 0) {
+      plan.snacks = meals.snacks.map(recipeId => ({ recipe_id: recipeId, servings: 1 }))
+    }
+
+    // Insert new plan (should not exist for unplanned days)
+    const { error } = await supabase
+      .from('daily_plans')
+      .insert({
+        user_id: userId,
+        plan_date: planDate,
+        plan,
+      })
+
+    if (error) {
+      console.error('Error creating day plan:', error)
+      return { success: false, error: error.message }
+    }
+
+    return { success: true }
+  } catch (error) {
+    console.error('Error in createDayPlan:', error)
+    return { success: false, error: 'Failed to create day plan' }
+  }
+}
+
+/**
  * Fetch all public recipes for admin recipe picker
  */
 export async function getAllRecipes(): Promise<{

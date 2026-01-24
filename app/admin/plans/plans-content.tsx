@@ -11,6 +11,7 @@ import {
   ChevronRight,
   Edit2,
   Utensils,
+  Plus,
 } from "lucide-react";
 import {
   Card,
@@ -35,6 +36,7 @@ import {
   getUserPlans,
   getDayPlan,
   updateUserMeal,
+  createDayPlan,
   getAllRecipes,
 } from "@/lib/actions/admin-plans";
 
@@ -208,16 +210,59 @@ function DayPlanView({
   plan,
   recipes,
   onEditMeal,
+  onCreatePlan,
   loadingMealKey,
 }: {
   date: Date;
   plan: AdminUserPlan | null;
   recipes: Record<string, AdminRecipeInfo>;
   onEditMeal?: (mealType: string, snackIndex?: number) => void;
+  onCreatePlan?: () => void;
   loadingMealKey?: string | null;
 }) {
   const dateStr = date.toISOString().split("T")[0];
   const isToday = dateStr === new Date().toISOString().split("T")[0];
+  const isUnplanned = !plan;
+
+  // Show "Create Plan" button for unplanned days
+  if (isUnplanned) {
+    return (
+      <div className="space-y-3">
+        <div className="flex items-center justify-between">
+          <div>
+            <p className="font-semibold">
+              {formatDate(dateStr)}
+              {isToday && <Badge className="ml-2 text-xs">Today</Badge>}
+            </p>
+            <p className="text-xs text-muted-foreground">
+              No plan for this day
+            </p>
+          </div>
+        </div>
+
+        <Card className="border-dashed border-2">
+          <CardContent className="p-8 text-center">
+            <Calendar className="h-12 w-12 mx-auto mb-3 text-muted-foreground" />
+            <p className="text-muted-foreground mb-4">
+              This day has no meal plan yet
+            </p>
+            <Button
+              onClick={onCreatePlan}
+              disabled={loadingMealKey === "create-plan"}
+              className="gap-2"
+            >
+              {loadingMealKey === "create-plan" ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Plus className="h-4 w-4" />
+              )}
+              Create Plan
+            </Button>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
 
   const getMealRecipe = (
     mealType: "breakfast" | "lunch" | "dinner",
@@ -519,6 +564,73 @@ export function PlansContent({ initialUsers }: PlansContentProps) {
     }
   };
 
+  // Handle create plan for unplanned days
+  const handleCreatePlan = async () => {
+    if (!selectedUser) return;
+
+    const dateStr = selectedDate.toISOString().split("T")[0];
+    setLoadingMealKey("create-plan");
+
+    try {
+      // Get a few random recipes to create a basic plan
+      const availableRecipes = allRecipes.filter((r) => r.is_public);
+
+      if (availableRecipes.length < 3) {
+        toast.error("Not enough recipes available to create a plan", {
+          duration: 3000,
+        });
+        return;
+      }
+
+      // Randomly select recipes for each meal
+      const shuffled = [...availableRecipes].sort(() => 0.5 - Math.random());
+
+      const result = await createDayPlan({
+        userId: selectedUser.user_id,
+        planDate: dateStr,
+        meals: {
+          breakfast: shuffled[0]?.id,
+          lunch: shuffled[1]?.id,
+          dinner: shuffled[2]?.id,
+          snacks: shuffled.length > 3 ? [shuffled[3].id] : undefined,
+        },
+      });
+
+      if (!result.success) {
+        toast.error(result.error || "Failed to create plan", {
+          duration: 3000,
+        });
+      } else {
+        toast.success(
+          "Plan created successfully! You can now edit individual meals.",
+          { duration: 3000 },
+        );
+
+        // Refresh the plan data
+        const refreshResult = await getDayPlan(selectedUser.user_id, dateStr);
+        if (
+          refreshResult.success &&
+          refreshResult.data &&
+          refreshResult.data.plan
+        ) {
+          setUserPlans((prev) => {
+            const filtered = prev.filter((p) => p.plan_date !== dateStr);
+            return [...filtered, refreshResult.data!.plan!];
+          });
+          setRecipes((prev) => ({
+            ...prev,
+            ...refreshResult.data!.recipes,
+          }));
+        }
+      }
+    } catch (error) {
+      console.error("Error creating plan:", error);
+      toast.error("Failed to create plan", { duration: 3000 });
+    } finally {
+      setLoadingMealKey(null);
+    }
+  };
+
   const weekDates = getWeekDates(currentWeek);
 
   return (
@@ -719,6 +831,7 @@ export function PlansContent({ initialUsers }: PlansContentProps) {
                   plan={getPlanForDate(selectedDate)}
                   recipes={recipes}
                   onEditMeal={handleEditMeal}
+                  onCreatePlan={handleCreatePlan}
                   loadingMealKey={loadingMealKey}
                 />
               </CardContent>
