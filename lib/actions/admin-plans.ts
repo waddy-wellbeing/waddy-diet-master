@@ -63,7 +63,9 @@ export async function getRecentUsers(limit = 20): Promise<{
       return { success: false, error: error.message }
     }
 
-    console.log('Fetched users:', data)
+    if (process.env.NODE_ENV !== 'production') {
+      console.log('Fetched users:', data)
+    }
     return { success: true, data: data as AdminUserProfile[] }
   } catch (error) {
     return { success: false, error: 'Failed to fetch users' }
