@@ -455,7 +455,6 @@ export function MealCard({
   const progress = meal.isLogged ? 100 : 0;
   const hasRecipe = !!meal.recipe;
   const canSwipe = meal.recipeCount > 1 && isToday;
-  const canLog = isToday;
 
   // Use scaled calories if available, otherwise use target
   const displayCalories =
