@@ -4,7 +4,7 @@
  * Helper functions for calendar indicators, date validation, and plan state management
  */
 
-import { format, isAfter, isBefore, isToday, startOfDay, addDays } from 'date-fns'
+import { format, isAfter, isBefore, startOfDay, addDays } from 'date-fns'
 import type { DailyPlan, DailyLog } from '@/lib/types/nutri'
 
 /** Visual states for calendar day indicators */
