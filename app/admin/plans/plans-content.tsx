@@ -138,7 +138,7 @@ function MealCard({
 
   if (!recipe) {
     return (
-      <Card className="border-dashed hover:border-primary/50 transition-colors cursor-pointer" onClick={onEdit}>
+      <Card className="border-dashed hover:border-primary/50 transition-colors cursor-pointer" onClick={() => onEdit?.()}>
         <CardContent className="p-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
@@ -155,7 +155,7 @@ function MealCard({
               disabled={isLoading}
               onClick={(e) => {
                 e.stopPropagation();
-                onEdit();
+                onEdit?.();
               }}
             >
               {isLoading ? (
@@ -211,7 +211,7 @@ function MealCard({
             size="icon"
             variant="ghost"
             className="h-8 w-8"
-            onClick={onEdit}
+            onClick={() => onEdit?.()}
             disabled={isLoading}
           >
             <Edit2 className="h-4 w-4" />
