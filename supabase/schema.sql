@@ -190,6 +190,22 @@ CREATE TABLE system_settings (
 );
 
 -- =============================================================================
+-- HELPER FUNCTIONS
+-- =============================================================================
+
+-- Helper function to check if current user is admin or moderator
+CREATE OR REPLACE FUNCTION is_admin_or_moderator()
+RETURNS BOOLEAN AS $$
+BEGIN
+  RETURN EXISTS (
+    SELECT 1 FROM profiles 
+    WHERE user_id = auth.uid() 
+    AND role IN ('admin', 'moderator')
+  );
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- =============================================================================
 -- ROW LEVEL SECURITY (RLS)
 -- =============================================================================
 
@@ -255,29 +271,53 @@ CREATE POLICY recipes_update_own ON recipes
 CREATE POLICY recipes_delete_own ON recipes
   FOR DELETE USING (auth.uid() = created_by);
 
-CREATE POLICY daily_plans_select_own ON daily_plans
-  FOR SELECT USING (auth.uid() = user_id);
+CREATE POLICY daily_plans_select ON daily_plans
+  FOR SELECT USING (
+    auth.uid() = user_id 
+    OR is_admin_or_moderator()
+  );
 
-CREATE POLICY daily_plans_insert_own ON daily_plans
-  FOR INSERT WITH CHECK (auth.uid() = user_id);
+CREATE POLICY daily_plans_insert ON daily_plans
+  FOR INSERT WITH CHECK (
+    auth.uid() = user_id 
+    OR is_admin_or_moderator()
+  );
 
-CREATE POLICY daily_plans_update_own ON daily_plans
-  FOR UPDATE USING (auth.uid() = user_id);
+CREATE POLICY daily_plans_update ON daily_plans
+  FOR UPDATE USING (
+    auth.uid() = user_id 
+    OR is_admin_or_moderator()
+  );
 
-CREATE POLICY daily_plans_delete_own ON daily_plans
-  FOR DELETE USING (auth.uid() = user_id);
+CREATE POLICY daily_plans_delete ON daily_plans
+  FOR DELETE USING (
+    auth.uid() = user_id 
+    OR is_admin_or_moderator()
+  );
 
-CREATE POLICY daily_logs_select_own ON daily_logs
-  FOR SELECT USING (auth.uid() = user_id);
+CREATE POLICY daily_logs_select ON daily_logs
+  FOR SELECT USING (
+    auth.uid() = user_id 
+    OR is_admin_or_moderator()
+  );
 
-CREATE POLICY daily_logs_insert_own ON daily_logs
-  FOR INSERT WITH CHECK (auth.uid() = user_id);
+CREATE POLICY daily_logs_insert ON daily_logs
+  FOR INSERT WITH CHECK (
+    auth.uid() = user_id 
+    OR is_admin_or_moderator()
+  );
 
-CREATE POLICY daily_logs_update_own ON daily_logs
-  FOR UPDATE USING (auth.uid() = user_id);
+CREATE POLICY daily_logs_update ON daily_logs
+  FOR UPDATE USING (
+    auth.uid() = user_id 
+    OR is_admin_or_moderator()
+  );
 
-CREATE POLICY daily_logs_delete_own ON daily_logs
-  FOR DELETE USING (auth.uid() = user_id);
+CREATE POLICY daily_logs_delete ON daily_logs
+  FOR DELETE USING (
+    auth.uid() = user_id 
+    OR is_admin_or_moderator()
+  );
 
 -- System settings: Only admins can manage
 CREATE POLICY system_settings_admin_select ON system_settings

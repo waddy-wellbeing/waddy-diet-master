@@ -50,10 +50,11 @@ export function RecipePickerSheet({
     if (!mealType) return []
 
     // Meal type mapping (same logic as dashboard)
+    // Strict meal-type mapping: only related categories per slot
     const mealTypeMapping: Record<string, string[]> = {
       breakfast: ['breakfast', 'smoothies'],
-      lunch: ['lunch', 'one pot', 'dinner', 'side dishes'],
-      dinner: ['dinner', 'lunch', 'one pot', 'side dishes', 'breakfast'],
+      lunch: ['lunch', 'one pot', 'side dishes'],
+      dinner: ['dinner', 'one pot', 'side dishes'],
       snacks: ['snack', 'snacks & sweetes', 'smoothies'],
     }
 

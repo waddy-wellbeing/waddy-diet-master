@@ -138,14 +138,32 @@ function MealCard({
 
   if (!recipe) {
     return (
-      <Card className="border-dashed">
+      <Card className="border-dashed hover:border-primary/50 transition-colors cursor-pointer" onClick={onEdit}>
         <CardContent className="p-4">
-          <div className="flex items-center gap-3">
-            <span className="text-2xl">{mealEmoji[mealType] || "🍽️"}</span>
-            <div>
-              <p className="text-sm font-medium capitalize">{mealType}</p>
-              <p className="text-xs text-muted-foreground">No meal planned</p>
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <span className="text-2xl">{mealEmoji[mealType] || "🍽️"}</span>
+              <div>
+                <p className="text-sm font-medium capitalize">{mealType}</p>
+                <p className="text-xs text-muted-foreground">No meal planned</p>
+              </div>
             </div>
+            <Button
+              size="icon"
+              variant="ghost"
+              className="h-8 w-8"
+              disabled={isLoading}
+              onClick={(e) => {
+                e.stopPropagation();
+                onEdit();
+              }}
+            >
+              {isLoading ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Plus className="h-4 w-4" />
+              )}
+            </Button>
           </div>
         </CardContent>
       </Card>
@@ -332,13 +350,21 @@ function DayPlanView({
           onEdit={() => onEditMeal?.("dinner")}
           isLoading={loadingMealKey === "dinner"}
         />
-        {snacks.length > 0 && (
-          <div className="mt-2 pt-2 border-t">
-            <p className="text-xs font-semibold text-muted-foreground mb-2">
-              Snacks
-            </p>
-            <div className="space-y-2">
-              {snacks.map((snack, index) => (
+        <div className="mt-2 pt-2 border-t">
+          <p className="text-xs font-semibold text-muted-foreground mb-2">
+            Snacks
+          </p>
+          <div className="space-y-2">
+            {snacks.length === 0 ? (
+              <MealCard
+                mealType="snacks"
+                recipe={null}
+                servings={1}
+                onEdit={() => onEditMeal?.("snacks", 0)}
+                isLoading={loadingMealKey === `snacks-0`}
+              />
+            ) : (
+              snacks.map((snack, index) => (
                 <MealCard
                   key={index}
                   mealType="snacks"
@@ -347,10 +373,10 @@ function DayPlanView({
                   onEdit={() => onEditMeal?.("snacks", index)}
                   isLoading={loadingMealKey === `snacks-${index}`}
                 />
-              ))}
-            </div>
+              ))
+            )}
           </div>
-        )}
+        </div>
       </div>
     </div>
   );
