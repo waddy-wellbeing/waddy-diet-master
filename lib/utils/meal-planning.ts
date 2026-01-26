@@ -39,7 +39,7 @@ function hasPlanContent(plan: DailyPlan): boolean {
     plan.breakfast?.recipe_id ||
     plan.lunch?.recipe_id ||
     plan.dinner?.recipe_id ||
-    (plan.snacks && plan.snacks.length > 0 && plan.snacks[0]?.recipe_id)
+    plan.snacks?.some((snack) => snack?.recipe_id)
   )
 }
 
