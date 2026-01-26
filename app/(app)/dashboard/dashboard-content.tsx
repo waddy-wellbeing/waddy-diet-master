@@ -145,7 +145,7 @@ export function DashboardContent({
           .select("log, logged_totals")
           .eq("user_id", profile.user_id)
           .eq("log_date", dateStr)
-          .single();
+          .maybeSingle();
 
         // Fetch daily plan
         const { data: planData } = await supabase
@@ -153,7 +153,7 @@ export function DashboardContent({
           .select("plan, daily_totals")
           .eq("user_id", profile.user_id)
           .eq("plan_date", dateStr)
-          .single();
+          .maybeSingle();
 
         // Set to null if no data (important for unplanned days)
         setDailyLog(logData || null);
@@ -220,11 +220,11 @@ export function DashboardContent({
         return;
       }
 
-      // Get the first recipe for each meal type
-      const breakfast = recipesByMealType.breakfast[0];
-      const lunch = recipesByMealType.lunch[0];
-      const dinner = recipesByMealType.dinner[0];
-      const snacks = recipesByMealType.snacks[0];
+      // Get the first recipe for each meal type (with safe array access)
+      const breakfast = recipesByMealType.breakfast?.[0];
+      const lunch = recipesByMealType.lunch?.[0];
+      const dinner = recipesByMealType.dinner?.[0];
+      const snacks = recipesByMealType.snacks?.[0];
 
       // Only save if we have recipes available
       if (!breakfast && !lunch && !dinner && !snacks) {

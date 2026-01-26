@@ -662,7 +662,7 @@ export function MealCard({
                   <motion.p
                     key={`cal-${meal.currentIndex}`}
                     initial={{ scale: 1.1, color: "rgb(34, 197, 94)" }}
-                    animate={{ scale: 1, color: "currentColor" }}
+                    animate={{ scale: 1, color: "rgb(115, 115, 115)" }}
                     transition={{ duration: 0.4 }}
                     className="text-xs text-muted-foreground font-mono"
                   >

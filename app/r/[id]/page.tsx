@@ -172,7 +172,7 @@ export default async function PublicRecipePage({ params }: PageProps) {
                   sizes="(max-width: 1024px) 100vw, 1024px"
                   className="object-cover scale-110 blur-2xl brightness-90 saturate-150"
                   priority
-                  aria-hidden
+                  aria-hidden="true"
                 />
 
                 {/* Main image */}
