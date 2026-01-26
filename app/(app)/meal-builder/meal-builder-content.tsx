@@ -1589,19 +1589,16 @@ export function MealBuilderContent({
                                                     ⚡ Similar Protein
                                                   </span>
                                                 )}
-                                                {isHealthier &&
-                                                  !proteinSimilar && (
-                                                    <span className="text-[10px] font-semibold text-green-600 bg-green-100 px-1.5 py-0.5 rounded whitespace-nowrap">
-                                                      💚 Low Cal
-                                                    </span>
-                                                  )}
-                                                {isHighProtein &&
-                                                  !isHealthier &&
-                                                  !proteinSimilar && (
-                                                    <span className="text-[10px] font-semibold text-blue-600 bg-blue-100 px-1.5 py-0.5 rounded whitespace-nowrap">
-                                                      💪 High Protein
-                                                    </span>
-                                                  )}
+                                                {false && (
+                                                  <span className="text-[10px] font-semibold text-green-600 bg-green-100 px-1.5 py-0.5 rounded whitespace-nowrap">
+                                                    💚 Low Cal
+                                                  </span>
+                                                )}
+                                                {false && (
+                                                  <span className="text-[10px] font-semibold text-blue-600 bg-blue-100 px-1.5 py-0.5 rounded whitespace-nowrap">
+                                                    💪 High Protein
+                                                  </span>
+                                                )}
                                               </div>
                                               <div className="flex items-center gap-2 text-xs text-muted-foreground">
                                                 <span className="font-mono">
