@@ -35,8 +35,8 @@ export interface ProfileTargets {
 export interface MealSlot {
   name: string           // e.g., "breakfast", "mid_morning", "lunch", "afternoon", "dinner"
   label?: string         // Display label, e.g., "وجبة الإفطار"
-  percentage: number     // e.g., 0.25 for 25%
-  target_calories?: number // Calculated: daily_calories * percentage
+  percentage: number     // e.g., 25 for 25% (0-100 range, must sum to 100)
+  target_calories?: number // Calculated: daily_calories * (percentage / 100)
 }
 
 /** User dietary preferences and restrictions */

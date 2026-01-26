@@ -1,9 +1,9 @@
 import { createServerClient } from '@supabase/ssr'
-import { NextResponse, type NextRequest } from 'next/server'
+import { type NextRequest } from 'next/server'
 
-export async function middleware(request: NextRequest) {
-  let supabaseResponse = NextResponse.next({
-    request,
+export default async function proxy(request: NextRequest) {
+  let response = new Response(null, {
+    headers: request.headers,
   })
 
   const supabase = createServerClient(
@@ -15,15 +15,14 @@ export async function middleware(request: NextRequest) {
           return request.cookies.getAll()
         },
         setAll(cookiesToSet) {
-          cookiesToSet.forEach(({ name, value }) =>
-            request.cookies.set(name, value)
-          )
-          supabaseResponse = NextResponse.next({
-            request,
+          cookiesToSet.forEach(({ name, value, options }) => {
+            response.headers.append(
+              'Set-Cookie',
+              `${name}=${value}; ${Object.entries(options || {})
+                .map(([key, val]) => `${key}=${val}`)
+                .join('; ')}`
+            )
           })
-          cookiesToSet.forEach(({ name, value, options }) =>
-            supabaseResponse.cookies.set(name, value, options)
-          )
         },
       },
     }
@@ -57,14 +56,14 @@ export async function middleware(request: NextRequest) {
 
   // If user is logged in and tries to access auth routes, redirect to dashboard
   if (user && isAuthRoute) {
-    return NextResponse.redirect(new URL('/dashboard', request.url))
+    return Response.redirect(new URL('/dashboard', request.url))
   }
 
   // If user is not logged in and tries to access protected routes
   if (!user && (isAppRoute || isAdminRoute)) {
     const redirectUrl = new URL('/login', request.url)
     redirectUrl.searchParams.set('redirect', pathname)
-    return NextResponse.redirect(redirectUrl)
+    return Response.redirect(redirectUrl)
   }
 
   // For admin routes, check if user has admin or moderator role
@@ -79,11 +78,11 @@ export async function middleware(request: NextRequest) {
 
     if (!isAdmin) {
       // Redirect non-admin users to dashboard
-      return NextResponse.redirect(new URL('/dashboard', request.url))
+      return Response.redirect(new URL('/dashboard', request.url))
     }
   }
 
-  return supabaseResponse
+  return response
 }
 
 export const config = {

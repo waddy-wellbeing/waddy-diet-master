@@ -206,7 +206,7 @@ export function calculateMealBudgets(
 ): { name: string; percentage: number; calories: number }[] {
   return mealDistribution.map(meal => ({
     ...meal,
-    calories: Math.round(dailyCalories * meal.percentage),
+    calories: Math.round(dailyCalories * (meal.percentage / 100)),
   }))
 }
 

@@ -4,6 +4,15 @@ import { createClient } from '@/lib/supabase/server'
 import { revalidatePath } from 'next/cache'
 import type { MealSlot, PlanStatus, ProfileBasicInfo, ProfileTargets, ProfilePreferences, ProfileGoals } from '@/lib/types/nutri'
 
+// Normalize legacy decimal percentages (0-1) to percentage values (0-100)
+const normalizeMealStructurePercentages = (structure: MealSlot[] = []): MealSlot[] => {
+  const total = structure.reduce((sum, meal) => sum + (meal.percentage || 0), 0)
+  if (total > 0 && total <= 1.5) {
+    return structure.map(meal => ({ ...meal, percentage: meal.percentage * 100 }))
+  }
+  return structure
+}
+
 export interface UserWithProfile {
   id: string
   email: string
@@ -80,6 +89,16 @@ export async function getUsers(options?: {
     query = query.eq('plan_status', options.planStatus)
   }
 
+  // Add search filters if provided (include JSON basic_info.name)
+  if (options?.search) {
+    const trimmed = options.search.trim()
+    const searchTerm = `%${trimmed}%`
+    // Avoid ilike on UUIDs (causes errors); search text fields + JSON name
+    query = query.or(
+      `name.ilike.${searchTerm},email.ilike.${searchTerm},mobile.ilike.${searchTerm},basic_info->>name.ilike.${searchTerm}`
+    )
+  }
+
   // Get profiles
   const { data: profiles, count, error } = await query
     .order('created_at', { ascending: false })
@@ -119,17 +138,8 @@ export async function getUsers(options?: {
     },
   }))
 
-  // Filter by search if provided (search in basic_info.name)
-  let filteredUsers = users
-  if (options?.search) {
-    const searchLower = options.search.toLowerCase()
-    filteredUsers = users.filter(u => 
-      u.profile?.basic_info?.name?.toLowerCase().includes(searchLower) ||
-      u.id.toLowerCase().includes(searchLower)
-    )
-  }
-
-  return { data: filteredUsers, count: count || 0, error: null }
+  // Return server-filtered results directly; count reflects server-side total
+  return { data: users, count: count || 0, error: null }
 }
 
 /**
@@ -187,12 +197,14 @@ export async function assignMealStructure(
 ): Promise<{ success: boolean; error: string | null }> {
   const supabase = await createClient()
 
-  // Validate percentages sum to 1
-  const totalPercentage = mealStructure.reduce((sum, meal) => sum + meal.percentage, 0)
-  if (Math.abs(totalPercentage - 1.0) > 0.01) {
+  const normalizedStructure = normalizeMealStructurePercentages(mealStructure)
+
+  // Validate percentages sum to 100
+  const totalPercentage = normalizedStructure.reduce((sum, meal) => sum + meal.percentage, 0)
+  if (Math.abs(totalPercentage - 100) > 0.5) {
     return { 
       success: false, 
-      error: `Percentages must sum to 100% (currently ${(totalPercentage * 100).toFixed(1)}%)` 
+      error: `Percentages must sum to 100% (currently ${totalPercentage.toFixed(1)}%)` 
     }
   }
 
@@ -209,15 +221,15 @@ export async function assignMealStructure(
 
   // Calculate target calories per meal if daily_calories is set
   const calories = dailyCalories || profile.targets?.daily_calories
-  const structureWithCalories = mealStructure.map(meal => ({
+  const structureWithCalories = normalizedStructure.map(meal => ({
     ...meal,
-    target_calories: calories ? Math.round(calories * meal.percentage) : undefined,
+    target_calories: calories ? Math.round(calories * (meal.percentage / 100)) : undefined,
   }))
 
   // Update preferences with meal structure
   const updatedPreferences = {
     ...profile.preferences,
-    meals_per_day: mealStructure.length,
+    meals_per_day: normalizedStructure.length,
     meal_structure: structureWithCalories,
   }
 
@@ -300,13 +312,15 @@ export async function updateUserCalories(
   }
 
   // Recalculate meal calories if structure exists
-  const mealStructure = profile.preferences?.meal_structure as MealSlot[] | undefined
+  const mealStructure = profile.preferences?.meal_structure
+    ? normalizeMealStructurePercentages(profile.preferences.meal_structure as MealSlot[])
+    : undefined
   let updatedPreferences = profile.preferences
 
   if (mealStructure && mealStructure.length > 0) {
-    const updatedStructure = mealStructure.map(meal => ({
+    const updatedStructure = normalizeMealStructurePercentages(mealStructure).map(meal => ({
       ...meal,
-      target_calories: Math.round(dailyCalories * meal.percentage),
+      target_calories: Math.round(dailyCalories * (meal.percentage / 100)),
     }))
     updatedPreferences = {
       ...profile.preferences,
@@ -398,21 +412,23 @@ export async function updateUserTargets(
     return { success: false, error: fetchError.message }
   }
 
-  const updatedTargets = { ...profile.targets, ...targets }
+    const mealStructure = profile.preferences?.meal_structure
+      ? normalizeMealStructurePercentages(profile.preferences.meal_structure as MealSlot[])
+      : undefined
+    const updatedStructure = mealStructure
+      ? mealStructure.map(meal => ({
+          ...meal,
+          target_calories: Math.round(targets.daily_calories! * (meal.percentage / 100)),
+        }))
+      : undefined
 
-  // Recalculate meal calories if daily_calories changed and structure exists
-  let updatedPreferences = profile.preferences
-  if (targets.daily_calories && profile.preferences?.meal_structure) {
-    const mealStructure = profile.preferences.meal_structure as MealSlot[]
-    const updatedStructure = mealStructure.map(meal => ({
-      ...meal,
-      target_calories: Math.round(targets.daily_calories! * meal.percentage),
-    }))
-    updatedPreferences = {
+    const updatedTargets = { ...profile.targets, ...targets }
+  
+    // Update preferences with meal structure (if exists)
+    const updatedPreferences = {
       ...profile.preferences,
-      meal_structure: updatedStructure,
+      ...(updatedStructure ? { meal_structure: updatedStructure } : {}),
     }
-  }
 
   const { error } = await supabase
     .from('profiles')
