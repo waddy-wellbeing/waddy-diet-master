@@ -4,7 +4,7 @@
  * Helper functions for calendar indicators, date validation, and plan state management
  */
 
-import { format, isAfter, isBefore, isToday, startOfDay, addDays } from 'date-fns'
+import { format, isAfter, isBefore, startOfDay, addDays } from 'date-fns'
 import type { DailyPlan, DailyLog } from '@/lib/types/nutri'
 
 /** Visual states for calendar day indicators */
@@ -39,7 +39,7 @@ function hasPlanContent(plan: DailyPlan): boolean {
     plan.breakfast?.recipe_id ||
     plan.lunch?.recipe_id ||
     plan.dinner?.recipe_id ||
-    (plan.snacks && plan.snacks.length > 0 && plan.snacks[0]?.recipe_id)
+    plan.snacks?.some((snack) => snack?.recipe_id)
   )
 }
 

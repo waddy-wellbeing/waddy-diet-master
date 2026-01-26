@@ -67,8 +67,7 @@ export async function savePlanMeal(params: SavePlanMealParams): Promise<ActionRe
       updatedPlan = existingPlan.plan as DailyPlan
 
       if (mealType === 'snacks') {
-        // Snacks are stored as array
-        const existingSnacks = Array.isArray(updatedPlan.snacks) ? updatedPlan.snacks : []
+        // Snacks are stored as array; currently we overwrite with the new snack
         updatedPlan.snacks = [{
           recipe_id: meal.recipe_id,
           servings: meal.servings,
