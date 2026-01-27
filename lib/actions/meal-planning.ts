@@ -31,17 +31,13 @@ interface RemovePlanMealParams {
  */
 export async function savePlanMeal(params: SavePlanMealParams): Promise<ActionResult> {
   try {
-    console.log('[savePlanMeal] Starting with params:', params)
-    
     const supabase = await createClient()
     const { data: { user }, error: authError } = await supabase.auth.getUser()
 
     if (authError || !user) {
-      console.error('[savePlanMeal] Auth error:', authError)
       return { success: false, error: 'Not authenticated' }
     }
 
-    console.log('[savePlanMeal] User authenticated:', user.id)
     const { date, mealType, recipeId } = params
 
     // Get existing plan for this date
@@ -51,8 +47,6 @@ export async function savePlanMeal(params: SavePlanMealParams): Promise<ActionRe
       .eq('user_id', user.id)
       .eq('plan_date', date)
       .maybeSingle()
-
-    console.log('[savePlanMeal] Existing plan:', existingPlan)
 
     // Build the meal object (fixed 1 serving)
     const meal: PlanMealSlot = {
@@ -94,10 +88,8 @@ export async function savePlanMeal(params: SavePlanMealParams): Promise<ActionRe
 
     // Calculate daily totals
     const updatedTotals = await calculateDailyTotals(updatedPlan)
-    console.log('[savePlanMeal] Calculated totals:', updatedTotals)
 
     // Upsert the plan
-    console.log('[savePlanMeal] Upserting plan:', { user_id: user.id, plan_date: date, plan: updatedPlan })
     const { error: upsertError } = await supabase
       .from('daily_plans')
       .upsert({
@@ -110,11 +102,9 @@ export async function savePlanMeal(params: SavePlanMealParams): Promise<ActionRe
       })
 
     if (upsertError) {
-      console.error('[savePlanMeal] Upsert error:', upsertError)
       return { success: false, error: 'Failed to save meal to plan' }
     }
 
-    console.log('[savePlanMeal] Success! Revalidating paths...')
     // Revalidate dashboard to show updated indicators
     revalidatePath('/dashboard')
     revalidatePath(`/dashboard?date=${date}`)
@@ -244,9 +234,20 @@ export async function deletePlan(date: string): Promise<ActionResult> {
 }
 
 /**
- * Get a daily plan for a specific date
+ * Recipe info returned with plan (minimal data for display)
  */
-export async function getPlan(date: string): Promise<ActionResult<DailyPlan | null>> {
+export interface PlanRecipeInfo {
+  id: string
+  name: string
+  image_url: string | null
+  nutrition_per_serving: { calories?: number } | null
+}
+
+/**
+ * Get a daily plan for a specific date
+ * Returns both the plan and recipe info for all recipes in the plan
+ */
+export async function getPlan(date: string): Promise<ActionResult<{ plan: DailyPlan | null; recipes: Record<string, PlanRecipeInfo> }>> {
   try {
     const supabase = await createClient()
     const { data: { user }, error: authError } = await supabase.auth.getUser()
@@ -262,7 +263,44 @@ export async function getPlan(date: string): Promise<ActionResult<DailyPlan | nu
       .eq('plan_date', date)
       .maybeSingle()
 
-    return { success: true, data: planData?.plan as DailyPlan || null }
+    const plan = planData?.plan as DailyPlan || null
+    const recipes: Record<string, PlanRecipeInfo> = {}
+
+    // If we have a plan, fetch recipe info for all recipes in it
+    if (plan) {
+      const recipeIds: string[] = []
+      
+      // Collect all recipe IDs from the plan
+      if (plan.breakfast?.recipe_id) recipeIds.push(plan.breakfast.recipe_id)
+      if (plan.lunch?.recipe_id) recipeIds.push(plan.lunch.recipe_id)
+      if (plan.dinner?.recipe_id) recipeIds.push(plan.dinner.recipe_id)
+      if (plan.snacks) {
+        for (const snack of plan.snacks) {
+          if (snack.recipe_id) recipeIds.push(snack.recipe_id)
+        }
+      }
+
+      // Fetch recipe info for all IDs
+      if (recipeIds.length > 0) {
+        const { data: recipeData } = await supabase
+          .from('recipes')
+          .select('id, name, image_url, nutrition_per_serving')
+          .in('id', recipeIds)
+
+        if (recipeData) {
+          for (const recipe of recipeData) {
+            recipes[recipe.id] = {
+              id: recipe.id,
+              name: recipe.name,
+              image_url: recipe.image_url,
+              nutrition_per_serving: recipe.nutrition_per_serving as { calories?: number } | null,
+            }
+          }
+        }
+      }
+    }
+
+    return { success: true, data: { plan, recipes } }
   } catch (error) {
     console.error('Unexpected error getting plan:', error)
     return { success: false, error: 'An unexpected error occurred' }

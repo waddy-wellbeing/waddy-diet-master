@@ -15,7 +15,6 @@ export function OnboardingContent() {
     if (hasGuestCompletedOnboarding()) {
       const data = loadGuestOnboardingData()
       if (data) {
-        console.log('Found completed guest onboarding data, pre-filling form...')
         setGuestData(data)
       }
     }

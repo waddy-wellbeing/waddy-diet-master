@@ -21,7 +21,7 @@ import {
   SheetTitle,
 } from '@/components/ui/sheet'
 import { RecipePickerSheet } from './recipe-picker-sheet'
-import { savePlanMeal, removePlanMeal, deletePlan, getPlan } from '@/lib/actions/meal-planning'
+import { savePlanMeal, removePlanMeal, deletePlan, getPlan, type PlanRecipeInfo } from '@/lib/actions/meal-planning'
 import { formatPlanDateHeader } from '@/lib/utils/meal-planning'
 import type { DailyPlan, RecipeRecord } from '@/lib/types/nutri'
 
@@ -44,6 +44,7 @@ const MEAL_TYPES: { key: MealType; label: string; emoji: string }[] = [
 
 export function MealPlanSheet({ open, onOpenChange, date, recipes, onPlanUpdated }: MealPlanSheetProps) {
   const [plan, setPlan] = useState<DailyPlan | null>(null)
+  const [planRecipes, setPlanRecipes] = useState<Record<string, PlanRecipeInfo>>({})
   const [loading, setLoading] = useState(false)
   const [saving, setSaving] = useState(false)
   const [pickerOpen, setPickerOpen] = useState(false)
@@ -60,7 +61,8 @@ export function MealPlanSheet({ open, onOpenChange, date, recipes, onPlanUpdated
       const result = await getPlan(dateStr)
       
       if (result.success) {
-        setPlan(result.data)
+        setPlan(result.data.plan)
+        setPlanRecipes(result.data.recipes)
       } else {
         toast.error('Failed to load plan')
       }
@@ -88,8 +90,6 @@ export function MealPlanSheet({ open, onOpenChange, date, recipes, onPlanUpdated
   const handleRecipeSelected = async (recipeId: string) => {
     if (!date || !activeMealType) return
 
-    console.log('[MealPlanSheet] Saving recipe:', { recipeId, mealType: activeMealType, date: format(date, 'yyyy-MM-dd') })
-    
     setSaving(true)
     const dateStr = format(date, 'yyyy-MM-dd')
     const result = await savePlanMeal({
@@ -98,15 +98,13 @@ export function MealPlanSheet({ open, onOpenChange, date, recipes, onPlanUpdated
       recipeId,
     })
 
-    console.log('[MealPlanSheet] Save result:', result)
-
     if (result.success) {
       // Refresh plan
       const updated = await getPlan(dateStr)
-      console.log('[MealPlanSheet] Refreshed plan:', updated)
       
       if (updated.success) {
-        setPlan(updated.data)
+        setPlan(updated.data.plan)
+        setPlanRecipes(updated.data.recipes)
       }
 
       toast.success(swapMode ? 'Meal replaced in plan' : 'Meal added to plan')
@@ -137,7 +135,8 @@ export function MealPlanSheet({ open, onOpenChange, date, recipes, onPlanUpdated
       // Refresh plan
       const updated = await getPlan(dateStr)
       if (updated.success) {
-        setPlan(updated.data)
+        setPlan(updated.data.plan)
+        setPlanRecipes(updated.data.recipes)
       }
       toast.success('Meal removed from plan')
       onPlanUpdated()
@@ -175,7 +174,8 @@ export function MealPlanSheet({ open, onOpenChange, date, recipes, onPlanUpdated
   }
 
   // Get recipe for a meal slot
-  const getRecipeForMeal = (mealType: MealType): RecipeRecord | null => {
+  // First checks planRecipes (fetched from DB with the plan), then falls back to props
+  const getRecipeForMeal = (mealType: MealType): RecipeRecord | PlanRecipeInfo | null => {
     if (!plan) return null
 
     let recipeId: string | undefined
@@ -188,6 +188,12 @@ export function MealPlanSheet({ open, onOpenChange, date, recipes, onPlanUpdated
 
     if (!recipeId) return null
 
+    // First check planRecipes (from DB - includes admin-set recipes)
+    if (planRecipes[recipeId]) {
+      return planRecipes[recipeId]
+    }
+
+    // Fall back to props (user's personalized recipes)
     return recipes.find(r => r.id === recipeId) || null
   }
 

@@ -435,8 +435,6 @@ export function MealBuilderContent({
   ) => {
     setSelectedSwaps((prev) => ({ ...prev, [ingredientId]: swap }));
     setExpandedIngredient(null);
-    // Toast-like feedback (could be extended to show actual toast)
-    console.log(`Swapped ingredient for ${ingredientId} to ${swap.name}`);
   };
 
   const handleClearSwap = (ingredientId: string) => {
@@ -449,19 +447,8 @@ export function MealBuilderContent({
 
   const handleSaveMeal = async () => {
     if (!selectedMeal || !currentRecipe) {
-      console.error("Missing meal or recipe:", {
-        selectedMeal,
-        hasRecipe: !!currentRecipe,
-      });
       return;
     }
-
-    console.log("Saving meal:", {
-      meal: selectedMeal,
-      recipeId: currentRecipe.id,
-      recipeName: currentRecipe.name,
-      servings: currentRecipe.scale_factor,
-    });
 
     setSaving(true);
 

@@ -2,6 +2,89 @@
 
 import { createAdminClient } from '@/lib/supabase/admin'
 
+/**
+ * Calculate daily totals from a plan (admin version using admin client)
+ */
+async function calculateDailyTotals(plan: AdminUserPlan['plan']): Promise<{
+  calories: number
+  protein_g: number
+  carbs_g: number
+  fat_g: number
+}> {
+  const supabase = createAdminClient()
+  
+  let totalCalories = 0
+  let totalProtein = 0
+  let totalCarbs = 0
+  let totalFat = 0
+
+  // Collect all recipe IDs
+  const recipeIds: string[] = []
+  
+  if (plan.breakfast?.recipe_id) recipeIds.push(plan.breakfast.recipe_id)
+  if (plan.lunch?.recipe_id) recipeIds.push(plan.lunch.recipe_id)
+  if (plan.dinner?.recipe_id) recipeIds.push(plan.dinner.recipe_id)
+  if (plan.snacks) {
+    for (const snack of plan.snacks) {
+      if (snack?.recipe_id) recipeIds.push(snack.recipe_id)
+    }
+  }
+
+  if (recipeIds.length === 0) {
+    return { calories: 0, protein_g: 0, carbs_g: 0, fat_g: 0 }
+  }
+
+  // Fetch all recipes in one query
+  const { data: recipes } = await supabase
+    .from('recipes')
+    .select('id, nutrition_per_serving')
+    .in('id', recipeIds)
+
+  if (!recipes) {
+    return { calories: 0, protein_g: 0, carbs_g: 0, fat_g: 0 }
+  }
+
+  // Create lookup map
+  const nutritionMap: Record<string, { calories?: number; protein_g?: number; carbs_g?: number; fat_g?: number }> = {}
+  for (const recipe of recipes) {
+    nutritionMap[recipe.id] = recipe.nutrition_per_serving || {}
+  }
+
+  // Calculate totals for breakfast, lunch, dinner
+  for (const mealType of ['breakfast', 'lunch', 'dinner'] as const) {
+    const meal = plan[mealType]
+    if (meal?.recipe_id && nutritionMap[meal.recipe_id]) {
+      const nutrition = nutritionMap[meal.recipe_id]
+      const servings = meal.servings || 1
+      totalCalories += Math.round((nutrition.calories || 0) * servings)
+      totalProtein += Math.round((nutrition.protein_g || 0) * servings)
+      totalCarbs += Math.round((nutrition.carbs_g || 0) * servings)
+      totalFat += Math.round((nutrition.fat_g || 0) * servings)
+    }
+  }
+
+  // Calculate totals for snacks
+  if (plan.snacks && Array.isArray(plan.snacks)) {
+    for (const snack of plan.snacks) {
+      if (snack?.recipe_id && nutritionMap[snack.recipe_id]) {
+        const nutrition = nutritionMap[snack.recipe_id]
+        const servings = snack.servings || 1
+        totalCalories += Math.round((nutrition.calories || 0) * servings)
+        totalProtein += Math.round((nutrition.protein_g || 0) * servings)
+        totalCarbs += Math.round((nutrition.carbs_g || 0) * servings)
+        totalFat += Math.round((nutrition.fat_g || 0) * servings)
+      }
+    }
+  }
+
+  return {
+    calories: totalCalories,
+    protein_g: totalProtein,
+    carbs_g: totalCarbs,
+    fat_g: totalFat,
+  }
+}
+
 export interface AdminUserProfile {
   user_id: string
   name: string | null
@@ -63,9 +146,6 @@ export async function getRecentUsers(limit = 20): Promise<{
       return { success: false, error: error.message }
     }
 
-    if (process.env.NODE_ENV !== 'production') {
-      console.log('Fetched users:', data)
-    }
     return { success: true, data: data as AdminUserProfile[] }
   } catch (error) {
     return { success: false, error: 'Failed to fetch users' }
@@ -132,8 +212,6 @@ export async function getUserPlans(userId: string, daysBack = 30, daysForward = 
     const startDateStr = startDate.toISOString().split('T')[0]
     const endDateStr = endDate.toISOString().split('T')[0]
 
-    console.log(`Fetching plans for user ${userId} from ${startDateStr} to ${endDateStr}`)
-
     // Fetch user's plans
     const { data: plans, error: plansError } = await supabase
       .from('daily_plans')
@@ -147,8 +225,6 @@ export async function getUserPlans(userId: string, daysBack = 30, daysForward = 
       console.error('Error fetching plans:', plansError)
       return { success: false, error: plansError.message }
     }
-
-    console.log(`Fetched ${plans?.length || 0} plans for user ${userId}:`, plans)
 
     // Extract all unique recipe IDs from plans
     const recipeIds = new Set<string>()
@@ -167,7 +243,6 @@ export async function getUserPlans(userId: string, daysBack = 30, daysForward = 
     // Fetch recipe info for all recipe IDs
     const recipes: Record<string, AdminRecipeInfo> = {}
     if (recipeIds.size > 0) {
-      console.log('Fetching recipes for IDs:', Array.from(recipeIds))
       const { data: recipeData, error: recipesError } = await supabase
         .from('recipes')
         .select('id, name, image_url, nutrition_per_serving')
@@ -176,7 +251,6 @@ export async function getUserPlans(userId: string, daysBack = 30, daysForward = 
       if (recipesError) {
         console.error('Error fetching recipes:', recipesError)
       } else if (recipeData) {
-        console.log('Fetched recipes:', recipeData)
         for (const recipe of recipeData) {
           recipes[recipe.id] = recipe as AdminRecipeInfo
         }
@@ -189,8 +263,6 @@ export async function getUserPlans(userId: string, daysBack = 30, daysForward = 
       .select('user_id, name, email, basic_info, created_at, role')
       .eq('user_id', userId)
       .single()
-
-    console.log('User profile:', profile)
 
     return {
       success: true,
@@ -366,6 +438,9 @@ export async function updateUserMeal({
       updatedPlan[mealType] = { recipe_id: recipeId, servings: 1 }
     }
 
+    // Calculate daily totals
+    const dailyTotals = await calculateDailyTotals(updatedPlan)
+
     // Save to database with conflict resolution on user_id + plan_date
     const { error } = await supabase
       .from('daily_plans')
@@ -374,6 +449,7 @@ export async function updateUserMeal({
           user_id: userId,
           plan_date: planDate,
           plan: updatedPlan,
+          daily_totals: dailyTotals,
         },
         {
           onConflict: 'user_id,plan_date', // Specify unique constraint columns
@@ -434,6 +510,9 @@ export async function createDayPlan({
       plan.snacks = meals.snacks.map(recipeId => ({ recipe_id: recipeId, servings: 1 }))
     }
 
+    // Calculate daily totals
+    const dailyTotals = await calculateDailyTotals(plan)
+
     // Insert new plan (should not exist for unplanned days)
     const { error } = await supabase
       .from('daily_plans')
@@ -441,6 +520,7 @@ export async function createDayPlan({
         user_id: userId,
         plan_date: planDate,
         plan,
+        daily_totals: dailyTotals,
       })
 
     if (error) {

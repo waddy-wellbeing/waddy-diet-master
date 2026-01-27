@@ -231,7 +231,6 @@ export function DashboardContent({
         return;
       }
 
-      console.log("Auto-saving today's plan...");
       await saveFullDayPlan({
         date: format(new Date(), "yyyy-MM-dd"),
         meals: {
@@ -1167,7 +1166,7 @@ export function DashboardContent({
                 onSwapMeal={handleSwapMeal}
                 onAddFood={() => {
                   // Navigate to meal builder or open add food modal
-                  console.log("Add food to", meal.name);
+                  // TODO: Implement add food functionality
                 }}
               />
             ))}

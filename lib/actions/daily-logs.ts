@@ -20,8 +20,6 @@ export async function checkAndNotifyAchievements(
     // Detect all achievements for this user/date
     const achievements = await detectAchievements(userId, logDate)
 
-    console.log(`Found ${achievements.length} achievement(s) for user ${userId} on ${logDate}`)
-
     // Send notification for each achievement
     for (const achievement of achievements) {
       await sendAchievementNotification(userId, achievement)
