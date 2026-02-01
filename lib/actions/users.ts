@@ -22,6 +22,7 @@ export interface UserWithProfile {
     name: string | null
     email: string | null
     mobile?: string | null
+    country_code?: string | null
     avatar_url: string | null
     role: 'admin' | 'moderator' | 'client'
     plan_status: PlanStatus
@@ -172,6 +173,7 @@ export async function getUser(userId: string): Promise<{
         name: profile.name,
         email: profile.email,
         mobile: profile.mobile,
+        country_code: profile.country_code,
         avatar_url: profile.avatar_url,
         role: profile.role,
         plan_status: profile.plan_status,

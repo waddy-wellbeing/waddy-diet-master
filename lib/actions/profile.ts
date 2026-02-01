@@ -3,6 +3,7 @@
 import { revalidatePath } from 'next/cache'
 import { createClient } from '@/lib/supabase/server'
 import { calculateTDEE } from '@/lib/utils/tdee'
+import { detectCountry } from '@/lib/utils/phone'
 import type {
   ProfileBasicInfo,
   ProfileGoals,
@@ -160,6 +161,12 @@ export async function updateProfile(data: UpdateProfileData): Promise<UpdateResu
     // Add mobile if provided
     if (data.mobile !== undefined) {
       updateData.mobile = data.mobile || null
+      // Extract and update country code
+      if (data.mobile) {
+        updateData.country_code = detectCountry(data.mobile) || null
+      } else {
+        updateData.country_code = null
+      }
     }
     
     const { error: updateError } = await supabase
@@ -169,6 +176,12 @@ export async function updateProfile(data: UpdateProfileData): Promise<UpdateResu
 
     if (updateError) {
       console.error('Profile update error:', updateError)
+      
+      // Handle duplicate mobile number error
+      if (updateError.code === '23505' && updateError.message.includes('profiles_mobile_country_unique')) {
+        return { success: false, error: 'This phone number is already registered. Please use a different number.' }
+      }
+      
       return { success: false, error: 'Failed to update profile' }
     }
 

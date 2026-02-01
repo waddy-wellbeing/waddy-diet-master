@@ -71,6 +71,7 @@ export interface Profile {
   user_id: string
   name: string | null
   mobile?: string | null
+  country_code?: string | null
   email: string | null
   avatar_url: string | null
   role: UserRole
