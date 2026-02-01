@@ -26,6 +26,7 @@ CREATE TABLE profiles (
   name VARCHAR(255),
   email VARCHAR(255),
   mobile TEXT,
+  country_code VARCHAR(2),
   avatar_url TEXT,
   role user_role NOT NULL DEFAULT 'client',
   plan_status plan_status NOT NULL DEFAULT 'pending_assignment',
@@ -38,13 +39,14 @@ CREATE TABLE profiles (
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   CONSTRAINT profiles_user_id_unique UNIQUE (user_id),
-  CONSTRAINT profiles_mobile_unique UNIQUE (mobile)
+  CONSTRAINT profiles_mobile_country_unique UNIQUE (country_code, mobile)
 );
 
 CREATE INDEX profiles_user_id_idx ON profiles(user_id);
 CREATE INDEX profiles_role_idx ON profiles(role);
 CREATE INDEX profiles_name_idx ON profiles(name);
 CREATE INDEX profiles_mobile_idx ON profiles(mobile) WHERE mobile IS NOT NULL;
+CREATE INDEX profiles_country_code_idx ON profiles(country_code) WHERE country_code IS NOT NULL;
 
 -- =============================================================================
 -- INGREDIENTS

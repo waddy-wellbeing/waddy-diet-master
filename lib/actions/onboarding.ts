@@ -2,6 +2,7 @@
 
 import { createClient } from '@/lib/supabase/server'
 import { calculateTDEE } from '@/lib/utils/tdee'
+import { detectCountry } from '@/lib/utils/phone'
 import type {
   ProfileBasicInfo,
   ProfileTargets,
@@ -70,6 +71,9 @@ export async function saveOnboardingData(formData: OnboardingFormData): Promise<
 
     const { basicInfo, activityLevel, goals, dietaryPreferences, lifestyle, mealsPerDay } = formData
     const mobile = basicInfo.mobile || undefined
+
+    // Extract country code from mobile number
+    const countryCode = mobile ? detectCountry(mobile) : null
 
     // Parse and convert values (always store in metric)
     const height_cm = parseFloat(basicInfo.height) || 0
@@ -162,6 +166,7 @@ export async function saveOnboardingData(formData: OnboardingFormData): Promise<
           name: basicInfo.name,
           email: user.email,
           mobile: mobile || null,
+          country_code: countryCode || null,
           basic_info: profileBasicInfo,
           targets: profileTargets,
           preferences: profilePreferences,
@@ -181,7 +186,13 @@ export async function saveOnboardingData(formData: OnboardingFormData): Promise<
 
     if (profileError) {
       console.error('Profile update error:', profileError)
-      return { success: false, error: profileError.message }
+      
+      // Handle duplicate mobile number error with user-friendly message
+      if (profileError.code === '23505' && profileError.message.includes('profiles_mobile_country_unique')) {
+        return { success: false, error: 'This phone number is already registered. Please use a different number or sign in.' }
+      }
+      
+      return { success: false, error: 'Failed to save your information. Please try again.' }
     }
 
     console.log('Onboarding saved successfully')
