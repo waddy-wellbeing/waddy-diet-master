@@ -1,49 +1,20 @@
-# Ramadan Mode Implementation Plan (V2 - Single Table Architecture)
+# Fasting Mode Implementation Plan (V3)
 
-## 📋 1. Final Architecture: Single Table with Logical Separation
+## 📋 1. Architecture: Presentation-Layer Mapping
 
-This document outlines the definitive implementation plan for the Ramadan feature. We will use a **single-table architecture**, which is more scalable, maintainable, and efficient than creating parallel tables.
+This document outlines the implementation of a user-controlled **Fasting Mode**. This approach is simpler and more flexible than previous versions, focusing on remapping the display of existing data rather than changing the data itself.
 
-- **Core Principle:** All data (recipes, plans) lives in the existing tables. A `mode` flag on `daily_plans` and `tags` on `recipes` provide the logical separation.
-- **No Data Duplication:** A recipe suitable for both regular lunch and Ramadan iftar exists only once.
-- **Simplified Maintenance:** Schema changes are made to one set of tables, not two.
-- **Powerful Analytics:** All historical data is in one place, making it easy to analyze trends across all modes.
+-   **Core Principle:** The user's meal data (`daily_plans`) remains unchanged. A boolean flag in the user's profile (`is_fasting_mode`) controls how that data is presented in the UI.
+-   **Trigger:** A simple toggle switch in the user's profile settings. This is not tied to the Ramadan calendar and can be used for any type of fasting.
+-   **No Data Duplication:** A user's plan is created once. It can be *viewed* as a regular plan or a fasting plan.
 
 ---
 
 ## 🗄️ 2. Schema & Type Changes
 
-### 2.1. `daily_plans` Table
+### 2.1. `profiles` Table (`preferences` JSONB)
 
-Add a `mode` column to track if a plan was generated for a regular or Ramadan day.
-
-**Migration SQL (`supabase/migrations/<timestamp>_add_mode_to_daily_plans.sql`):**
-
-```sql
--- Add a 'mode' column to daily_plans to distinguish between regular and ramadan plans.
-ALTER TABLE public.daily_plans
-ADD COLUMN mode TEXT NOT NULL DEFAULT 'regular';
-
--- Add a check constraint to ensure data integrity.
-ALTER TABLE public.daily_plans
-ADD CONSTRAINT daily_plans_mode_check CHECK (mode IN ('regular', 'ramadan'));
-
-COMMENT ON COLUMN public.daily_plans.mode IS 'Indicates the context in which the plan was created (e.g., regular, ramadan).';
-```
-
-### 2.2. `recipes` Table (Tagging Strategy)
-
-No schema change is needed. We will leverage the existing `tags` array column.
-
-- **Action:** Admin must tag recipes with appropriate meal types.
-- **Examples:**
-  - Oats: `tags: ['breakfast', 'suhoor']`
-  - Lentil Soup: `tags: ['lunch', 'dinner', 'iftar']`
-  - Date Smoothie: `tags: ['snack', 'fasting_breaking']`
-
-### 2.3. `profiles` Table (`preferences` JSONB)
-
-Add one optional field to the `ProfilePreferences` type to allow users to manually override the automatic Ramadan detection.
+Add a single boolean flag to the `ProfilePreferences` type. This is the **only database change required**.
 
 **Type Change (`lib/types/nutri.ts`):**
 
@@ -53,218 +24,142 @@ export interface ProfilePreferences {
   meals_per_day?: number;
   meal_structure?: MealSlot[];
 
-  // NEW: User override for Ramadan mode
-  ramadan_mode_override?: boolean | null; // true=force ON, false=force OFF, null=auto-detect
+  // NEW: User-controlled fasting mode flag
+  is_fasting_mode?: boolean; // true = fasting, false/null = regular
 }
 ```
+
+No other database migrations are necessary. The `daily_plans` and `recipes` tables are not modified.
 
 ---
 
-## 📁 3. New Files & Core Logic
+## 📁 3. Core Logic & Implementation
 
-### 3.1. Package Installation
+The logic is primarily handled in the UI and a new configuration file.
 
-```bash
-npm install @tabby_ai/hijri-converter
-```
+### 3.1. Configuration: `lib/config/fasting-mode-map.ts`
 
-### 3.2. Utility: `lib/utils/ramadan.ts`
-
-This file handles date detection only. It is simple and has no dependencies on our app's logic.
+This new file will define how regular meals are mapped to fasting meals.
 
 ```typescript
-// lib/utils/ramadan.ts
-import { Hijri } from "@tabby_ai/hijri-converter";
+// lib/config/fasting-mode-map.ts
 
-const RAMADAN_MONTH = 9;
-
-/**
- * Checks if a given Gregorian date falls within the month of Ramadan.
- * @param date The date to check (defaults to now).
- * @returns True if the date is in Ramadan, false otherwise.
- */
-export function isRamadan(date: Date = new Date()): boolean {
-  try {
-    const hijri = Hijri.fromGregorian(
-      date.getFullYear(),
-      date.getMonth() + 1, // Gregorian months are 0-indexed
-      date.getDate(),
-    );
-    return hijri.month === RAMADAN_MONTH;
-  } catch (error) {
-    console.error("Error converting date to Hijri:", error);
-    return false;
-  }
-}
-```
-
-### 3.3. Configuration: `lib/config/meal-modes.ts`
-
-This file contains **static data only**. It defines the different meal structures and has no complex logic.
-
-```typescript
-// lib/config/meal-modes.ts
-import type { MealSlot } from "@/lib/types/nutri";
-
-export type MealMode = "regular" | "ramadan";
-
-export interface MealSlotOption {
-  value: string;
-  label: string;
+export interface MealDisplayMapping {
+  source: string; // The original meal name (e.g., 'breakfast')
+  label: string; // The new display label (e.g., 'Suhoor')
   label_ar: string;
+  order: number; // Display order for the UI
 }
 
-export interface MealModeConfig {
-  mode: MealMode;
-  mealSlotOptions: MealSlotOption[];
-  templates: Record<string, Omit<MealSlot, "target_calories">[]>;
+export interface FastingModeConfig {
+  mapping: MealDisplayMapping[];
+  redistribute: {
+    from: string[]; // Meals to hide and take calories from
+    to: string; // Meal to add the calories to
+  };
 }
 
-// --- REGULAR MODE ---
-export const REGULAR_MEAL_SLOT_OPTIONS: MealSlotOption[] = [
-  { value: "breakfast", label: "Breakfast", label_ar: "الإفطار" },
-  { value: "lunch", label: "Lunch", label_ar: "الغداء" },
-  { value: "dinner", label: "Dinner", label_ar: "العشاء" },
-  { value: "snacks", label: "Snacks", label_ar: "وجبات خفيفة" },
-];
-export const REGULAR_MODE_CONFIG: MealModeConfig = {
-  mode: "regular",
-  mealSlotOptions: REGULAR_MEAL_SLOT_OPTIONS,
-  templates: {
-    "3_meals": [
-      { name: "breakfast", percentage: 30 },
-      { name: "lunch", percentage: 40 },
-      { name: "dinner", percentage: 30 },
-    ],
-    "4_meals": [
-      { name: "breakfast", percentage: 25 },
-      { name: "lunch", percentage: 35 },
-      { name: "dinner", percentage: 25 },
-      { name: "snacks", percentage: 15 },
-    ],
-  },
-};
+export const FASTING_MODE_CONFIG: FastingModeConfig = {
+  // Defines how to remap meals when fasting mode is ON
+  mapping: [
+    { source: 'breakfast', label: 'Suhoor', label_ar: 'سحور', order: 1 },
+    { source: 'lunch', label: 'Iftar', label_ar: 'إفطار', order: 2 },
+    { source: 'snacks', label: 'Snacks', label_ar: 'سناكس', order: 3 },
+  ],
 
-// --- RAMADAN MODE ---
-export const RAMADAN_MEAL_SLOT_OPTIONS: MealSlotOption[] = [
-  {
-    value: "fasting_breaking",
-    label: "Fasting Breaking",
-    label_ar: "كسر صيام",
-  },
-  { value: "iftar", label: "Iftar", label_ar: "إفطار" },
-  { value: "suhoor", label: "Suhoor", label_ar: "سحور" },
-  { value: "snacks", label: "Snacks", label_ar: "سناكس" },
-];
-export const RAMADAN_MODE_CONFIG: MealModeConfig = {
-  mode: "ramadan",
-  mealSlotOptions: RAMADAN_MEAL_SLOT_OPTIONS,
-  templates: {
-    "2_meals": [
-      { name: "iftar", percentage: 55 },
-      { name: "suhoor", percentage: 45 },
-    ],
-    "3_meals": [
-      { name: "fasting_breaking", percentage: 10 },
-      { name: "iftar", percentage: 50 },
-      { name: "suhoor", percentage: 40 },
-    ],
-    "4_meals": [
-      { name: "fasting_breaking", percentage: 10 },
-      { name: "iftar", percentage: 40 },
-      { name: "suhoor", percentage: 35 },
-      { name: "snacks", percentage: 15 },
-    ],
+  // Defines how to handle calorie redistribution for hidden meals
+  redistribute: {
+    from: ['dinner'], // Hide the 'dinner' meal
+    to: 'lunch', // Add its calories to 'lunch' (which is displayed as Iftar)
   },
 };
 ```
 
-### 3.4. Service Layer: `lib/services/meal-planning.ts`
+### 3.2. Service Layer: `lib/services/meal-display.ts`
 
-This new file will contain all the complex business logic, keeping it separate from UI components and simple configs.
+This new service will process a `daily_plan` and apply the fasting mode logic for the UI.
 
 ```typescript
-// lib/services/meal-planning.ts
-import { createClient } from "@/lib/supabase/server";
-import { isRamadan } from "@/lib/utils/ramadan";
-import {
-  REGULAR_MODE_CONFIG,
-  RAMADAN_MODE_CONFIG,
-  type MealModeConfig,
-} from "@/lib/config/meal-modes";
-import type { MealSlot, Recipe } from "@/lib/types/nutri";
+// lib/services/meal-display.ts
+import { FASTING_MODE_CONFIG, type MealDisplayMapping } from '@/lib/config/fasting-mode-map';
+import type { DailyPlan, MealSlot } from '@/lib/types/nutri';
 
-/**
- * Determines which meal configuration to use based on date and user preference.
- */
-export function getActiveMealConfig(
-  userOverride?: boolean | null,
-): MealModeConfig {
-  const useRamadan =
-    userOverride === null || userOverride === undefined
-      ? isRamadan()
-      : userOverride;
-  return useRamadan ? RAMADAN_MODE_CONFIG : REGULAR_MODE_CONFIG;
+export interface DisplayMeal extends MealSlot {
+  displayLabel: string;
+  displayLabelAr: string;
+  order: number;
+  originalName: string;
 }
 
 /**
- * Generates a meal structure with calculated target calories.
+ * Takes a standard daily plan and transforms it for display based on fasting mode.
+ * This function DOES NOT modify the database. It's for UI presentation only.
  */
-export function generateMealStructure(
-  mealsPerDay: 2 | 3 | 4 | 5,
-  dailyCalories: number,
-  config: MealModeConfig,
-): MealSlot[] {
-  const template = config.templates[`${mealsPerDay}_meals`];
-  if (!template) {
-    // Fallback to a default if template for count doesn't exist
-    const defaultKey = Object.keys(config.templates)[0];
-    return config.templates[defaultKey].map((slot) => ({
-      ...slot,
-      target_calories: Math.round((slot.percentage / 100) * dailyCalories),
+export function getDisplayMeals(
+  plan: DailyPlan,
+  isFasting: boolean
+): DisplayMeal[] {
+  const originalMeals = plan.plan; // The array of meals from the DB
+
+  if (!isFasting) {
+    // If not fasting, return meals as they are with default labels.
+    return originalMeals.map((meal) => ({
+      ...meal,
+      displayLabel: meal.label || meal.name,
+      displayLabelAr: meal.label_ar || meal.name,
+      order: getOrderForMeal(meal.name),
+      originalName: meal.name,
     }));
   }
-  return template.map((slot) => ({
-    ...slot,
-    target_calories: Math.round((slot.percentage / 100) * dailyCalories),
-  }));
-}
 
-/**
- * Finds suitable recipes from the database to substitute a meal.
- */
-export async function findSubstituteRecipes(
-  targetCalories: number,
-  mealType: string,
-  limit: number = 5,
-): Promise<Recipe[]> {
-  const supabase = await createClient();
-  const tolerance = 0.15; // 15% calorie variance
-  const lowerBound = targetCalories * (1 - tolerance);
-  const upperBound = targetCalories * (1 + tolerance);
+  // --- Fasting Mode Logic ---
+  const { mapping, redistribute } = FASTING_MODE_CONFIG;
 
-  // Map Ramadan types to regular types for broader matching
-  const tagMap: Record<string, string> = {
-    iftar: "dinner",
-    suhoor: "breakfast",
-    fasting_breaking: "snacks",
-  };
-  const searchTags = [mealType, tagMap[mealType]].filter(Boolean).join(",");
+  // 1. Calculate calories to redistribute from hidden meals
+  const redistributedCalories = originalMeals
+    .filter((meal) => redistribute.from.includes(meal.name))
+    .reduce((sum, meal) => sum + (meal.target_calories || 0), 0);
 
-  const { data, error } = await supabase
-    .from("recipes")
-    .select("*, nutrition_per_serving->calories")
-    .gte("nutrition_per_serving->calories", lowerBound)
-    .lte("nutrition_per_serving->calories", upperBound)
-    .or(`tags.cs.{${searchTags}}`) // Search for recipes containing any of the tags
-    .limit(limit);
+  // 2. Create a new array of meals to be displayed
+  const displayMeals: DisplayMeal[] = [];
 
-  if (error) {
-    console.error("Error finding substitute recipes:", error);
-    return [];
+  for (const meal of originalMeals) {
+    const mapInfo = mapping.find((m) => m.source === meal.name);
+
+    if (mapInfo) {
+      // This meal should be displayed with a new label
+      let finalCalories = meal.target_calories || 0;
+
+      // If this is the target for redistribution, add the extra calories
+      if (meal.name === redistribute.to) {
+        finalCalories += redistributedCalories;
+      }
+
+      displayMeals.push({
+        ...meal,
+        target_calories: finalCalories,
+        displayLabel: mapInfo.label,
+        displayLabelAr: mapInfo.label_ar,
+        order: mapInfo.order,
+        originalName: meal.name,
+      });
+    }
+    // Meals not in the mapping are implicitly hidden (e.g., 'dinner')
   }
 
-  return (data as Recipe[]) ?? [];
+  // 3. Sort the meals by the specified display order
+  return displayMeals.sort((a, b) => a.order - b.order);
+}
+
+// Helper to provide a default sort order for regular mode
+function getOrderForMeal(name: string): number {
+  const orderMap: Record<string, number> = {
+    breakfast: 1,
+    lunch: 2,
+    snacks: 3,
+    dinner: 4,
+  };
+  return orderMap[name] || 99;
 }
 ```
 
@@ -272,47 +167,28 @@ export async function findSubstituteRecipes(
 
 ## 👣 4. Phased Implementation Plan
 
-### Phase 1: Foundation (1-2 Days)
+### Phase 1: Foundation (1 Day)
 
-- [ ] **Task:** Create migration file `..._add_mode_to_daily_plans.sql` with the content from section 2.1.
-- [ ] **Task:** Run `npm install @tabby_ai/hijri-converter`.
-- [ ] **Task:** Create `lib/utils/ramadan.ts` with the code from section 3.2.
-- [ ] **Task:** Create `lib/config/meal-modes.ts` with the code from section 3.3.
-- [ ] **Task:** Create `lib/services/meal-planning.ts` with the code from section 3.4.
-- [ ] **Task:** Update `lib/types/nutri.ts` to add `ramadan_mode_override` to `ProfilePreferences`.
+-   [ ] **Task:** Update `lib/types/nutri.ts` to add `is_fasting_mode?: boolean` to the `ProfilePreferences` interface.
+-   [ ] **Task:** Create `lib/config/fasting-mode-map.ts` with the content from section 3.1.
+-   [ ] **Task:** Create `lib/services/meal-display.ts` with the content from section 3.2.
 
-### Phase 2: Integration (2-3 Days)
+### Phase 2: UI Integration (1-2 Days)
 
-- [ ] **Task:** Refactor `lib/actions/onboarding.ts`.
-  - Import `getActiveMealConfig` and `generateMealStructure` from the new service.
-  - Use them to create the initial `meal_structure` for the user.
-- [ ] **Task:** Refactor `lib/actions/users.ts` (`assignMealStructure` function).
-  - Update it to accept a `mode` parameter and use the service functions.
-- [ ] **Task:** Refactor `app/(app)/dashboard/page.tsx`.
-  - Fetch user's `ramadan_mode_override` preference.
-  - Call `getActiveMealConfig` to get the correct `mealSlotOptions`.
-  - Use these options to render the correct meal labels (e.g., "Iftar" instead of "Dinner").
-- [ ] **Task:** Refactor `components/admin/plan-assignment-dialog.tsx`.
-  - Allow admin to select "Regular" or "Ramadan" mode.
-  - Use the appropriate config from `meal-modes.ts` to populate templates.
+-   [ ] **Task:** Create a `FastingModeToggle` component.
+    -   **Location:** `components/profile/fasting-mode-toggle.tsx`.
+    -   **Functionality:** A simple Switch component that reads `user.preferences.is_fasting_mode` and calls a server action to update it.
+-   [ ] **Task:** Add the `FastingModeToggle` to the user's profile page (`app/(app)/profile/page.tsx`).
+-   [ ] **Task:** Refactor the dashboard (`app/(app)/dashboard/page.tsx`).
+    -   **Data Fetching:** Fetch the `daily_plan` and the user's `is_fasting_mode` preference.
+    -   **Transformation:** In the server component, call `getDisplayMeals(plan, is_fasting_mode)`.
+    -   **Rendering:** Map over the transformed `displayMeals` array to render the meal cards. Use `meal.displayLabel` and `meal.target_calories` for the UI.
 
-### Phase 3: User Controls & UX (1-2 Days)
+### Phase 3: Polish & Testing (1 Day)
 
-- [ ] **Task:** Create a `RamadanModeToggle` component in `components/ui` or `components/profile`.
-  - This component will have three states: On, Off, Auto.
-  - It updates the `ramadan_mode_override` field in `profiles.preferences`.
-- [ ] **Task:** Add the toggle to the user's profile/settings page.
-- [ ] **Task:** In the main layout or dashboard header, display a 🌙 icon if `getActiveMealConfig().mode === 'ramadan'`.
-- [ ] **Task:** During onboarding, if `isRamadan()` is true, show a prompt: "It's currently Ramadan. Would you like to start with a Ramadan meal plan?"
+-   [ ] **Task:** Test the toggle functionality. Ensure the dashboard updates immediately (or on refresh) when the mode is changed.
+-   [ ] **Task:** Verify that the calorie redistribution is correct (e.g., Iftar's calories are higher when Dinner is hidden).
+-   [ ] **Task:** Check that Arabic labels are displayed correctly.
+-   [ ] **Task:** Ensure that when a user adds a recipe to "Iftar", it is correctly saved to the `lunch` slot in the `daily_plans` table in the database, using the `originalName` property from the `DisplayMeal` type.
 
-### Phase 4: Meal Substitution Feature (2-3 Days)
-
-- [ ] **Task:** In the admin panel, create a simple interface for adding/editing `tags` on recipes. Ensure key recipes are tagged with `iftar`, `suhoor`, etc.
-- [ ] **Task:** On the dashboard meal card, add a "..." menu with a "Remove Meal" option.
-- [ ] **Task:** When "Remove Meal" is clicked, open a bottom sheet (`Sheet` component).
-  - **UI:** Show options: "Distribute calories to other meals" or "Replace with another recipe".
-  - **Logic (Distribute):** Call a server action that uses the (to-be-created) `redistributeCalories` function in the meal planning service.
-  - **Logic (Replace):** Call a server action that uses `findSubstituteRecipes` to fetch options. Display these options in the sheet for the user to choose from.
-- [ ] **Task:** Upon confirmation, update the `daily_plans` record for that day with the new meal structure and recipes.
-
-This structured plan ensures all logic is properly separated, the database remains clean, and the feature is implemented in manageable, testable phases.
+This plan is significantly simpler, requires almost no database changes, and provides a much more flexible and user-friendly experience.
