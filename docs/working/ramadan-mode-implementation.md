@@ -4,9 +4,9 @@
 
 This document outlines the implementation of a user-controlled **Fasting Mode**. This approach is simpler and more flexible than previous versions, focusing on remapping the display of existing data rather than changing the data itself.
 
--   **Core Principle:** The user's meal data (`daily_plans`) remains unchanged. A boolean flag in the user's profile (`is_fasting_mode`) controls how that data is presented in the UI.
--   **Trigger:** A simple toggle switch in the user's profile settings. This is not tied to the Ramadan calendar and can be used for any type of fasting.
--   **No Data Duplication:** A user's plan is created once. It can be *viewed* as a regular plan or a fasting plan.
+- **Core Principle:** The user's meal data (`daily_plans`) remains unchanged. A boolean flag in the user's profile (`is_fasting_mode`) controls how that data is presented in the UI.
+- **Trigger:** A simple toggle switch in the user's profile settings. This is not tied to the Ramadan calendar and can be used for any type of fasting.
+- **No Data Duplication:** A user's plan is created once. It can be _viewed_ as a regular plan or a fasting plan.
 
 ---
 
@@ -62,15 +62,15 @@ export interface FastingModeConfig {
 export const FASTING_MODE_CONFIG: FastingModeConfig = {
   // Defines how to remap meals when fasting mode is ON
   mapping: [
-    { source: 'breakfast', label: 'Suhoor', label_ar: 'سحور', order: 1 },
-    { source: 'lunch', label: 'Iftar', label_ar: 'إفطار', order: 2 },
-    { source: 'snacks', label: 'Snacks', label_ar: 'سناكس', order: 3 },
+    { source: "breakfast", label: "Suhoor", label_ar: "سحور", order: 1 },
+    { source: "lunch", label: "Iftar", label_ar: "إفطار", order: 2 },
+    { source: "snacks", label: "Snacks", label_ar: "سناكس", order: 3 },
   ],
 
   // Defines how to handle calorie redistribution for hidden meals
   redistribute: {
-    from: ['dinner'], // Hide the 'dinner' meal
-    to: 'lunch', // Add its calories to 'lunch' (which is displayed as Iftar)
+    from: ["dinner"], // Hide the 'dinner' meal
+    to: "lunch", // Add its calories to 'lunch' (which is displayed as Iftar)
   },
 };
 ```
@@ -81,8 +81,11 @@ This new service will process a `daily_plan` and apply the fasting mode logic fo
 
 ```typescript
 // lib/services/meal-display.ts
-import { FASTING_MODE_CONFIG, type MealDisplayMapping } from '@/lib/config/fasting-mode-map';
-import type { DailyPlan, MealSlot } from '@/lib/types/nutri';
+import {
+  FASTING_MODE_CONFIG,
+  type MealDisplayMapping,
+} from "@/lib/config/fasting-mode-map";
+import type { DailyPlan, MealSlot } from "@/lib/types/nutri";
 
 export interface DisplayMeal extends MealSlot {
   displayLabel: string;
@@ -97,7 +100,7 @@ export interface DisplayMeal extends MealSlot {
  */
 export function getDisplayMeals(
   plan: DailyPlan,
-  isFasting: boolean
+  isFasting: boolean,
 ): DisplayMeal[] {
   const originalMeals = plan.plan; // The array of meals from the DB
 
@@ -169,26 +172,26 @@ function getOrderForMeal(name: string): number {
 
 ### Phase 1: Foundation (1 Day)
 
--   [ ] **Task:** Update `lib/types/nutri.ts` to add `is_fasting_mode?: boolean` to the `ProfilePreferences` interface.
--   [ ] **Task:** Create `lib/config/fasting-mode-map.ts` with the content from section 3.1.
--   [ ] **Task:** Create `lib/services/meal-display.ts` with the content from section 3.2.
+- [ ] **Task:** Update `lib/types/nutri.ts` to add `is_fasting_mode?: boolean` to the `ProfilePreferences` interface.
+- [ ] **Task:** Create `lib/config/fasting-mode-map.ts` with the content from section 3.1.
+- [ ] **Task:** Create `lib/services/meal-display.ts` with the content from section 3.2.
 
 ### Phase 2: UI Integration (1-2 Days)
 
--   [ ] **Task:** Create a `FastingModeToggle` component.
-    -   **Location:** `components/profile/fasting-mode-toggle.tsx`.
-    -   **Functionality:** A simple Switch component that reads `user.preferences.is_fasting_mode` and calls a server action to update it.
--   [ ] **Task:** Add the `FastingModeToggle` to the user's profile page (`app/(app)/profile/page.tsx`).
--   [ ] **Task:** Refactor the dashboard (`app/(app)/dashboard/page.tsx`).
-    -   **Data Fetching:** Fetch the `daily_plan` and the user's `is_fasting_mode` preference.
-    -   **Transformation:** In the server component, call `getDisplayMeals(plan, is_fasting_mode)`.
-    -   **Rendering:** Map over the transformed `displayMeals` array to render the meal cards. Use `meal.displayLabel` and `meal.target_calories` for the UI.
+- [ ] **Task:** Create a `FastingModeToggle` component.
+  - **Location:** `components/profile/fasting-mode-toggle.tsx`.
+  - **Functionality:** A simple Switch component that reads `user.preferences.is_fasting_mode` and calls a server action to update it.
+- [ ] **Task:** Add the `FastingModeToggle` to the user's profile page (`app/(app)/profile/page.tsx`).
+- [ ] **Task:** Refactor the dashboard (`app/(app)/dashboard/page.tsx`).
+  - **Data Fetching:** Fetch the `daily_plan` and the user's `is_fasting_mode` preference.
+  - **Transformation:** In the server component, call `getDisplayMeals(plan, is_fasting_mode)`.
+  - **Rendering:** Map over the transformed `displayMeals` array to render the meal cards. Use `meal.displayLabel` and `meal.target_calories` for the UI.
 
 ### Phase 3: Polish & Testing (1 Day)
 
--   [ ] **Task:** Test the toggle functionality. Ensure the dashboard updates immediately (or on refresh) when the mode is changed.
--   [ ] **Task:** Verify that the calorie redistribution is correct (e.g., Iftar's calories are higher when Dinner is hidden).
--   [ ] **Task:** Check that Arabic labels are displayed correctly.
--   [ ] **Task:** Ensure that when a user adds a recipe to "Iftar", it is correctly saved to the `lunch` slot in the `daily_plans` table in the database, using the `originalName` property from the `DisplayMeal` type.
+- [ ] **Task:** Test the toggle functionality. Ensure the dashboard updates immediately (or on refresh) when the mode is changed.
+- [ ] **Task:** Verify that the calorie redistribution is correct (e.g., Iftar's calories are higher when Dinner is hidden).
+- [ ] **Task:** Check that Arabic labels are displayed correctly.
+- [ ] **Task:** Ensure that when a user adds a recipe to "Iftar", it is correctly saved to the `lunch` slot in the `daily_plans` table in the database, using the `originalName` property from the `DisplayMeal` type.
 
 This plan is significantly simpler, requires almost no database changes, and provides a much more flexible and user-friendly experience.
