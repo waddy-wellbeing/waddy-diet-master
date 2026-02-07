@@ -9,6 +9,7 @@ export const MEAL_TYPES = [
   'lunch',
   'dinner',
   'snack',
+  'pre-iftar'
 ] as const
 
 export const CUISINES = [
