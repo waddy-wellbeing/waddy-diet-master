@@ -272,6 +272,106 @@ export async function assignMealStructure(
 }
 
 /**
+ * Set fasting mode preferences for a user
+ * Stores only the fasting meal count in preferences
+ * Uses the same daily_calories from targets for both regular and fasting modes
+ * 
+ * @param userId - The user's ID
+ * @param fastingMealsPerDay - Number of fasting meals (2-5)
+ * @returns Success/error result
+ */
+export async function setFastingModePreferences(
+  userId: string,
+  fastingMealsPerDay: number
+): Promise<{ success: boolean; error: string | null }> {
+  const supabase = await createClient()
+
+  // Validate fasting meals count
+  if (fastingMealsPerDay < 2 || fastingMealsPerDay > 5) {
+    return {
+      success: false,
+      error: 'Fasting meals must be between 2 and 5'
+    }
+  }
+
+  // Get current profile
+  const { data: profile, error: fetchError } = await supabase
+    .from('profiles')
+    .select('preferences')
+    .eq('user_id', userId)
+    .single()
+
+  if (fetchError) {
+    return { success: false, error: fetchError.message }
+  }
+
+  // Update preferences with fasting meal count only
+  const updatedPreferences = {
+    ...profile.preferences,
+    fasting_meals_per_day: fastingMealsPerDay,
+  }
+
+  // Update profile
+  const { error: updateError } = await supabase
+    .from('profiles')
+    .update({
+      preferences: updatedPreferences,
+    })
+    .eq('user_id', userId)
+
+  if (updateError) {
+    return { success: false, error: updateError.message }
+  }
+
+  revalidatePath('/admin/users')
+  revalidatePath(`/admin/users/${userId}`)
+  return { success: true, error: null }
+}
+
+/**
+ * Toggle meal planning mode for a specific date's plan
+ * Updates the mode column in daily_plans table (NOT user preferences)
+ * This allows different modes for different days and enables cross-device sync
+ * Does NOT auto-generate plans - user must explicitly save (same as regular mode)
+ * 
+ * @param userId - The user's ID
+ * @param planDate - The date of the plan to update (YYYY-MM-DD format)
+ * @param mode - The mode to set: 'regular' or 'fasting'
+ * @returns Success/error result
+ */
+export async function togglePlanMode(
+  userId: string,
+  planDate: string,
+  mode: 'regular' | 'fasting'
+): Promise<{ success: boolean; error: string | null }> {
+  const supabase = await createClient()
+
+  // Validate mode
+  if (mode !== 'regular' && mode !== 'fasting') {
+    return {
+      success: false,
+      error: 'Mode must be either "regular" or "fasting"'
+    }
+  }
+
+  // Update the mode column for the specific date's plan
+  // If no plan exists yet, this will be set when user saves
+  const { error: updateError } = await supabase
+    .from('daily_plans')
+    .update({ mode })
+    .eq('user_id', userId)
+    .eq('plan_date', planDate)
+
+  if (updateError) {
+    return { success: false, error: updateError.message }
+  }
+
+  revalidatePath('/dashboard')
+  revalidatePath(`/dashboard/${planDate}`)
+  return { success: true, error: null }
+}
+
+/**
  * Update user's plan status
  */
 export async function updatePlanStatus(

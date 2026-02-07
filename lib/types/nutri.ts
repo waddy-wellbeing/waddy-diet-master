@@ -29,6 +29,8 @@ export interface ProfileTargets {
   // Calculated BMR and TDEE (stored for reference)
   bmr?: number
   tdee?: number
+  // NOTE: Same daily_calories used for both regular and fasting modes
+  // Separate calorie calculations deferred to future (too complex)
 }
 
 /** Single meal slot in the user's meal structure */
@@ -49,9 +51,9 @@ export interface ProfilePreferences {
   max_prep_time_minutes?: number
   // Meal structure - assigned by coach
   meals_per_day?: number           // User's requested meal count (from onboarding)
-  meal_structure?: MealSlot[]      // Assigned by coach with percentages
-  // Fasting mode toggle
-  is_fasting_mode?: boolean        // true = fasting mode, false/null = regular mode
+  // Fasting mode configuration
+  fasting_meals_per_day?: number   // Number of fasting meals (2-5)
+  // NOTE: Mode toggle (regular/fasting) is stored per-plan in daily_plans.mode, NOT here
 }
 
 /** User goal information */
@@ -223,7 +225,8 @@ export interface DailyPlan {
   lunch?: PlanMealSlot
   dinner?: PlanMealSlot
   snacks?: PlanSnackItem[]
-  fasting_plan?: MealSlot[]        // Separate fasting meal structure (pre-iftar, iftar, suhoor)
+  mode?: 'regular' | 'fasting'     // Meal planning mode (stored per plan in database)
+  fasting_plan?: MealSlot[]        // Fasting meal structure (only used when mode='fasting')
 }
 
 /** Daily nutrition totals */
