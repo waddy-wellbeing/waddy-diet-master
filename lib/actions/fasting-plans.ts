@@ -197,7 +197,6 @@ export async function generateFastingPlan(
         user_id: userId,
         plan_date: planDate,
         fasting_plan: assignedPlan,
-        mode: 'fasting', // Set mode to fasting
         is_generated: true
       }, {
         onConflict: 'user_id,plan_date'

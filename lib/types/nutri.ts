@@ -224,12 +224,19 @@ export interface PlanSnackItem {
 
 /** Full daily plan structure */
 export interface DailyPlan {
+  // Regular mode meals
   breakfast?: PlanMealSlot
   lunch?: PlanMealSlot
   dinner?: PlanMealSlot
   snacks?: PlanSnackItem[]
+  // Fasting mode meals
+  'pre-iftar'?: PlanMealSlot
+  iftar?: PlanMealSlot
+  'full-meal-taraweeh'?: PlanMealSlot
+  'snack-taraweeh'?: PlanSnackItem[]
+  suhoor?: PlanMealSlot
+  // Metadata
   mode?: 'regular' | 'fasting'     // Meal planning mode (stored per plan in database)
-  fasting_plan?: MealSlot[]        // Fasting meal structure (only used when mode='fasting')
 }
 
 /** Daily nutrition totals */

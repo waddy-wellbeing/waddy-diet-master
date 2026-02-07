@@ -16,13 +16,15 @@ type ActionResult<T = void> =
 
 interface SavePlanMealParams {
   date: string // YYYY-MM-DD format
-  mealType: 'breakfast' | 'lunch' | 'dinner' | 'snacks'
+  mealType: 'breakfast' | 'lunch' | 'dinner' | 'snacks' | 'pre-iftar' | 'iftar' | 'full-meal-taraweeh' | 'snack-taraweeh' | 'suhoor'
   recipeId: string
+  isFastingMode?: boolean // NEW: Indicates if this is a fasting plan
 }
 
 interface RemovePlanMealParams {
   date: string
-  mealType: 'breakfast' | 'lunch' | 'dinner' | 'snacks'
+  mealType: 'breakfast' | 'lunch' | 'dinner' | 'snacks' | 'pre-iftar' | 'iftar' | 'full-meal-taraweeh' | 'snack-taraweeh' | 'suhoor'
+  isFastingMode?: boolean // NEW: Indicates if this is a fasting plan
 }
 
 /**
@@ -42,12 +44,15 @@ export async function savePlanMeal(params: SavePlanMealParams): Promise<ActionRe
     }
 
     console.log('[savePlanMeal] User authenticated:', user.id)
-    const { date, mealType, recipeId } = params
+    const { date, mealType, recipeId, isFastingMode = false } = params
+
+    // Use correct plan column based on mode
+    const planColumn = isFastingMode ? 'fasting_plan' : 'plan'
 
     // Get existing plan for this date
     const { data: existingPlan } = await supabase
       .from('daily_plans')
-      .select('plan, daily_totals')
+      .select(`${planColumn}, daily_totals`)
       .eq('user_id', user.id)
       .eq('plan_date', date)
       .maybeSingle()
@@ -64,23 +69,23 @@ export async function savePlanMeal(params: SavePlanMealParams): Promise<ActionRe
 
     if (existingPlan) {
       // Update existing plan
-      updatedPlan = existingPlan.plan as DailyPlan
+      updatedPlan = (existingPlan as any)[planColumn] as DailyPlan
 
-      if (mealType === 'snacks') {
+      if (mealType === 'snacks' || mealType === 'snack-taraweeh') {
         // Snacks are stored as array; currently we overwrite with the new snack
-        updatedPlan.snacks = [{
+        updatedPlan[mealType] = [{
           recipe_id: meal.recipe_id,
           servings: meal.servings,
         }]
       } else {
-        // Breakfast, lunch, dinner are single slots
+        // All other meals are single slots
         updatedPlan[mealType] = meal
       }
     } else {
       // Create new plan
-      if (mealType === 'snacks') {
+      if (mealType === 'snacks' || mealType === 'snack-taraweeh') {
         updatedPlan = {
-          snacks: [{
+          [mealType]: [{
             recipe_id: meal.recipe_id,
             servings: meal.servings,
           }],
@@ -96,14 +101,14 @@ export async function savePlanMeal(params: SavePlanMealParams): Promise<ActionRe
     const updatedTotals = await calculateDailyTotals(updatedPlan)
     console.log('[savePlanMeal] Calculated totals:', updatedTotals)
 
-    // Upsert the plan
-    console.log('[savePlanMeal] Upserting plan:', { user_id: user.id, plan_date: date, plan: updatedPlan })
+    // Upsert the plan to correct column
+    console.log('[savePlanMeal] Upserting plan:', { user_id: user.id, plan_date: date, [planColumn]: updatedPlan })
     const { error: upsertError } = await supabase
       .from('daily_plans')
       .upsert({
         user_id: user.id,
         plan_date: date,
-        plan: updatedPlan,
+        [planColumn]: updatedPlan,
         daily_totals: updatedTotals,
       }, {
         onConflict: 'user_id,plan_date',
@@ -138,12 +143,15 @@ export async function removePlanMeal(params: RemovePlanMealParams): Promise<Acti
       return { success: false, error: 'Not authenticated' }
     }
 
-    const { date, mealType } = params
+    const { date, mealType, isFastingMode = false } = params
+
+    // Use correct plan column based on mode
+    const planColumn = isFastingMode ? 'fasting_plan' : 'plan'
 
     // Get existing plan
     const { data: existingPlan } = await supabase
       .from('daily_plans')
-      .select('plan, daily_totals')
+      .select(`${planColumn}, daily_totals`)
       .eq('user_id', user.id)
       .eq('plan_date', date)
       .maybeSingle()
@@ -152,22 +160,30 @@ export async function removePlanMeal(params: RemovePlanMealParams): Promise<Acti
       return { success: false, error: 'Plan not found' }
     }
 
-    const updatedPlan = existingPlan.plan as DailyPlan
+    const updatedPlan = (existingPlan as any)[planColumn] as DailyPlan
 
     // Remove the meal
-    if (mealType === 'snacks') {
-      updatedPlan.snacks = undefined
+    if (mealType === 'snacks' || mealType === 'snack-taraweeh') {
+      updatedPlan[mealType] = undefined
     } else {
       updatedPlan[mealType] = undefined
     }
 
-    // Check if plan is now empty
-    const hasAnyMeals = !!(
-      updatedPlan.breakfast?.recipe_id ||
-      updatedPlan.lunch?.recipe_id ||
-      updatedPlan.dinner?.recipe_id ||
-      (updatedPlan.snacks && updatedPlan.snacks.length > 0)
-    )
+    // Check if plan is now empty - handle both regular and fasting modes
+    const hasAnyMeals = isFastingMode 
+      ? !!(
+          updatedPlan['pre-iftar']?.recipe_id ||
+          updatedPlan.iftar?.recipe_id ||
+          updatedPlan['full-meal-taraweeh']?.recipe_id ||
+          (updatedPlan['snack-taraweeh'] && updatedPlan['snack-taraweeh'].length > 0) ||
+          updatedPlan.suhoor?.recipe_id
+        )
+      : !!(
+          updatedPlan.breakfast?.recipe_id ||
+          updatedPlan.lunch?.recipe_id ||
+          updatedPlan.dinner?.recipe_id ||
+          (updatedPlan.snacks && updatedPlan.snacks.length > 0)
+        )
 
     if (!hasAnyMeals) {
       // Delete the entire plan if empty
@@ -188,7 +204,7 @@ export async function removePlanMeal(params: RemovePlanMealParams): Promise<Acti
       const { error: updateError } = await supabase
         .from('daily_plans')
         .update({
-          plan: updatedPlan,
+          [planColumn]: updatedPlan,
           daily_totals: updatedTotals,
         })
         .eq('user_id', user.id)
@@ -246,7 +262,7 @@ export async function deletePlan(date: string): Promise<ActionResult> {
 /**
  * Get a daily plan for a specific date
  */
-export async function getPlan(date: string): Promise<ActionResult<DailyPlan | null>> {
+export async function getPlan(date: string, isFastingMode = false): Promise<ActionResult<DailyPlan | null>> {
   try {
     const supabase = await createClient()
     const { data: { user }, error: authError } = await supabase.auth.getUser()
@@ -255,14 +271,17 @@ export async function getPlan(date: string): Promise<ActionResult<DailyPlan | nu
       return { success: false, error: 'Not authenticated' }
     }
 
+    // Use correct plan column based on mode
+    const planColumn = isFastingMode ? 'fasting_plan' : 'plan'
+
     const { data: planData } = await supabase
       .from('daily_plans')
-      .select('plan')
+      .select(planColumn)
       .eq('user_id', user.id)
       .eq('plan_date', date)
       .maybeSingle()
 
-    return { success: true, data: planData?.plan as DailyPlan || null }
+    return { success: true, data: (planData as any)?.[planColumn] as DailyPlan || null }
   } catch (error) {
     console.error('Unexpected error getting plan:', error)
     return { success: false, error: 'An unexpected error occurred' }
@@ -280,9 +299,11 @@ async function calculateDailyTotals(plan: DailyPlan): Promise<DailyTotals> {
   let totalCarbs = 0
   let totalFat = 0
 
-  // Calculate for breakfast, lunch, dinner
-  for (const mealType of ['breakfast', 'lunch', 'dinner'] as const) {
-    const meal = plan[mealType]
+  // All single-slot meal types (both regular and fasting)
+  const singleSlotMeals = ['breakfast', 'lunch', 'dinner', 'pre-iftar', 'iftar', 'full-meal-taraweeh', 'suhoor'] as const
+
+  for (const mealType of singleSlotMeals) {
+    const meal = (plan as any)[mealType] as PlanMealSlot | undefined
     if (meal && meal.recipe_id) {
       const { data: recipe } = await supabase
         .from('recipes')
@@ -302,24 +323,29 @@ async function calculateDailyTotals(plan: DailyPlan): Promise<DailyTotals> {
     }
   }
 
-  // Calculate for snacks
-  if (plan.snacks && Array.isArray(plan.snacks)) {
-    for (const snack of plan.snacks) {
-      if (snack.recipe_id) {
-        const { data: recipe } = await supabase
-          .from('recipes')
-          .select('nutrition_per_serving')
-          .eq('id', snack.recipe_id)
-          .single()
+  // All array-slot meal types (snacks for regular, snack-taraweeh for fasting)
+  const arraySlotMeals = ['snacks', 'snack-taraweeh'] as const
 
-        if (recipe?.nutrition_per_serving) {
-          const nutrition = recipe.nutrition_per_serving as any
-          const servings = snack.servings || 1
+  for (const mealType of arraySlotMeals) {
+    const snackArray = (plan as any)[mealType] as PlanSnackItem[] | undefined
+    if (snackArray && Array.isArray(snackArray)) {
+      for (const snack of snackArray) {
+        if (snack.recipe_id) {
+          const { data: recipe } = await supabase
+            .from('recipes')
+            .select('nutrition_per_serving')
+            .eq('id', snack.recipe_id)
+            .single()
 
-          totalCalories += (nutrition.calories || 0) * servings
-          totalProtein += (nutrition.protein_g || 0) * servings
-          totalCarbs += (nutrition.carbs_g || 0) * servings
-          totalFat += (nutrition.fat_g || 0) * servings
+          if (recipe?.nutrition_per_serving) {
+            const nutrition = recipe.nutrition_per_serving as any
+            const servings = snack.servings || 1
+
+            totalCalories += (nutrition.calories || 0) * servings
+            totalProtein += (nutrition.protein_g || 0) * servings
+            totalCarbs += (nutrition.carbs_g || 0) * servings
+            totalFat += (nutrition.fat_g || 0) * servings
+          }
         }
       }
     }

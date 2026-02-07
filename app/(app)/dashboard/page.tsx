@@ -63,7 +63,7 @@ export default async function DashboardPage() {
     // Today's plan
     supabase
       .from("daily_plans")
-      .select("plan, daily_totals, mode, fasting_plan, fasting_daily_totals")
+      .select("plan, daily_totals, fasting_plan")
       .eq("user_id", user.id)
       .eq("plan_date", todayStr)
       .maybeSingle(),
@@ -147,16 +147,47 @@ export default async function DashboardPage() {
 
   // Use user's saved meal structure if available, otherwise default percentages
   const userMealStructure = profile.preferences?.meal_structure;
+  const isFastingModeCheck = profile.preferences?.is_fasting || false;
   const mealTargets: Record<string, number> = {};
 
-  if (userMealStructure && userMealStructure.length > 0) {
+  if (isFastingModeCheck) {
+    // Fasting mode: distribute calories across fasting meals
+    // Default fasting distribution (can be customized later)
+    const fastingDistribution: Record<string, number> = {
+      "pre-iftar": 0.1, // 10% - light snack
+      iftar: 0.4, // 40% - main breaking fast meal
+      "full-meal-taraweeh": 0.3, // 30% - substantial meal
+      "snack-taraweeh": 0.1, // 10% - light snack
+      suhoor: 0.25, // 25% - pre-dawn meal
+    };
+
+    const selectedFastingMeals =
+      profile.preferences?.fasting_selected_meals || [];
+    const mealsToUse =
+      selectedFastingMeals.length > 0
+        ? selectedFastingMeals
+        : Object.keys(fastingDistribution);
+
+    // Calculate total percentage and normalize
+    const totalPercentage = mealsToUse.reduce(
+      (sum: number, meal: string) => sum + (fastingDistribution[meal] || 0),
+      0,
+    );
+
+    for (const meal of mealsToUse) {
+      const normalizedPercentage =
+        (fastingDistribution[meal] || 0.2) / totalPercentage;
+      mealTargets[meal] = Math.round(dailyCalories * normalizedPercentage);
+    }
+  } else if (userMealStructure && userMealStructure.length > 0) {
+    // Regular mode with custom meal structure
     for (const slot of userMealStructure) {
       mealTargets[slot.name] = Math.round(
         dailyCalories * (slot.percentage / 100),
       );
     }
   } else {
-    // Fallback to default distribution
+    // Fallback to default regular distribution
     mealTargets.breakfast = Math.round(dailyCalories * 0.25);
     mealTargets.lunch = Math.round(dailyCalories * 0.35);
     mealTargets.dinner = Math.round(dailyCalories * 0.3);
@@ -185,6 +216,12 @@ export default async function DashboardPage() {
     snack_2: ["snack", "snacks & sweetes", "smoothies"],
     snack_3: ["snack", "snacks & sweetes", "smoothies"],
     evening: ["snack", "snacks & sweetes", "smoothies"], // Evening snack
+    // Fasting meal mappings
+    "pre-iftar": ["pre-iftar"], // UNIQUE: Only recipes tagged as pre-iftar (dates, light snacks to break fast)
+    iftar: ["dinner", "lunch", "one pot", "side dishes"], // Main breaking fast meal
+    "full-meal-taraweeh": ["dinner", "lunch", "one pot"], // Full meal after prayers
+    "snack-taraweeh": ["snack", "snacks & sweetes"], // Snack after prayers
+    suhoor: ["breakfast", "smoothies", "snack"], // Pre-dawn meal
   };
 
   // Get scaling limits from system settings or use defaults
@@ -199,34 +236,71 @@ export default async function DashboardPage() {
     macro_similarity_score?: number; // Score 0-100 indicating how well recipe matches target macros
   }
 
-  // Build list of meal slots from saved structure, or use defaults
-  const mealSlots =
-    userMealStructure && userMealStructure.length > 0
-      ? userMealStructure.map((slot: any) => slot.name)
-      : ["breakfast", "lunch", "dinner", "snacks"];
+  // Build list of meal slots based on fasting mode
+  const FASTING_MEAL_ORDER = [
+    "pre-iftar",
+    "iftar",
+    "full-meal-taraweeh",
+    "snack-taraweeh",
+    "suhoor",
+  ];
+
+  const mealSlots = (() => {
+    if (isFastingModeCheck) {
+      // Fasting mode: use selected fasting meals in specific order
+      const selectedFastingMeals =
+        profile.preferences?.fasting_selected_meals || [];
+      if (selectedFastingMeals.length > 0) {
+        return FASTING_MEAL_ORDER.filter((meal) =>
+          selectedFastingMeals.includes(meal),
+        );
+      }
+      // Fallback: show all fasting meals if none selected
+      return FASTING_MEAL_ORDER;
+    }
+
+    // Regular mode: use meal structure or defaults
+    if (userMealStructure && userMealStructure.length > 0) {
+      return userMealStructure.map((slot: any) => slot.name);
+    }
+    return ["breakfast", "lunch", "dinner", "snacks"];
+  })();
 
   const recipesByMealType: Record<string, ScaledRecipe[]> = {};
   for (const slot of mealSlots) {
     recipesByMealType[slot] = [];
   }
 
+  // Fasting meals that skip meal_type filtering (use ALL recipes, filter by calories only)
+  // Only 'pre-iftar' uses specific meal_type filtering
+  const FASTING_CALORIES_ONLY_MEALS = [
+    "iftar",
+    "full-meal-taraweeh",
+    "snack-taraweeh",
+    "suhoor",
+  ];
+
   if (allRecipes) {
     for (const mealSlot of mealSlots) {
       const targetCalories = mealTargets[mealSlot];
-      const acceptedMealTypes = mealTypeMapping[mealSlot];
+      const acceptedMealTypes = mealTypeMapping[mealSlot] || [];
       const primaryMealType = acceptedMealTypes[0];
+      const isCaloriesOnlySlot = FASTING_CALORIES_ONLY_MEALS.includes(mealSlot);
 
       const suitableRecipes: ScaledRecipe[] = [];
 
       for (const recipe of allRecipes) {
-        const recipeMealTypes = recipe.meal_type || [];
-        const matchesMealType = acceptedMealTypes.some((t) =>
-          recipeMealTypes.some(
-            (rmt: string) => rmt.toLowerCase() === t.toLowerCase(),
-          ),
-        );
-
-        if (!matchesMealType) continue;
+        // For fasting meals (except pre-iftar): skip meal_type filtering, use all recipes
+        // For regular meals and pre-iftar: filter by meal_type as usual
+        if (!isCaloriesOnlySlot) {
+          const recipeMealTypes = recipe.meal_type || [];
+          const matchesMealType = acceptedMealTypes.some((t) =>
+            recipeMealTypes.some(
+              (rmt: string) => rmt.toLowerCase() === t.toLowerCase(),
+            ),
+          );
+          if (!matchesMealType) continue;
+        }
 
         const baseCalories = recipe.nutrition_per_serving?.calories;
         if (!baseCalories || baseCalories <= 0) continue;
@@ -307,7 +381,10 @@ export default async function DashboardPage() {
   }
 
   // If there's a daily plan, get the currently selected recipe indices
-  const plan = dailyPlan?.plan as DailyPlan | undefined;
+  // Use fasting_plan for fasting mode, plan for regular mode
+  const plan = isFastingModeCheck
+    ? (dailyPlan?.fasting_plan as DailyPlan | undefined)
+    : (dailyPlan?.plan as DailyPlan | undefined);
   const selectedRecipeIndices: Record<string, number> = {};
 
   // Initialize with 0 for all meal slots
@@ -329,9 +406,7 @@ export default async function DashboardPage() {
   }
 
   // ===== ROUTE TO APPROPRIATE DASHBOARD BASED ON FASTING MODE =====
-  const isFastingMode = profile.preferences?.is_fasting || false;
-
-  if (isFastingMode) {
+  if (isFastingModeCheck) {
     // User has fasting mode enabled → Show fasting dashboard
     return (
       <FastingDashboardContent

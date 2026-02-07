@@ -157,68 +157,63 @@ const macroSimilarityScore =
 
 ### Phase 1: Database Schema (Foundation)
 
-**Task 1.1: Create Migration File**
+**Task 1.1: Create Migration File** ✅ COMPLETED
 
-- [ ] Create file: `supabase/migrations/<timestamp>_add_fasting_mode_to_daily_plans.sql`
-- [ ] Add SQL commands:
+- [x] Migration already exists with mode column and fasting_plan
+- [x] `daily_plans.mode` column tracks 'regular' or 'fasting' per plan
+- [x] `daily_plans.fasting_plan` JSONB column stores fasting meal structure
+- [x] **NOTE**: Only ONE `daily_totals` column for both modes (no `fasting_daily_totals`)
 
-  ```sql
-  -- Add mode column to track regular vs fasting mode per plan
-  ALTER TABLE public.daily_plans
-  ADD COLUMN mode TEXT NOT NULL DEFAULT 'regular';
-
-  -- Add fasting_plan column to store fasting meal structure
-  ALTER TABLE public.daily_plans
-  ADD COLUMN fasting_plan JSONB DEFAULT NULL;
-
-  -- Add check constraint for valid modes
-  ALTER TABLE public.daily_plans
-  ADD CONSTRAINT daily_plans_mode_check CHECK (mode IN ('regular', 'fasting'));
-
-  -- Set all existing records to 'regular' mode
-  UPDATE public.daily_plans SET mode = 'regular' WHERE mode IS NULL;
-
-  -- Add comments
-  COMMENT ON COLUMN public.daily_plans.mode IS 'Meal planning mode: regular or fasting';
-  COMMENT ON COLUMN public.daily_plans.fasting_plan IS 'Stores fasting-mode meal structure separately from regular plan';
-
-  -- Add index for mode filtering
-  CREATE INDEX daily_plans_mode_idx ON daily_plans(mode);
-  ```
-
-- [ ] Test: Run migration locally and verify columns exist in `daily_plans` table
-
-**Task 1.2: Update TypeScript Types** ✅
+**Task 1.2: Update TypeScript Types** ✅ COMPLETED
 
 - [x] File: `lib/types/nutri.ts`
-- [x] Add to `ProfilePreferences` interface:
+- [x] Added to `ProfilePreferences`:
   ```typescript
-  fasting_meals_per_day?: number   // Number of fasting meals (2-5)
+  is_fasting?: boolean                    // Toggle state (true = fasting mode)
+  fasting_selected_meals?: string[]       // Selected fasting meal types
   ```
-- [ ] ~~Add to `ProfileTargets` interface~~ **SKIPPED - Too Complex**:
+- [x] Updated `DailyPlan` interface:
   ```typescript
-  // fasting_daily_calories?: number  // FUTURE: Separate calorie calculation for fasting
-  // NOTE: For now, we use the same daily_calories for both regular and fasting modes
-  // Different calorie targets require different calculation logic (too complex for Phase 1)
+  mode?: 'regular' | 'fasting'           // Historical record of which mode was used
+  // Regular meals
+  breakfast?: PlanMealSlot
+  lunch?: PlanMealSlot
+  dinner?: PlanMealSlot
+  snacks?: PlanSnackItem[]
+  // Fasting meals
+  'pre-iftar'?: PlanMealSlot
+  iftar?: PlanMealSlot
+  'full-meal-taraweeh'?: PlanMealSlot
+  'snack-taraweeh'?: PlanSnackItem[]
+  suhoor?: PlanMealSlot
   ```
-- [x] Update `DailyPlan` interface:
-  ```typescript
-  mode?: 'regular' | 'fasting'     // Meal planning mode (stored per plan)
-  fasting_plan?: MealSlot[]        // Fasting meal plan (only used when mode='fasting')
-  ```
-- [x] Test: Run `npm run build` to ensure no type errors
+- [x] **IMPORTANT**: `daily_totals` used for BOTH regular and fasting (no separate column)
 
 **Architecture Notes:**
 
-- `preferences`: Stores only `fasting_meals_per_day` (number), NOT meal structure or mode toggle
-- `daily_plans.mode`: **Database column** for cross-device sync (toggle on laptop = toggle on mobile)
+- `preferences.is_fasting`: **Boolean toggle** stored in user preferences for cross-device sync
+  - Values: `true` (fasting mode) | `false` (regular mode)
+  - Default: `false` for all users
+  - **Primary mode indicator** - dashboard checks this to decide which UI to show
+- `preferences.fasting_selected_meals`: **String array** storing selected fasting meal types
+  - Example: `['pre-iftar', 'iftar', 'suhoor']` for 3-meal fasting
+  - Dynamically built based on user selection in onboarding/profile
+  - Used to determine which meals to display in fasting dashboard
+- `daily_plans.mode`: **Database column** storing which mode was active when plan was saved
   - Values: `'regular'` | `'fasting'` (TEXT with CHECK constraint)
   - Default: `'regular'` for all new/existing records
-  - Stored **per plan** (not in user preferences) - allows different modes for different days
-  - Future-proof: Can add more modes (`'bulking'`, `'cutting'`) without schema changes
-- `targets`: Uses **same** `daily_calories` for both modes (no separate fasting calories for now - too complex)
+  - **Historical record** - tracks which mode generated the plan (for future analytics)
+- `targets`: Uses **same** `daily_calories` for both modes (no separate fasting calories - too complex for now)
 - `daily_plans`: Stores BOTH `plan` (regular recipes) AND `fasting_plan` (fasting recipes) in same row
-- **Dashboard Logic**: If `mode === 'fasting'` → use `fasting_plan`, otherwise use `plan` (NO check needed for regular mode)
+  - **IMPORTANT**: Only ONE `daily_totals` column used for BOTH modes (no separate `fasting_daily_totals`)
+  - When saving fasting plan → updates `fasting_plan` + `daily_totals` columns
+  - When saving regular plan → updates `plan` + `daily_totals` columns
+  - `daily_totals` gets overwritten based on which mode is currently active
+- **Dashboard Logic**:
+  - Check `preferences.is_fasting` to decide which dashboard component to render
+  - FastingDashboardContent fetches from `fasting_plan` column
+  - DashboardContent fetches from `plan` column
+  - Both use same `daily_totals` for calorie tracking
 
 ---
 
@@ -336,128 +331,111 @@ const macroSimilarityScore =
 
 ---
 
-### Phase 4: UI Components ✅
+### Phase 4: UI Components ✅ COMPLETED
 
-**Task 4.1: Create Fasting Mode Toggle Component** ✅
+**Task 4.1: Fasting Mode Toggle** ✅ COMPLETED
 
-- [x] Create file: `components/profile/fasting-mode-toggle.tsx`
-- [x] Component with toggle switch using shadcn/ui button + motion
-- [x] Component props:
-  ```typescript
-  interface Props {
-    userId: string;
-    currentMode: "regular" | "fasting";
-    fastingMealsPerDay?: number;
-    onModeChange?: (mode) => void;
-  }
-  ```
-- [x] On toggle change → call `togglePlanMode(userId, date, mode)` server action
-- [x] Check if `fasting_meals_per_day` is configured before switching to fasting mode
-- [x] Show configuration dialog if not set
-- [x] Show loading state during server action
-- [x] Show success toast on completion ("تم التبديل إلى نمط رمضان ✨")
-- [x] Include settings button to reconfigure meal count
-- [x] Test: Toggle switch and verify database updates
+- [x] Toggle moved to profile page (not dashboard)
+- [x] Stores state in `preferences.is_fasting` (boolean)
+- [x] Dashboard routing based on `is_fasting` flag
+- [x] Separate dashboards: `FastingDashboardContent` and `DashboardContent`
 
-**Task 4.2: Meal Configuration Dialog** ✅
+**Task 4.2: Dashboard Split** ✅ COMPLETED
 
-- [x] Dialog with 4 options (2-5 meals) with Arabic labels
-- [x] Custom radio-style selection (no RadioGroup component needed)
-- [x] Visual selection with purple accent
-- [x] Calls `setFastingModePreferences(userId, mealCount)` on save
-- [x] Auto-toggles to fasting mode after saving config
-- [x] Can be reopened via settings icon on toggle component
+- [x] `FastingDashboardContent` - Fasting meals with ordered slots
+- [x] `DashboardContent` - Regular meals only
+- [x] Page.tsx routes based on `preferences.is_fasting`
+- [x] Each dashboard independent and maintainable
 
-**Task 4.3: Add Toggle to Profile Page** ✅
+**Task 4.3: MealPlanSheet Component** ✅ COMPLETED
 
-- [x] File: `app/(app)/profile/profile-content.tsx`
-- [x] Fetch user's current plan mode from `daily_plans` table for today
-- [x] Added state management for `currentMode`
-- [x] Render `<FastingModeToggle />` between Preferences and Account Stats sections
-- [x] Auto-fetch mode on component mount
-- [x] Update mode state when toggle changes
-- [x] Test: Navigate to profile, see toggle, verify it works
-
-**Implementation Details:**
-
-- Toggle design: Purple moon icon for fasting mode, lime green lightning for regular
-- Smooth animation using Framer Motion
-- Arabic text with RTL support
-- Shows meal count below mode name (e.g., "2 وجبات يومياً")
-- Settings button only visible when in fasting mode with configured meals
-- Loading spinner appears in toggle during mode switch
-- Toast notifications for success/error states
+- [x] Updated to support both regular and fasting modes
+- [x] Added `isFastingMode` prop (boolean, defaults to false)
+- [x] Conditional meal types:
+  - Regular: Breakfast 🍳, Lunch 🍱, Dinner 🍽️, Snacks 🍎
+  - Fasting: كسر صيام 🥤, إفطار 🍽️, وجبة بعد التراويح 🍱, سناك بعد التراويح 🍎, سحور 🌙
+- [x] Passes `isFastingMode` to all server actions
+- [x] FastingDashboardContent passes `isFastingMode={true}`
+- [x] DashboardContent passes `isFastingMode={false}`
 
 ---
 
-### Phase 5: Dashboard Display Logic
+### Phase 5: Server Actions ✅ COMPLETED
 
-**Task 5.1: Update Dashboard Data Fetching**
+**Task 5.1: Save Actions Updated** ✅ COMPLETED
 
-- [ ] File: `app/(app)/dashboard/page.tsx`
-- [ ] Fetch `plan`, `fasting_plan`, AND `mode` from `daily_plans` table
-- [ ] Add conditional logic (ONLY check for fasting mode):
+- [x] `saveMealToPlan()` - Accepts `isFastingMode` parameter
+  - Saves to `fasting_plan` if true, `plan` if false
+  - **Uses `daily_totals` for both modes** (no separate fasting_daily_totals)
+  - Sets `mode` column to 'fasting' or 'regular'
+- [x] `saveFullDayPlan()` - Accepts `isFastingMode` parameter
+  - Same dual-column logic as saveMealToPlan
+- [x] File: `lib/actions/daily-plans.ts`
 
-  ```typescript
-  // Use fasting plan if mode is 'fasting', otherwise use regular plan
-  const displayPlan =
-    dailyPlan.mode === "fasting" ? dailyPlan.fasting_plan : dailyPlan.plan;
+**Task 5.2: Get Actions Updated** ✅ COMPLETED
 
-  // Alternative (more explicit):
-  const displayPlan =
-    dailyPlan.mode === "fasting" && dailyPlan.fasting_plan
-      ? dailyPlan.fasting_plan
-      : dailyPlan.plan;
-  ```
+- [x] `getPlan()` - Accepts `isFastingMode` parameter
+  - Fetches from `fasting_plan` if true, `plan` if false
+  - Returns correct meal structure based on mode
+- [x] File: `lib/actions/meal-planning.ts`
 
-- [ ] **NO changes to regular mode logic** - it works as-is using `plan` column
-- [ ] Test: Toggle mode and refresh dashboard - verify different meal names appear
+**Task 5.3: Remove Actions Updated** ✅ COMPLETED
 
-**Task 5.2: Update Meal Cards Rendering**
+- [x] `removePlanMeal()` - Accepts `isFastingMode` parameter
+  - Removes from correct column based on mode
+  - Handles both regular and fasting meal structures
+- [x] File: `lib/actions/meal-planning.ts`
 
-- [ ] File: `components/dashboard/dashboard-components.tsx` (or wherever meal cards are)
-- [ ] Ensure meal cards display:
-  - `meal.label` (will be "Iftar" or "Lunch" depending on mode)
-  - `meal.label_ar` (Arabic labels)
-  - `meal.target_calories` (calculated calories)
-- [ ] No code changes needed if already using `meal.label` - just verify
-- [ ] Test: In fasting mode, verify cards show "Pre-Iftar", "Iftar", "Suhoor"
+**Current Database Schema:**
+
+```
+daily_plans:
+  - plan (JSONB) - Regular meals
+  - fasting_plan (JSONB) - Fasting meals
+  - daily_totals (JSONB) - Shared totals for BOTH modes
+  - mode (TEXT) - 'regular' or 'fasting' (historical record)
+```
 
 ---
 
-### Phase 6: Testing & Validation
+### Phase 6: Current Status & Remaining Work
 
-**Task 6.1: End-to-End Testing**
+**✅ COMPLETED:**
 
-- [ ] Test Scenario 1: New User
-  1. Complete onboarding with 4 meals
-  2. Verify `plan` column has regular meals
-  3. Toggle fasting mode ON
-  4. Verify `fasting_plan` column is populated
-  5. Verify dashboard shows fasting meals
-- [ ] Test Scenario 2: Toggle Back
-  1. Toggle fasting mode OFF
-  2. Verify dashboard shows regular meals again
-  3. Toggle fasting mode ON again
-  4. Verify same fasting plan appears (preserved)
-- [ ] Test Scenario 3: Different Meal Counts
-  1. Test with 3, 4, 5 meals per day
-  2. Verify percentages sum to 100%
-  3. Verify calorie calculations are correct
+1. Dashboard split into separate components (FastingDashboardContent + DashboardContent)
+2. Routing based on `preferences.is_fasting` flag
+3. Fasting meal ordering: pre-iftar → iftar → full-meal-taraweeh → snack-taraweeh → suhoor
+4. Recipe recommendations working for fasting meals
+5. Calorie distribution for fasting meals (10% pre-iftar, 40% iftar, etc.)
+6. Pre-iftar uses unique "pre-iftar" meal_type from database
+7. Save/load actions use correct columns (plan vs fasting_plan)
+8. MealPlanSheet component supports both modes
+9. Auto-save functionality for both modes
+10. Swap functionality working in fasting mode
+11. **Database uses single `daily_totals` column for both modes**
 
-**Task 6.2: Edge Cases**
+**🔧 KNOWN LIMITATIONS:**
 
-- [ ] Test: User with no `plan` yet (new user) - should generate both plans
-- [ ] Test: User changes `meals_per_day` after fasting plan exists - decide behavior (regenerate or keep?)
-- [ ] Test: Arabic labels display correctly in UI
-- [ ] Test: Empty fasting plan (all meals have no recipes) - verify empty state UI
+- ❌ No separate `fasting_daily_totals` column (uses same `daily_totals` for both)
+- ❌ No meal type filtering for fasting (all recipes available for all fasting meals)
+- ❌ Future: May need separate calorie calculations for fasting vs regular
 
-**Task 6.3: Data Validation**
+**📋 TESTING NEEDED:**
 
-- [ ] Verify: Both `plan` and `fasting_plan` can coexist in same row
-- [ ] Verify: Percentages in fasting templates sum to 100%
-- [ ] Verify: Calorie totals match user's `daily_calories` target
-- [ ] Verify: No data loss when toggling modes multiple times
+- [ ] Test: Switch modes and verify correct meals appear
+- [ ] Test: Save plan in fasting mode → Check database `fasting_plan` column
+- [ ] Test: Save plan in regular mode → Check database `plan` column
+- [ ] Test: MealPlanSheet shows Arabic labels in fasting mode
+- [ ] Test: Both modes share same `daily_totals` (no separate totals)
+- [ ] Test: Swap functionality in both modes
+- [ ] Test: Auto-save in both modes
+
+**🚀 READY FOR:**
+
+- User testing with both regular and fasting modes
+- Verifying calorie calculations are accurate
+- Confirming UI displays correct meal types
+- Testing mode switching doesn't lose data
 
 ---
 

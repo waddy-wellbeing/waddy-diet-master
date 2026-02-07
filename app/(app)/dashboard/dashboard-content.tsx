@@ -159,9 +159,7 @@ export function DashboardContent({
         // Fetch daily plan
         const { data: planData } = await supabase
           .from("daily_plans")
-          .select(
-            "plan, daily_totals, mode, fasting_plan, fasting_daily_totals",
-          )
+          .select("plan, daily_totals, fasting_plan")
           .eq("user_id", profile.user_id)
           .eq("plan_date", dateStr)
           .maybeSingle();
@@ -1223,6 +1221,8 @@ export function DashboardContent({
           return Array.from(uniqueRecipes.values());
         })()}
         onPlanUpdated={handlePlanUpdated}
+        isFastingMode={false}
+        selectedMeals={mealSlots.map((slot) => slot.name as MealType)} // Pass selected meals
       />
     </div>
   );
