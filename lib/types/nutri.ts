@@ -51,9 +51,12 @@ export interface ProfilePreferences {
   max_prep_time_minutes?: number
   // Meal structure - assigned by coach
   meals_per_day?: number           // User's requested meal count (from onboarding)
+  meal_structure?: MealSlot[]      // User's meal structure with percentages
   // Fasting mode configuration
-  fasting_meals_per_day?: number   // Number of fasting meals (2-5)
-  // NOTE: Mode toggle (regular/fasting) is stored per-plan in daily_plans.mode, NOT here
+  is_fasting?: boolean                // Toggle state: true = fasting mode ON, false/undefined = regular mode
+  fasting_selected_meals?: string[]   // Selected fasting meals (e.g., ['iftar', 'suhoor', 'snack-taraweeh'])
+  // NOTE: Mode toggle state is stored HERE in preferences, NOT in daily_plans.mode
+  // daily_plans.mode is only set when a plan is actually SAVED (not just toggled)
 }
 
 /** User goal information */

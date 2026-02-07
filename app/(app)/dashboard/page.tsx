@@ -2,6 +2,7 @@ import { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { DashboardContent } from "./dashboard-content";
+import { FastingDashboardContent } from "./fasting-dashboard-content";
 import { format, startOfWeek, endOfWeek, subDays } from "date-fns";
 import type {
   DailyPlan,
@@ -62,7 +63,7 @@ export default async function DashboardPage() {
     // Today's plan
     supabase
       .from("daily_plans")
-      .select("plan, daily_totals")
+      .select("plan, daily_totals, mode, fasting_plan, fasting_daily_totals")
       .eq("user_id", user.id)
       .eq("plan_date", todayStr)
       .maybeSingle(),
@@ -78,7 +79,7 @@ export default async function DashboardPage() {
     // Week plans for the week selector (NEW - for plan indicators)
     supabase
       .from("daily_plans")
-      .select("plan_date, plan")
+      .select("plan_date, plan, mode, fasting_plan")
       .eq("user_id", user.id)
       .gte("plan_date", format(weekStart, "yyyy-MM-dd"))
       .lte("plan_date", format(weekEnd, "yyyy-MM-dd")),
@@ -327,6 +328,28 @@ export default async function DashboardPage() {
     }
   }
 
+  // ===== ROUTE TO APPROPRIATE DASHBOARD BASED ON FASTING MODE =====
+  const isFastingMode = profile.preferences?.is_fasting || false;
+
+  if (isFastingMode) {
+    // User has fasting mode enabled → Show fasting dashboard
+    return (
+      <FastingDashboardContent
+        profile={profile}
+        initialDailyLog={dailyLog}
+        initialDailyPlan={dailyPlan}
+        initialWeekLogs={weekData}
+        initialWeekPlans={weekPlansMap}
+        initialWeekLogsMap={weekLogsMap}
+        initialStreak={streak}
+        recipesByMealType={recipesByMealType}
+        initialSelectedIndices={selectedRecipeIndices}
+        mealTargets={mealTargets}
+      />
+    );
+  }
+
+  // User has regular mode → Show regular dashboard
   return (
     <DashboardContent
       profile={profile}

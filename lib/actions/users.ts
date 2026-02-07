@@ -273,24 +273,24 @@ export async function assignMealStructure(
 
 /**
  * Set fasting mode preferences for a user
- * Stores only the fasting meal count in preferences
+ * Stores the selected fasting meals array in preferences
  * Uses the same daily_calories from targets for both regular and fasting modes
  * 
  * @param userId - The user's ID
- * @param fastingMealsPerDay - Number of fasting meals (2-5)
+ * @param selectedMeals - Array of selected meal names (e.g., ['iftar', 'suhoor'])
  * @returns Success/error result
  */
 export async function setFastingModePreferences(
   userId: string,
-  fastingMealsPerDay: number
+  selectedMeals: string[]
 ): Promise<{ success: boolean; error: string | null }> {
   const supabase = await createClient()
 
-  // Validate fasting meals count
-  if (fastingMealsPerDay < 2 || fastingMealsPerDay > 5) {
+  // Validate meal count (1-5 meals)
+  if (selectedMeals.length < 1 || selectedMeals.length > 5) {
     return {
       success: false,
-      error: 'Fasting meals must be between 2 and 5'
+      error: 'Must select between 1 and 5 meals'
     }
   }
 
@@ -305,10 +305,10 @@ export async function setFastingModePreferences(
     return { success: false, error: fetchError.message }
   }
 
-  // Update preferences with fasting meal count only
+  // Update preferences with selected meals array
   const updatedPreferences = {
     ...profile.preferences,
-    fasting_meals_per_day: fastingMealsPerDay,
+    fasting_selected_meals: selectedMeals,
   }
 
   // Update profile
@@ -329,14 +329,13 @@ export async function setFastingModePreferences(
 }
 
 /**
- * Toggle meal planning mode for a specific date's plan
- * Updates the mode column in daily_plans table (NOT user preferences)
- * This allows different modes for different days and enables cross-device sync
- * Does NOT auto-generate plans - user must explicitly save (same as regular mode)
+ * Toggle fasting mode preference for the user
+ * Sets is_fasting flag in user's preferences (NOT in daily_plans)
+ * This allows recommendations to show fasting meals before any plan is saved
+ * When user actually saves a plan, THEN daily_plans.mode will be set
  * 
  * @param userId - The user's ID
- * @param planDate - The date of the plan to update (YYYY-MM-DD format)
- * @param mode - The mode to set: 'regular' or 'fasting'
+ * @param isFasting - true for fasting mode, false for regular mode
  * @returns Success/error result
  */
 export async function togglePlanMode(
@@ -354,19 +353,37 @@ export async function togglePlanMode(
     }
   }
 
-  // Update the mode column for the specific date's plan
-  // If no plan exists yet, this will be set when user saves
-  const { error: updateError } = await supabase
-    .from('daily_plans')
-    .update({ mode })
+  // Get current profile
+  const { data: profile, error: fetchError } = await supabase
+    .from('profiles')
+    .select('preferences')
     .eq('user_id', userId)
-    .eq('plan_date', planDate)
+    .single()
+
+  if (fetchError) {
+    return { success: false, error: fetchError.message }
+  }
+
+  // Update preferences with is_fasting flag
+  const updatedPreferences = {
+    ...profile.preferences,
+    is_fasting: mode === 'fasting',
+  }
+
+  // Update profile preferences
+  const { error: updateError } = await supabase
+    .from('profiles')
+    .update({
+      preferences: updatedPreferences,
+    })
+    .eq('user_id', userId)
 
   if (updateError) {
     return { success: false, error: updateError.message }
   }
 
   revalidatePath('/dashboard')
+  revalidatePath('/profile')
   revalidatePath(`/dashboard/${planDate}`)
   return { success: true, error: null }
 }

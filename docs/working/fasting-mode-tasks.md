@@ -20,6 +20,7 @@ This approach ensures scalability and consistency - no new complex logic, just a
 ## 🔄 **User Flow Comparison**
 
 ### **Regular Mode Flow:**
+
 1. User navigates to dashboard
 2. System fetches `daily_plans.plan` for today
 3. If empty → Show recipe **recommendations** (not saved yet)
@@ -28,6 +29,7 @@ This approach ensures scalability and consistency - no new complex logic, just a
 6. Dashboard now shows saved plan
 
 ### **Fasting Mode Flow (EXACTLY THE SAME):**
+
 1. **User toggles ON in profile** → Sets mode, checks `fasting_meals_per_day` (prompts if not set)
 2. User navigates to dashboard
 3. System fetches `daily_plans.fasting_plan` for today
@@ -47,35 +49,39 @@ This approach ensures scalability and consistency - no new complex logic, just a
 **Understanding the existing logic before implementing fasting mode:**
 
 #### **1. Calorie Calculation**
+
 - User has `daily_calories` target (e.g., 2000 kcal)
 - Meal structure defines percentages (e.g., breakfast: 25%, lunch: 35%, dinner: 30%, snacks: 10%)
 - Target calories per meal = `daily_calories * (percentage / 100)`
-  - Example: Breakfast = 2000 * 0.25 = **500 calories**
+  - Example: Breakfast = 2000 \* 0.25 = **500 calories**
 
 #### **2. Meal Type Filtering (Recipe Type Mapping)**
+
 Each meal slot maps to acceptable recipe types from the database:
 
 ```typescript
 const mealTypeMapping = {
-  breakfast: ['breakfast', 'smoothies'],
-  lunch: ['lunch', 'one pot', 'dinner', 'side dishes'],
-  dinner: ['dinner', 'lunch', 'one pot', 'side dishes', 'breakfast'],
-  snacks: ['snack', 'snacks & sweetes', 'smoothies']
-}
+  breakfast: ["breakfast", "smoothies"],
+  lunch: ["lunch", "one pot", "dinner", "side dishes"],
+  dinner: ["dinner", "lunch", "one pot", "side dishes", "breakfast"],
+  snacks: ["snack", "snacks & sweetes", "smoothies"],
+};
 ```
 
 **Logic:**
+
 - For user's "lunch" meal, system searches recipes with `meal_type` IN `['lunch', 'one pot', 'dinner', 'side dishes']`
 - This allows flexibility (e.g., dinner recipes can be used for lunch)
 - Database stores `meal_type` as array: `['lunch', 'dinner']`
 
 #### **3. Dynamic Scaling (Scale Factor)**
+
 Recipes can be scaled up or down to hit exact calorie targets:
 
 ```typescript
-const baseCalories = recipe.nutrition_per_serving.calories // e.g., 400 cal
-const targetCalories = 500 // User's breakfast target
-const scaleFactor = targetCalories / baseCalories // 500 / 400 = 1.25x
+const baseCalories = recipe.nutrition_per_serving.calories; // e.g., 400 cal
+const targetCalories = 500; // User's breakfast target
+const scaleFactor = targetCalories / baseCalories; // 500 / 400 = 1.25x
 
 // Limits: 0.5x - 2.0x (from system settings)
 if (scaleFactor < 0.5 || scaleFactor > 2.0) {
@@ -84,43 +90,52 @@ if (scaleFactor < 0.5 || scaleFactor > 2.0) {
 ```
 
 **Example:**
+
 - Recipe: Omelette (400 cal base)
 - User needs: 500 cal breakfast
 - Scale factor: 1.25x (add more ingredients)
 
 #### **4. Macro Similarity Scoring**
+
 Recipes are scored based on how well they match user's macro targets:
 
 ```typescript
 // Calculate target macro percentages (from user's daily targets)
-const targetProteinPct = (dailyProtein * 4 / dailyCalories) * 100 // e.g., 30%
-const targetCarbsPct = (dailyCarbs * 4 / dailyCalories) * 100    // e.g., 40%
-const targetFatPct = (dailyFat * 9 / dailyCalories) * 100        // e.g., 30%
+const targetProteinPct = ((dailyProtein * 4) / dailyCalories) * 100; // e.g., 30%
+const targetCarbsPct = ((dailyCarbs * 4) / dailyCalories) * 100; // e.g., 40%
+const targetFatPct = ((dailyFat * 9) / dailyCalories) * 100; // e.g., 30%
 
 // Calculate recipe macro percentages
-const recipeProteinPct = (recipeProtein * 4 / baseCalories) * 100
+const recipeProteinPct = ((recipeProtein * 4) / baseCalories) * 100;
 // ... same for carbs/fat
 
 // Similarity score (0-100, higher = better match)
-const proteinScore = max(0, 100 - abs(targetProteinPct - recipeProteinPct) * 1.5)
-const carbsScore = max(0, 100 - abs(targetCarbsPct - recipeCarbsPct) * 1.5)
-const fatScore = max(0, 100 - abs(targetFatPct - recipeFatPct) * 1.5)
+const proteinScore = max(
+  0,
+  100 - abs(targetProteinPct - recipeProteinPct) * 1.5,
+);
+const carbsScore = max(0, 100 - abs(targetCarbsPct - recipeCarbsPct) * 1.5);
+const fatScore = max(0, 100 - abs(targetFatPct - recipeFatPct) * 1.5);
 
-const macroSimilarityScore = proteinScore * 0.5 + carbsScore * 0.3 + fatScore * 0.2
+const macroSimilarityScore =
+  proteinScore * 0.5 + carbsScore * 0.3 + fatScore * 0.2;
 // Protein weighted 50%, Carbs 30%, Fat 20%
 ```
 
 #### **5. Recipe Sorting Priority**
+
 1. **Macro similarity** (highest score first) - difference > 5 points
 2. **Primary meal type** (exact match preferred: "breakfast" for breakfast slot)
 3. **Scale factor closest to 1.0** (less modification needed)
 
 #### **6. Recipe Swapping**
+
 - User can swap entire recipes within the same meal slot
 - System shows alternatives with similar calories/macros
 - Tracks `original_recipe_id` if swapped
 
 #### **7. Ingredient Swapping**
+
 - User can swap individual ingredients within a recipe
 - Tracks swapped ingredients with quantities
 - Recalculates nutrition based on swaps
@@ -128,7 +143,8 @@ const macroSimilarityScore = proteinScore * 0.5 + carbsScore * 0.3 + fatScore * 
 ---
 
 ### **Fasting Mode Differences:**
-- ✅ **Same calorie calculation** (daily_calories * percentage)
+
+- ✅ **Same calorie calculation** (daily_calories \* percentage)
 - ✅ **Same scaling logic** (0.5x - 2.0x)
 - ✅ **Same macro similarity scoring**
 - ✅ **Same sorting priority**
@@ -303,6 +319,7 @@ const macroSimilarityScore = proteinScore * 0.5 + carbsScore * 0.3 + fatScore * 
 - [x] Added server action decorator: `'use server'` ✅
 
 **Recipe Assignment Strategy:**
+
 - ✅ Dynamic scaling (0.5x - 2.0x) to hit exact calorie targets
 - ✅ Macro similarity scoring (protein 50%, carbs 30%, fat 20%)
 - ✅ Sorting by: macro score → scale factor closest to 1.0
@@ -310,6 +327,7 @@ const macroSimilarityScore = proteinScore * 0.5 + carbsScore * 0.3 + fatScore * 
 - ✅ Uses ALL public recipes for now (breakfast recipes can be used for iftar, etc.)
 
 **IMPORTANT - Flow Clarification:**
+
 - ❌ **NOT auto-called** on toggle (removed auto-generation)
 - ✅ Called **explicitly when user clicks SAVE button** in dashboard
 - ✅ Same flow as regular mode: Show recommendations → User browses → User saves
@@ -318,46 +336,57 @@ const macroSimilarityScore = proteinScore * 0.5 + carbsScore * 0.3 + fatScore * 
 
 ---
 
-### Phase 4: UI Components
+### Phase 4: UI Components ✅
 
-**Task 4.1: Create Fasting Mode Toggle Component**
+**Task 4.1: Create Fasting Mode Toggle Component** ✅
 
-- [ ] Create file: `components/profile/fasting-mode-toggle.tsx`
-- [ ] Use existing Switch/Toggle component from shadcn/ui
-- [ ] Component props:
+- [x] Create file: `components/profile/fasting-mode-toggle.tsx`
+- [x] Component with toggle switch using shadcn/ui button + motion
+- [x] Component props:
   ```typescript
   interface Props {
     userId: string;
-    currentValue: boolean;
+    currentMode: "regular" | "fasting";
+    fastingMealsPerDay?: number;
+    onModeChange?: (mode) => void;
   }
   ```
-- [ ] On toggle change → call `toggleFastingMode()` server action
-- [ ] Show loading state during server action
-- [ ] Show success toast on completion
-- [ ] Test: Toggle switch and verify database updates
+- [x] On toggle change → call `togglePlanMode(userId, date, mode)` server action
+- [x] Check if `fasting_meals_per_day` is configured before switching to fasting mode
+- [x] Show configuration dialog if not set
+- [x] Show loading state during server action
+- [x] Show success toast on completion ("تم التبديل إلى نمط رمضان ✨")
+- [x] Include settings button to reconfigure meal count
+- [x] Test: Toggle switch and verify database updates
 
-**Task 4.2: Add Toggle to Profile Page**
+**Task 4.2: Meal Configuration Dialog** ✅
 
-- [ ] File: `app/(app)/profile/page.tsx`
-- [ ] Fetch user's current plan mode from `daily_plans` table (for today or upcoming days)
-- [ ] Render `<FastingModeToggle userId={user.id} currentMode={currentMode} />`
-- [ ] Add section label: "Meal Planning Mode" or "نمط تخطيط الوجبات"
-- [ ] On toggle: Update `mode` column for today's plan (or upcoming plans)
-- [ ] Test: Navigate to profile, see toggle, verify it works
+- [x] Dialog with 4 options (2-5 meals) with Arabic labels
+- [x] Custom radio-style selection (no RadioGroup component needed)
+- [x] Visual selection with purple accent
+- [x] Calls `setFastingModePreferences(userId, mealCount)` on save
+- [x] Auto-toggles to fasting mode after saving config
+- [x] Can be reopened via settings icon on toggle component
 
-**Why Profile Page (not Dashboard)?**
+**Task 4.3: Add Toggle to Profile Page** ✅
 
-- User gets time to update/regenerate plans while navigating from profile → dashboard
-- Clear intentional action (settings change) vs instant dashboard switch
-- Reduces surprise factor when meal names change
+- [x] File: `app/(app)/profile/profile-content.tsx`
+- [x] Fetch user's current plan mode from `daily_plans` table for today
+- [x] Added state management for `currentMode`
+- [x] Render `<FastingModeToggle />` between Preferences and Account Stats sections
+- [x] Auto-fetch mode on component mount
+- [x] Update mode state when toggle changes
+- [x] Test: Navigate to profile, see toggle, verify it works
 
-**Why `mode` Column in daily_plans (not preferences)?**
+**Implementation Details:**
 
-- **Cross-device sync**: Toggle on laptop must reflect on mobile browser ✅
-- **Per-day flexibility**: User can have regular mode on Monday, fasting mode on Tuesday
-- **Future-proof**: Easy to add more modes (`'bulking'`, `'cutting'`) without schema changes
-- **Cleaner queries**: `WHERE mode = 'fasting'` instead of boolean checks
-- **No changes to regular logic**: Only check when `mode === 'fasting'`
+- Toggle design: Purple moon icon for fasting mode, lime green lightning for regular
+- Smooth animation using Framer Motion
+- Arabic text with RTL support
+- Shows meal count below mode name (e.g., "2 وجبات يومياً")
+- Settings button only visible when in fasting mode with configured meals
+- Loading spinner appears in toggle during mode switch
+- Toast notifications for success/error states
 
 ---
 

@@ -69,7 +69,7 @@ interface DashboardContentProps {
   mealTargets: Record<string, number>;
 }
 
-export function DashboardContent({
+export function FastingDashboardContent({
   profile,
   initialDailyLog,
   initialDailyPlan,
@@ -97,28 +97,47 @@ export function DashboardContent({
   const [planSheetOpen, setPlanSheetOpen] = useState(false);
   const [planSheetDate, setPlanSheetDate] = useState<Date | null>(null);
 
-  // Regular mode dashboard - build meal slots from user's meal structure or defaults
+  // Fasting mode is always enabled for this dashboard
+  const isFastingMode = true;
+
+  // Fasting meal labels mapping with specific order
+  const FASTING_MEAL_LABELS: Record<string, string> = {
+    "pre-iftar": "كسر صيام",
+    iftar: "إفطار",
+    "full-meal-taraweeh": "وجبة بعد التراويح",
+    "snack-taraweeh": "سناك بعد التراويح",
+    suhoor: "سحور",
+  };
+
+  // ORDERED fasting meal slots (specific order as requested)
+  const FASTING_MEAL_ORDER = [
+    "pre-iftar",
+    "iftar",
+    "full-meal-taraweeh",
+    "snack-taraweeh",
+    "suhoor",
+  ];
+
+  // Build meal slots from user's selected fasting meals, maintaining the order
   const mealSlots = (() => {
-    // Use regular meal structure if available
-    if (
-      profile.preferences?.meal_structure &&
-      profile.preferences.meal_structure.length > 0
-    ) {
-      return profile.preferences.meal_structure.map(
-        (slot: { name: string; label?: string }) => ({
-          name: slot.name,
-          label: slot.label,
-        }),
-      );
+    const selectedMeals = profile.preferences?.fasting_selected_meals || [];
+
+    // If no meals selected, show all fasting meals in order
+    if (selectedMeals.length === 0) {
+      return FASTING_MEAL_ORDER.map((mealName) => ({
+        name: mealName,
+        label: FASTING_MEAL_LABELS[mealName] || mealName,
+      }));
     }
 
-    // Fallback to default regular meals
-    return [
-      { name: "breakfast", label: "Breakfast" },
-      { name: "lunch", label: "Lunch" },
-      { name: "dinner", label: "Dinner" },
-      { name: "snacks", label: "Snacks" },
-    ];
+    // Filter FASTING_MEAL_ORDER to only include meals the user selected
+    // This maintains the correct order while only showing selected meals
+    return FASTING_MEAL_ORDER.filter((meal) =>
+      selectedMeals.includes(meal),
+    ).map((mealName) => ({
+      name: mealName,
+      label: FASTING_MEAL_LABELS[mealName] || mealName,
+    }));
   })();
 
   // Track current recipe index for each meal type (for swiping)
@@ -267,16 +286,16 @@ export function DashboardContent({
 
   // Get current recipe for each meal type based on selected index
   // Get current recipe for the selected day
-  // - If the day has a plan in database: show the PLANNED recipe
+  // - If the day has a fasting plan in database: show the PLANNED recipe
   // - If the day has no plan: show the SUGGESTED recipe (shuffled based on date)
   const getCurrentRecipe = (mealType: MealName): ScaledRecipe | null => {
     const recipes = recipesByMealType[mealType] || [];
     if (recipes.length === 0) return null;
 
-    // Get the current plan (regular mode only)
-    const currentPlan = dailyPlan?.plan as DailyPlan | undefined;
+    // Get the fasting plan (fasting mode only)
+    const currentPlan = (dailyPlan as any)?.fasting_plan as DailyPlan | undefined;
 
-    // ===== PLANNED DAY: Return recipe from database plan =====
+    // ===== PLANNED DAY: Return recipe from database fasting plan =====
     if (currentPlan) {
       const planSlot =
         mealType === "snacks"

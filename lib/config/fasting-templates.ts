@@ -17,11 +17,16 @@ import type { MealSlot } from '@/lib/types/nutri';
  * - snack-taraweeh: 15%-20% range (light snack after Taraweeh)
  * - suhoor: 25%-45% range (pre-dawn meal before fasting begins)
  * 
- * Maximum meals: 5 (iftar and suhoor are required)
+ * Supports 1-5 meals with flexible combinations
  * Note: Percentages must sum to exactly 100%
  */
 export const FASTING_TEMPLATES: Record<number, MealSlot[]> = {
-    // 2 Meals: Minimum (Iftar + Suhoor only)
+    // 1 Meal: Single meal (any meal gets 100%)
+    1: [
+        { name: 'iftar', label: 'Iftar', percentage: 100 },
+    ],
+
+    // 2 Meals: Two meals split
     2: [
         { name: 'iftar', label: 'Iftar', percentage: 50 },
         { name: 'suhoor', label: 'Suhoor', percentage: 50 },
@@ -130,18 +135,13 @@ export function validateFastingTemplate(template: MealSlot[]): boolean {
  * @returns Custom MealSlot array with balanced percentages
  */
 export function buildCustomFastingTemplate(selectedMeals: string[]): MealSlot[] | null {
-    // Ensure required meals are selected
-    if (!selectedMeals.includes('iftar') || !selectedMeals.includes('suhoor')) {
-        return null; // Invalid: Iftar and Suhoor are required
-    }
-
     // Get base meals from options
     const selectedOptions = FASTING_MEAL_OPTIONS.filter(opt =>
         selectedMeals.includes(opt.value)
     );
 
-    if (selectedOptions.length < 2 || selectedOptions.length > 5) {
-        return null; // Invalid meal count (max 5 meals)
+    if (selectedOptions.length < 1 || selectedOptions.length > 5) {
+        return null; // Invalid meal count (1-5 meals allowed)
     }
 
     // Use predefined template if it matches selected count
@@ -203,8 +203,9 @@ export function generateFastingPlan(
  * Useful for UI selection
  */
 export const FASTING_MEAL_COUNT_OPTIONS = [
-    { value: 2, label: '2 Meals', description: 'Iftar and Suhoor only (minimum)' },
-    { value: 3, label: '3 Meals', description: 'Pre-Iftar + Iftar + Suhoor (standard)' },
+    { value: 1, label: '1 Meal', description: 'Single meal (any meal)' },
+    { value: 2, label: '2 Meals', description: 'Two meals combination' },
+    { value: 3, label: '3 Meals', description: 'Three meals combination' },
     { value: 4, label: '4 Meals', description: 'Add snack after Taraweeh' },
     { value: 5, label: '5 Meals', description: 'Add full meal after Taraweeh (maximum)' },
 ] as const;
