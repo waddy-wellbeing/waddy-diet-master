@@ -50,6 +50,8 @@ export interface ProfilePreferences {
   // Meal structure - assigned by coach
   meals_per_day?: number           // User's requested meal count (from onboarding)
   meal_structure?: MealSlot[]      // Assigned by coach with percentages
+  // Fasting mode toggle
+  is_fasting_mode?: boolean        // true = fasting mode, false/null = regular mode
 }
 
 /** User goal information */
@@ -221,6 +223,7 @@ export interface DailyPlan {
   lunch?: PlanMealSlot
   dinner?: PlanMealSlot
   snacks?: PlanSnackItem[]
+  fasting_plan?: MealSlot[]        // Separate fasting meal structure (pre-iftar, iftar, suhoor)
 }
 
 /** Daily nutrition totals */
