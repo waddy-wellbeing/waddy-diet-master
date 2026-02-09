@@ -322,8 +322,19 @@ function DayPlanView({
   };
 
   // Determine which meals to display based on fasting mode
+  const FASTING_MEAL_ORDER = [
+    "pre-iftar",
+    "iftar",
+    "full-meal-taraweeh",
+    "snack-taraweeh",
+    "suhoor",
+  ];
+
   const mealSlots = isFastingMode
-    ? fastingSelectedMeals || []
+    ? (fastingSelectedMeals || []).sort(
+        (a, b) =>
+          FASTING_MEAL_ORDER.indexOf(a) - FASTING_MEAL_ORDER.indexOf(b),
+      )
     : ["breakfast", "lunch", "dinner", "snacks"];
 
   // Fasting meal emoji mapping
