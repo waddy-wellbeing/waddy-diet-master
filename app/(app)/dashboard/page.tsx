@@ -272,7 +272,7 @@ export default async function DashboardPage() {
   }
 
   // Fasting meals that skip meal_type filtering (use ALL recipes, filter by calories only)
-  // Only 'pre-iftar' uses specific meal_type filtering
+  // pre-iftar is special: only meal_type filter, NO calorie scaling
   const FASTING_CALORIES_ONLY_MEALS = [
     "iftar",
     "full-meal-taraweeh",
@@ -286,12 +286,33 @@ export default async function DashboardPage() {
       const acceptedMealTypes = mealTypeMapping[mealSlot] || [];
       const primaryMealType = acceptedMealTypes[0];
       const isCaloriesOnlySlot = FASTING_CALORIES_ONLY_MEALS.includes(mealSlot);
+      const isPreIftar = mealSlot === "pre-iftar";
 
       const suitableRecipes: ScaledRecipe[] = [];
 
       for (const recipe of allRecipes) {
+        // Pre-iftar: ONLY filter by meal_type "pre-iftar", skip all calorie logic
+        if (isPreIftar) {
+          const recipeMealTypes = recipe.meal_type || [];
+          const matchesMealType = acceptedMealTypes.some((t) =>
+            recipeMealTypes.some(
+              (rmt: string) => rmt.toLowerCase() === t.toLowerCase(),
+            ),
+          );
+          if (!matchesMealType) continue;
+          
+          // Add recipe as-is with scale factor 1.0 (no scaling)
+          suitableRecipes.push({
+            ...recipe,
+            scale_factor: 1.0,
+            scaled_calories: recipe.nutrition_per_serving?.calories || 0,
+            original_calories: recipe.nutrition_per_serving?.calories || 0,
+          });
+          continue; // Skip calorie scaling logic below
+        }
+
         // For fasting meals (except pre-iftar): skip meal_type filtering, use all recipes
-        // For regular meals and pre-iftar: filter by meal_type as usual
+        // For regular meals: filter by meal_type as usual
         if (!isCaloriesOnlySlot) {
           const recipeMealTypes = recipe.meal_type || [];
           const matchesMealType = acceptedMealTypes.some((t) =>
