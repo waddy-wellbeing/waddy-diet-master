@@ -20,6 +20,13 @@ export interface AdminUserPlan {
     dinner?: { recipe_id: string; servings: number }
     snacks?: { recipe_id: string; servings: number }[]
   }
+  fasting_plan?: {
+    'pre-iftar'?: { recipe_id: string; servings: number }
+    'iftar'?: { recipe_id: string; servings: number }
+    'full-meal-taraweeh'?: { recipe_id: string; servings: number }
+    'snack-taraweeh'?: { recipe_id: string; servings: number }
+    'suhoor'?: { recipe_id: string; servings: number }
+  }
   daily_totals: {
     calories?: number
     protein_g?: number
@@ -115,6 +122,8 @@ export async function getUserPlans(userId: string, daysBack = 30, daysForward = 
     plans: AdminUserPlan[]
     recipes: Record<string, AdminRecipeInfo>
     profile: AdminUserProfile | null
+    isFastingMode: boolean
+    fastingSelectedMeals: string[]
   }
   error?: string
 }> {
@@ -137,7 +146,7 @@ export async function getUserPlans(userId: string, daysBack = 30, daysForward = 
     // Fetch user's plans
     const { data: plans, error: plansError } = await supabase
       .from('daily_plans')
-      .select('id, plan_date, plan, daily_totals')
+      .select('id, plan_date, plan, fasting_plan, daily_totals')
       .eq('user_id', userId)
       .gte('plan_date', startDateStr)
       .lte('plan_date', endDateStr)
@@ -150,9 +159,10 @@ export async function getUserPlans(userId: string, daysBack = 30, daysForward = 
 
     console.log(`Fetched ${plans?.length || 0} plans for user ${userId}:`, plans)
 
-    // Extract all unique recipe IDs from plans
+    // Extract all unique recipe IDs from plans (both regular and fasting)
     const recipeIds = new Set<string>()
     for (const plan of plans || []) {
+      // Regular plan recipes
       const p = plan.plan as AdminUserPlan['plan']
       if (p?.breakfast?.recipe_id) recipeIds.add(p.breakfast.recipe_id)
       if (p?.lunch?.recipe_id) recipeIds.add(p.lunch.recipe_id)
@@ -161,6 +171,16 @@ export async function getUserPlans(userId: string, daysBack = 30, daysForward = 
         for (const snack of p.snacks) {
           if (snack?.recipe_id) recipeIds.add(snack.recipe_id)
         }
+      }
+      
+      // Fasting plan recipes
+      const fp = plan.fasting_plan as AdminUserPlan['fasting_plan']
+      if (fp) {
+        if (fp['pre-iftar']?.recipe_id) recipeIds.add(fp['pre-iftar'].recipe_id)
+        if (fp['iftar']?.recipe_id) recipeIds.add(fp['iftar'].recipe_id)
+        if (fp['full-meal-taraweeh']?.recipe_id) recipeIds.add(fp['full-meal-taraweeh'].recipe_id)
+        if (fp['snack-taraweeh']?.recipe_id) recipeIds.add(fp['snack-taraweeh'].recipe_id)
+        if (fp['suhoor']?.recipe_id) recipeIds.add(fp['suhoor'].recipe_id)
       }
     }
 
@@ -183,14 +203,19 @@ export async function getUserPlans(userId: string, daysBack = 30, daysForward = 
       }
     }
 
-    // Fetch user profile
+    // Fetch user profile with preferences
     const { data: profile } = await supabase
       .from('profiles')
-      .select('user_id, name, email, basic_info, created_at, role')
+      .select('user_id, name, email, basic_info, preferences, created_at, role')
       .eq('user_id', userId)
       .single()
 
     console.log('User profile:', profile)
+
+    // Extract fasting preferences
+    const preferences = (profile as any)?.preferences || {}
+    const isFastingMode = preferences.is_fasting || false
+    const fastingSelectedMeals = preferences.fasting_selected_meals || []
 
     return {
       success: true,
@@ -198,6 +223,8 @@ export async function getUserPlans(userId: string, daysBack = 30, daysForward = 
         plans: plans as AdminUserPlan[],
         recipes,
         profile: profile as AdminUserProfile | null,
+        isFastingMode,
+        fastingSelectedMeals,
       },
     }
   } catch (error) {
@@ -255,10 +282,10 @@ export async function getDayPlan(userId: string, planDate: string): Promise<{
   try {
     const supabase = createAdminClient()
 
-    // Fetch the specific day's plan
+    // Fetch the specific day's plan (include fasting_plan)
     const { data: plan, error: planError } = await supabase
       .from('daily_plans')
-      .select('id, plan_date, plan, daily_totals')
+      .select('id, plan_date, plan, fasting_plan, daily_totals')
       .eq('user_id', userId)
       .eq('plan_date', planDate)
       .single()
@@ -280,7 +307,7 @@ export async function getDayPlan(userId: string, planDate: string): Promise<{
       }
     }
 
-    // Extract recipe IDs
+    // Extract recipe IDs from both regular and fasting plans
     const recipeIds = new Set<string>()
     const p = plan.plan as AdminUserPlan['plan']
     
@@ -291,6 +318,16 @@ export async function getDayPlan(userId: string, planDate: string): Promise<{
       for (const snack of p.snacks) {
         if (snack?.recipe_id) recipeIds.add(snack.recipe_id)
       }
+    }
+    
+    // Extract fasting plan recipe IDs
+    const fp = plan.fasting_plan as AdminUserPlan['fasting_plan']
+    if (fp) {
+      if (fp['pre-iftar']?.recipe_id) recipeIds.add(fp['pre-iftar'].recipe_id)
+      if (fp['iftar']?.recipe_id) recipeIds.add(fp['iftar'].recipe_id)
+      if (fp['full-meal-taraweeh']?.recipe_id) recipeIds.add(fp['full-meal-taraweeh'].recipe_id)
+      if (fp['snack-taraweeh']?.recipe_id) recipeIds.add(fp['snack-taraweeh'].recipe_id)
+      if (fp['suhoor']?.recipe_id) recipeIds.add(fp['suhoor'].recipe_id)
     }
 
     // Fetch recipes
@@ -330,12 +367,14 @@ export async function updateUserMeal({
   mealType,
   recipeId,
   snackIndex,
+  isFastingMode,
 }: {
   userId: string
   planDate: string
   mealType: string
   recipeId: string
   snackIndex?: number | null
+  isFastingMode?: boolean
 }): Promise<{
   success: boolean
   error?: string
@@ -343,42 +382,53 @@ export async function updateUserMeal({
   try {
     const supabase = createAdminClient()
 
-    // Get existing plan
+    // Get existing plan (both regular and fasting)
     const { data: existingPlan } = await supabase
       .from('daily_plans')
-      .select('plan, daily_totals')
+      .select('plan, fasting_plan, daily_totals')
       .eq('user_id', userId)
       .eq('plan_date', planDate)
       .maybeSingle()
 
-    // Build updated plan
-    const currentPlan = (existingPlan?.plan as any) || {}
+    // Determine which column to update
+    const columnName = isFastingMode ? 'fasting_plan' : 'plan'
+    const otherColumnName = isFastingMode ? 'plan' : 'fasting_plan'
+    
+    const currentPlan = (existingPlan?.[columnName] as any) || {}
     const updatedPlan = { ...currentPlan }
 
     // Update the specific meal
     if (mealType === 'snacks' && snackIndex !== null && snackIndex !== undefined) {
-      // Update specific snack in array
+      // Update specific snack in array (regular mode only)
       const snacks = Array.isArray(updatedPlan.snacks) ? [...updatedPlan.snacks] : []
       snacks[snackIndex] = { recipe_id: recipeId, servings: 1 }
       updatedPlan.snacks = snacks
     } else {
-      // Update breakfast/lunch/dinner
+      // Update meal (breakfast/lunch/dinner or fasting meals)
       updatedPlan[mealType] = { recipe_id: recipeId, servings: 1 }
     }
 
-    // Save to database with conflict resolution on user_id + plan_date
+    // Preserve the other column (don't overwrite it)
+    const otherColumnData = existingPlan?.[otherColumnName] || null
+
+    // Save to database - include BOTH columns to preserve data
+    const upsertData: any = {
+      user_id: userId,
+      plan_date: planDate,
+      updated_at: new Date().toISOString(),
+    }
+    
+    // Set both columns explicitly
+    upsertData[columnName] = updatedPlan
+    if (otherColumnData) {
+      upsertData[otherColumnName] = otherColumnData
+    }
+
     const { error } = await supabase
       .from('daily_plans')
-      .upsert(
-        {
-          user_id: userId,
-          plan_date: planDate,
-          plan: updatedPlan,
-        },
-        {
-          onConflict: 'user_id,plan_date', // Specify unique constraint columns
-        }
-      )
+      .upsert(upsertData, {
+        onConflict: 'user_id,plan_date',
+      })
 
     if (error) {
       console.error('Error updating meal:', error)

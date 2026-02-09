@@ -26,10 +26,12 @@ export default async function DashboardPage() {
     redirect("/login");
   }
 
-  // Fetch user profile
+  // Fetch user profile (explicitly select preferences to ensure JSONB parsing)
   const { data: profile } = await supabase
     .from("profiles")
-    .select("*")
+    .select(
+      "id, user_id, name, email, avatar_url, role, plan_status, basic_info, targets, preferences, goals, onboarding_completed, onboarding_step, created_at, updated_at",
+    )
     .eq("user_id", user.id)
     .single();
 
@@ -113,11 +115,20 @@ export default async function DashboardPage() {
     }
   }
 
+  // Get fasting mode early (needed for weekPlansMap processing)
+  const isFastingModeCheck = profile.preferences?.is_fasting || false;
+
   // Process week plans for indicators
+  // Use correct column based on fasting mode
   const weekPlansMap: Record<string, DailyPlan> = {};
   if (weekPlans) {
     for (const planRecord of weekPlans) {
-      weekPlansMap[planRecord.plan_date] = planRecord.plan as DailyPlan;
+      const planData = isFastingModeCheck
+        ? (planRecord.fasting_plan as DailyPlan)
+        : (planRecord.plan as DailyPlan);
+      if (planData) {
+        weekPlansMap[planRecord.plan_date] = planData;
+      }
     }
   }
 
@@ -147,7 +158,6 @@ export default async function DashboardPage() {
 
   // Use user's saved meal structure if available, otherwise default percentages
   const userMealStructure = profile.preferences?.meal_structure;
-  const isFastingModeCheck = profile.preferences?.is_fasting || false;
   const mealTargets: Record<string, number> = {};
 
   if (isFastingModeCheck) {
@@ -298,19 +308,24 @@ export default async function DashboardPage() {
         // Calculate scale factor to hit exact target calories
         const scaleFactor = targetCalories / baseCalories;
 
-        // Check if scaling is within acceptable limits (0.5x - 2.0x for ALL meals)
-        if (scaleFactor < minScale || scaleFactor > maxScale) continue;
-
-        // THEN filter by meal_type
+        // Check meal_type filter FIRST
+        let matchesMealType = true;
         if (!isCaloriesOnlySlot) {
           const recipeMealTypes = recipe.meal_type || [];
-          const matchesMealType = acceptedMealTypes.some((t) =>
+          matchesMealType = acceptedMealTypes.some((t) =>
             recipeMealTypes.some(
               (rmt: string) => rmt.toLowerCase() === t.toLowerCase(),
             ),
           );
+          // Skip if doesn't match meal type (this is a hard filter)
           if (!matchesMealType) continue;
         }
+
+        // Check if scaling is within acceptable limits (0.5x - 2.0x)
+        // BUT: Don't skip recipes outside range - include ALL recipes for meal type
+        // This ensures planned recipes are always available even if they don't fit current calorie targets
+        const isWithinCalorieRange =
+          scaleFactor >= minScale && scaleFactor <= maxScale;
 
         // Calculate recipe's macro percentages
         const recipeProtein = nutritionData?.protein_g || 0;
@@ -344,20 +359,26 @@ export default async function DashboardPage() {
         );
 
         // For pre-iftar: force score to 0 so they appear LAST in sorted list
-        const finalScore = isPreIftar ? 0 : macroSimilarityScore;
+        // For recipes outside calorie range: also set score to -1 so they appear after pre-iftar
+        const finalScore = isPreIftar
+          ? 0
+          : !isWithinCalorieRange
+            ? -1
+            : macroSimilarityScore;
 
         suitableRecipes.push({
           ...(recipe as RecipeRecord),
           scale_factor: Math.round(scaleFactor * 100) / 100,
           scaled_calories: targetCalories, // Always equals target after scaling
           original_calories: baseCalories,
-          macro_similarity_score: finalScore, // Pre-iftar gets 0, others get calculated score
+          macro_similarity_score: finalScore, // Pre-iftar gets 0, out-of-range gets -1, others get calculated score
         });
       }
 
       // Sort by: 1) Macro similarity (descending), 2) Primary meal type, 3) Scale factor closest to 1.0
       suitableRecipes.sort((a, b) => {
         // First priority: Macro similarity (higher is better)
+        // Negative scores (out-of-range recipes) will appear last
         const macroScoreDiff =
           (b.macro_similarity_score || 0) - (a.macro_similarity_score || 0);
         if (Math.abs(macroScoreDiff) > 5) return macroScoreDiff; // Only prioritize if difference > 5 points

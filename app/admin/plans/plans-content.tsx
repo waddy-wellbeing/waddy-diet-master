@@ -54,6 +54,14 @@ function formatDate(dateStr: string): string {
   });
 }
 
+// Get date string in local timezone (YYYY-MM-DD)
+function getLocalDateString(date: Date): string {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
 // Get week dates array
 function getWeekDates(centerDate: Date): Date[] {
   const dates: Date[] = [];
@@ -138,7 +146,10 @@ function MealCard({
 
   if (!recipe) {
     return (
-      <Card className="border-dashed hover:border-primary/50 transition-colors cursor-pointer" onClick={() => onEdit?.()}>
+      <Card
+        className="border-dashed hover:border-primary/50 transition-colors cursor-pointer"
+        onClick={() => onEdit?.()}
+      >
         <CardContent className="p-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
@@ -230,6 +241,8 @@ function DayPlanView({
   onEditMeal,
   onCreatePlan,
   loadingMealKey,
+  isFastingMode,
+  fastingSelectedMeals,
 }: {
   date: Date;
   plan: AdminUserPlan | null;
@@ -237,9 +250,11 @@ function DayPlanView({
   onEditMeal?: (mealType: string, snackIndex?: number) => void;
   onCreatePlan?: () => void;
   loadingMealKey?: string | null;
+  isFastingMode?: boolean;
+  fastingSelectedMeals?: string[];
 }) {
-  const dateStr = date.toISOString().split("T")[0];
-  const isToday = dateStr === new Date().toISOString().split("T")[0];
+  const dateStr = getLocalDateString(date);
+  const isToday = dateStr === getLocalDateString(new Date());
   const isUnplanned = !plan;
 
   // Show "Create Plan" button for unplanned days
@@ -283,9 +298,11 @@ function DayPlanView({
   }
 
   const getMealRecipe = (
-    mealType: "breakfast" | "lunch" | "dinner",
+    mealType: string,
   ): { recipe: AdminRecipeInfo | null; servings: number } => {
-    const meal = plan?.plan?.[mealType];
+    // Choose plan based on fasting mode
+    const activePlan = isFastingMode ? plan?.fasting_plan : plan?.plan;
+    const meal = (activePlan as any)?.[mealType];
     if (!meal?.recipe_id) return { recipe: null, servings: 0 };
     return {
       recipe: recipes[meal.recipe_id] || null,
@@ -304,10 +321,28 @@ function DayPlanView({
     }));
   };
 
-  const breakfast = getMealRecipe("breakfast");
-  const lunch = getMealRecipe("lunch");
-  const dinner = getMealRecipe("dinner");
-  const snacks = getSnacks();
+  // Determine which meals to display based on fasting mode
+  const mealSlots = isFastingMode
+    ? fastingSelectedMeals || []
+    : ["breakfast", "lunch", "dinner", "snacks"];
+
+  // Fasting meal emoji mapping
+  const fastingMealEmoji: Record<string, string> = {
+    "pre-iftar": "🥤",
+    iftar: "🌙",
+    "full-meal-taraweeh": "🕌",
+    "snack-taraweeh": "🍪",
+    suhoor: "🌅",
+  };
+
+  // Fasting meal labels (Arabic)
+  const fastingMealLabels: Record<string, string> = {
+    "pre-iftar": "ما قبل الإفطار",
+    iftar: "الإفطار",
+    "full-meal-taraweeh": "وجبة كاملة - تراويح",
+    "snack-taraweeh": "سناك - تراويح",
+    suhoor: "السحور",
+  };
 
   return (
     <div className="space-y-3">
@@ -316,6 +351,11 @@ function DayPlanView({
           <p className="font-semibold">
             {formatDate(dateStr)}
             {isToday && <Badge className="ml-2 text-xs">Today</Badge>}
+            {isFastingMode && (
+              <Badge variant="secondary" className="ml-2 text-xs">
+                🌙 Fasting
+              </Badge>
+            )}
           </p>
           {plan?.daily_totals && (
             <p className="text-xs text-muted-foreground">
@@ -329,54 +369,85 @@ function DayPlanView({
       </div>
 
       <div className="grid gap-2">
-        <MealCard
-          mealType="breakfast"
-          recipe={breakfast.recipe}
-          servings={breakfast.servings}
-          onEdit={() => onEditMeal?.("breakfast")}
-          isLoading={loadingMealKey === "breakfast"}
-        />
-        <MealCard
-          mealType="lunch"
-          recipe={lunch.recipe}
-          servings={lunch.servings}
-          onEdit={() => onEditMeal?.("lunch")}
-          isLoading={loadingMealKey === "lunch"}
-        />
-        <MealCard
-          mealType="dinner"
-          recipe={dinner.recipe}
-          servings={dinner.servings}
-          onEdit={() => onEditMeal?.("dinner")}
-          isLoading={loadingMealKey === "dinner"}
-        />
-        <div className="mt-2 pt-2 border-t">
-          <p className="text-xs font-semibold text-muted-foreground mb-2">
-            Snacks
-          </p>
-          <div className="space-y-2">
-            {snacks.length === 0 ? (
-              <MealCard
-                mealType="snacks"
-                recipe={null}
-                servings={1}
-                onEdit={() => onEditMeal?.("snacks", 0)}
-                isLoading={loadingMealKey === `snacks-0`}
-              />
-            ) : (
-              snacks.map((snack, index) => (
+        {isFastingMode ? (
+          // Fasting mode meals
+          mealSlots.map((mealSlot) => {
+            const meal = getMealRecipe(mealSlot);
+            return (
+              <div key={mealSlot} className="relative">
+                {fastingMealEmoji[mealSlot] && (
+                  <div className="absolute -left-8 top-3 text-xl">
+                    {fastingMealEmoji[mealSlot]}
+                  </div>
+                )}
                 <MealCard
-                  key={index}
-                  mealType="snacks"
-                  recipe={snack.recipe}
-                  servings={snack.servings}
-                  onEdit={() => onEditMeal?.("snacks", index)}
-                  isLoading={loadingMealKey === `snacks-${index}`}
+                  mealType={mealSlot}
+                  recipe={meal.recipe}
+                  servings={meal.servings}
+                  onEdit={() => onEditMeal?.(mealSlot)}
+                  isLoading={loadingMealKey === mealSlot}
                 />
-              ))
-            )}
-          </div>
-        </div>
+                {fastingMealLabels[mealSlot] && (
+                  <p className="text-xs text-muted-foreground mt-1 text-right">
+                    {fastingMealLabels[mealSlot]}
+                  </p>
+                )}
+              </div>
+            );
+          })
+        ) : (
+          // Regular mode meals
+          <>
+            <MealCard
+              mealType="breakfast"
+              recipe={getMealRecipe("breakfast").recipe}
+              servings={getMealRecipe("breakfast").servings}
+              onEdit={() => onEditMeal?.("breakfast")}
+              isLoading={loadingMealKey === "breakfast"}
+            />
+            <MealCard
+              mealType="lunch"
+              recipe={getMealRecipe("lunch").recipe}
+              servings={getMealRecipe("lunch").servings}
+              onEdit={() => onEditMeal?.("lunch")}
+              isLoading={loadingMealKey === "lunch"}
+            />
+            <MealCard
+              mealType="dinner"
+              recipe={getMealRecipe("dinner").recipe}
+              servings={getMealRecipe("dinner").servings}
+              onEdit={() => onEditMeal?.("dinner")}
+              isLoading={loadingMealKey === "dinner"}
+            />
+            <div className="mt-2 pt-2 border-t">
+              <p className="text-xs font-semibold text-muted-foreground mb-2">
+                Snacks
+              </p>
+              <div className="space-y-2">
+                {getSnacks().length === 0 ? (
+                  <MealCard
+                    mealType="snacks"
+                    recipe={null}
+                    servings={1}
+                    onEdit={() => onEditMeal?.("snacks", 0)}
+                    isLoading={loadingMealKey === `snacks-0`}
+                  />
+                ) : (
+                  getSnacks().map((snack, index) => (
+                    <MealCard
+                      key={index}
+                      mealType="snacks"
+                      recipe={snack.recipe}
+                      servings={snack.servings}
+                      onEdit={() => onEditMeal?.("snacks", index)}
+                      isLoading={loadingMealKey === `snacks-${index}`}
+                    />
+                  ))
+                )}
+              </div>
+            </div>
+          </>
+        )}
       </div>
     </div>
   );
@@ -397,10 +468,19 @@ export function PlansContent({ initialUsers }: PlansContentProps) {
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [loadingDate, setLoadingDate] = useState(false);
 
+  // Fasting mode state
+  const [isFastingMode, setIsFastingMode] = useState(false);
+  const [fastingSelectedMeals, setFastingSelectedMeals] = useState<string[]>(
+    [],
+  );
+
   // Recipe picker state
   const [pickerOpen, setPickerOpen] = useState(false);
   const [allRecipes, setAllRecipes] = useState<any[]>([]);
   const [activeMealType, setActiveMealType] = useState<string | null>(null);
+  const [activeMealTypeForPicker, setActiveMealTypeForPicker] = useState<
+    string | null
+  >(null);
   const [activeSnackIndex, setActiveSnackIndex] = useState<number | null>(null);
   const [loadingMealKey, setLoadingMealKey] = useState<string | null>(null);
 
@@ -416,13 +496,15 @@ export function PlansContent({ initialUsers }: PlansContentProps) {
             selectedDate: date.toISOString(),
             userPlans,
             recipes,
+            isFastingMode,
+            fastingSelectedMeals,
           }),
         );
       } catch (error) {
         console.error("Error saving session state:", error);
       }
     },
-    [userPlans, recipes],
+    [userPlans, recipes, isFastingMode, fastingSelectedMeals],
   );
 
   // Load last opened session from localStorage on mount
@@ -441,6 +523,8 @@ export function PlansContent({ initialUsers }: PlansContentProps) {
             setSelectedDate(new Date(session.selectedDate));
             setUserPlans(session.userPlans || []);
             setRecipes(session.recipes || {});
+            setIsFastingMode(session.isFastingMode || false);
+            setFastingSelectedMeals(session.fastingSelectedMeals || []);
           }
         }
       }
@@ -508,9 +592,13 @@ export function PlansContent({ initialUsers }: PlansContentProps) {
     if (result.success && result.data) {
       setUserPlans(result.data.plans);
       setRecipes(result.data.recipes);
+      setIsFastingMode(result.data.isFastingMode);
+      setFastingSelectedMeals(result.data.fastingSelectedMeals);
     } else {
       setUserPlans([]);
       setRecipes({});
+      setIsFastingMode(false);
+      setFastingSelectedMeals([]);
     }
     setIsLoadingPlans(false);
   }, []);
@@ -524,13 +612,27 @@ export function PlansContent({ initialUsers }: PlansContentProps) {
 
   // Get plan for a specific date
   const getPlanForDate = (date: Date): AdminUserPlan | null => {
-    const dateStr = date.toISOString().split("T")[0];
+    const dateStr = getLocalDateString(date);
     return userPlans.find((p) => p.plan_date === dateStr) || null;
   };
 
   // Handle edit meal - opens recipe picker
   const handleEditMeal = (mealType: string, snackIndex?: number) => {
-    setActiveMealType(mealType);
+    // Map fasting meal slots to recipe meal_type for filtering
+    let recipeMealType = mealType;
+    if (isFastingMode) {
+      const fastingMealTypeMap: Record<string, string> = {
+        "pre-iftar": "pre-iftar",
+        iftar: "lunch",
+        "full-meal-taraweeh": "dinner",
+        "snack-taraweeh": "snack",
+        suhoor: "breakfast",
+      };
+      recipeMealType = fastingMealTypeMap[mealType] || mealType;
+    }
+
+    setActiveMealType(mealType); // Store original meal slot name for saving
+    setActiveMealTypeForPicker(recipeMealType); // Mapped type for recipe filtering
     setActiveSnackIndex(snackIndex ?? null);
     setPickerOpen(true);
   };
@@ -539,7 +641,7 @@ export function PlansContent({ initialUsers }: PlansContentProps) {
   const handleRecipeSelected = async (recipeId: string) => {
     if (!selectedUser || !activeMealType) return;
 
-    const dateStr = selectedDate.toISOString().split("T")[0];
+    const dateStr = getLocalDateString(selectedDate);
     const mealKey =
       activeSnackIndex !== null ? `snacks-${activeSnackIndex}` : activeMealType;
 
@@ -554,6 +656,7 @@ export function PlansContent({ initialUsers }: PlansContentProps) {
         mealType: activeMealType,
         recipeId,
         snackIndex: activeSnackIndex,
+        isFastingMode,
       });
 
       if (!result.success) {
@@ -586,6 +689,7 @@ export function PlansContent({ initialUsers }: PlansContentProps) {
     } finally {
       setLoadingMealKey(null);
       setActiveMealType(null);
+      setActiveMealTypeForPicker(null);
       setActiveSnackIndex(null);
     }
   };
@@ -594,7 +698,7 @@ export function PlansContent({ initialUsers }: PlansContentProps) {
   const handleCreatePlan = async () => {
     if (!selectedUser) return;
 
-    const dateStr = selectedDate.toISOString().split("T")[0];
+    const dateStr = getLocalDateString(selectedDate);
     setLoadingMealKey("create-plan");
 
     try {
@@ -770,11 +874,11 @@ export function PlansContent({ initialUsers }: PlansContentProps) {
                 {/* Week Days */}
                 <div className="grid grid-cols-7 gap-1">
                   {weekDates.map((date) => {
-                    const dateStr = date.toISOString().split("T")[0];
-                    const todayStr = new Date().toISOString().split("T")[0];
+                    const dateStr = getLocalDateString(date);
+                    const todayStr = getLocalDateString(new Date());
                     const isToday = dateStr === todayStr;
                     const isSelected =
-                      dateStr === selectedDate.toISOString().split("T")[0];
+                      dateStr === getLocalDateString(selectedDate);
                     const hasPlan = getPlanForDate(date) !== null;
 
                     return (
@@ -859,6 +963,8 @@ export function PlansContent({ initialUsers }: PlansContentProps) {
                   onEditMeal={handleEditMeal}
                   onCreatePlan={handleCreatePlan}
                   loadingMealKey={loadingMealKey}
+                  isFastingMode={isFastingMode}
+                  fastingSelectedMeals={fastingSelectedMeals}
                 />
               </CardContent>
             </Card>
@@ -872,7 +978,7 @@ export function PlansContent({ initialUsers }: PlansContentProps) {
         onOpenChange={setPickerOpen}
         recipes={allRecipes}
         onRecipeSelected={handleRecipeSelected}
-        mealType={activeMealType as any}
+        mealType={activeMealTypeForPicker as any}
       />
     </div>
   );

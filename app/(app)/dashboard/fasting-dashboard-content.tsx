@@ -59,7 +59,11 @@ interface ScaledRecipe extends RecipeRecord {
 interface DashboardContentProps {
   profile: Profile;
   initialDailyLog: { log: DailyLog; logged_totals: DailyTotals } | null;
-  initialDailyPlan: { plan: DailyPlan; daily_totals: DailyTotals } | null;
+  initialDailyPlan: {
+    plan: DailyPlan;
+    daily_totals: DailyTotals;
+    fasting_plan?: DailyPlan;
+  } | null;
   initialWeekLogs: Record<string, { consumed: number }>;
   initialWeekPlans?: Record<string, DailyPlan>;
   initialWeekLogsMap?: Record<string, DailyLog>;
