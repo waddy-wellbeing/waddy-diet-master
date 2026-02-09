@@ -61,42 +61,40 @@ export function RecipePickerSheet({
 }: RecipePickerSheetProps) {
   const [searchQuery, setSearchQuery] = useState("");
 
-  // Fasting meals that show ALL recipes (filter by calories only, not meal_type)
-  const FASTING_CALORIES_ONLY_MEALS = [
-    "iftar",
-    "full-meal-taraweeh",
-    "snack-taraweeh",
-    "suhoor",
-  ];
+  // All fasting meals now use meal_type filtering
+  // Only keeping this array for structure consistency (but it's empty)
+  const FASTING_CALORIES_ONLY_MEALS: string[] = [];
 
   // Filter recipes based on meal type and search query
   const filteredRecipes = useMemo(() => {
     if (!mealType) return [];
 
-    // Meal type mapping for regular meals and pre-iftar
+    // Meal type mapping for all meals (regular + fasting)
     const mealTypeMapping: Record<string, string[]> = {
       breakfast: ["breakfast", "smoothies"],
       lunch: ["lunch", "one pot", "side dishes"],
       dinner: ["dinner", "one pot", "side dishes"],
       snacks: ["snack", "snacks & sweetes", "smoothies"],
-      "pre-iftar": ["pre-iftar"], // Only pre-iftar tagged recipes
+      // Fasting meal mappings
+      "pre-iftar": ["pre-iftar", "smoothies"], // Pre-iftar first, then smoothies as fallback
+      iftar: ["lunch"], // Main breaking fast meal - lunch recipes only
+      "full-meal-taraweeh": ["lunch", "dinner"], // Full meal after prayers - lunch or dinner
+      "snack-taraweeh": ["snack"], // Snack after prayers - snack recipes only
+      suhoor: ["breakfast", "dinner"], // Pre-dawn meal - breakfast or dinner
     };
 
     const isCaloriesOnly = FASTING_CALORIES_ONLY_MEALS.includes(mealType);
     const acceptedTypes = mealTypeMapping[mealType] || [];
 
     return recipes.filter((recipe) => {
-      // For fasting meals (except pre-iftar): show ALL recipes, no meal_type filtering
-      // For regular meals and pre-iftar: filter by meal_type
-      if (!isCaloriesOnly) {
-        const recipeMealTypes = recipe.meal_type || [];
-        const matchesMealType = acceptedTypes.some((t) =>
-          recipeMealTypes.some(
-            (rmt: string) => rmt.toLowerCase() === t.toLowerCase(),
-          ),
-        );
-        if (!matchesMealType) return false;
-      }
+      // All meals now use meal_type filtering (FASTING_CALORIES_ONLY_MEALS is empty)
+      const recipeMealTypes = recipe.meal_type || [];
+      const matchesMealType = acceptedTypes.some((t) =>
+        recipeMealTypes.some(
+          (rmt: string) => rmt.toLowerCase() === t.toLowerCase(),
+        ),
+      );
+      if (!matchesMealType) return false;
 
       // Filter by search query
       if (searchQuery.trim()) {

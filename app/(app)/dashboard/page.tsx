@@ -217,11 +217,11 @@ export default async function DashboardPage() {
     snack_3: ["snack", "snacks & sweetes", "smoothies"],
     evening: ["snack", "snacks & sweetes", "smoothies"], // Evening snack
     // Fasting meal mappings
-    "pre-iftar": ["pre-iftar"], // UNIQUE: Only recipes tagged as pre-iftar (dates, light snacks to break fast)
-    iftar: ["dinner", "lunch", "one pot", "side dishes"], // Main breaking fast meal
-    "full-meal-taraweeh": ["dinner", "lunch", "one pot"], // Full meal after prayers
-    "snack-taraweeh": ["snack", "snacks & sweetes"], // Snack after prayers
-    suhoor: ["breakfast", "smoothies", "snack"], // Pre-dawn meal
+    "pre-iftar": ["pre-iftar", "smoothies"], // Pre-iftar first, then smoothies as fallback
+    iftar: ["lunch"], // Main breaking fast meal - lunch recipes only
+    "full-meal-taraweeh": ["lunch", "dinner"], // Full meal after prayers - lunch or dinner
+    "snack-taraweeh": ["snack"], // Snack after prayers - snack recipes only
+    suhoor: ["breakfast", "dinner"], // Pre-dawn meal - breakfast or dinner
   };
 
   // Get scaling limits from system settings or use defaults
@@ -271,14 +271,9 @@ export default async function DashboardPage() {
     recipesByMealType[slot] = [];
   }
 
-  // Fasting meals that skip meal_type filtering (use ALL recipes, filter by calories only)
   // pre-iftar is special: only meal_type filter, NO calorie scaling
-  const FASTING_CALORIES_ONLY_MEALS = [
-    "iftar",
-    "full-meal-taraweeh",
-    "snack-taraweeh",
-    "suhoor",
-  ];
+  // All other fasting meals now use both meal_type filtering AND calorie scaling
+  const FASTING_CALORIES_ONLY_MEALS: string[] = [];
 
   if (allRecipes) {
     for (const mealSlot of mealSlots) {
@@ -291,28 +286,22 @@ export default async function DashboardPage() {
       const suitableRecipes: ScaledRecipe[] = [];
 
       for (const recipe of allRecipes) {
-        // Pre-iftar: ONLY filter by meal_type "pre-iftar", skip all calorie logic
-        if (isPreIftar) {
-          const recipeMealTypes = recipe.meal_type || [];
-          const matchesMealType = acceptedMealTypes.some((t) =>
-            recipeMealTypes.some(
-              (rmt: string) => rmt.toLowerCase() === t.toLowerCase(),
-            ),
-          );
-          if (!matchesMealType) continue;
-          
-          // Add recipe as-is with scale factor 1.0 (no scaling)
-          suitableRecipes.push({
-            ...recipe,
-            scale_factor: 1.0,
-            scaled_calories: recipe.nutrition_per_serving?.calories || 0,
-            original_calories: recipe.nutrition_per_serving?.calories || 0,
-          });
-          continue; // Skip calorie scaling logic below
-        }
+        // Parse nutrition_per_serving if it's a JSON string
+        const nutritionData =
+          typeof recipe.nutrition_per_serving === "string"
+            ? JSON.parse(recipe.nutrition_per_serving)
+            : recipe.nutrition_per_serving;
 
-        // For fasting meals (except pre-iftar): skip meal_type filtering, use all recipes
-        // For regular meals: filter by meal_type as usual
+        const baseCalories = nutritionData?.calories;
+        if (!baseCalories || baseCalories <= 0) continue;
+
+        // Calculate scale factor to hit exact target calories
+        const scaleFactor = targetCalories / baseCalories;
+
+        // Check if scaling is within acceptable limits (0.5x - 2.0x for ALL meals)
+        if (scaleFactor < minScale || scaleFactor > maxScale) continue;
+
+        // THEN filter by meal_type
         if (!isCaloriesOnlySlot) {
           const recipeMealTypes = recipe.meal_type || [];
           const matchesMealType = acceptedMealTypes.some((t) =>
@@ -323,19 +312,10 @@ export default async function DashboardPage() {
           if (!matchesMealType) continue;
         }
 
-        const baseCalories = recipe.nutrition_per_serving?.calories;
-        if (!baseCalories || baseCalories <= 0) continue;
-
-        // Calculate scale factor to hit exact target calories
-        const scaleFactor = targetCalories / baseCalories;
-
-        // Check if scaling is within acceptable limits
-        if (scaleFactor < minScale || scaleFactor > maxScale) continue;
-
         // Calculate recipe's macro percentages
-        const recipeProtein = recipe.nutrition_per_serving?.protein_g || 0;
-        const recipeCarbs = recipe.nutrition_per_serving?.carbs_g || 0;
-        const recipeFat = recipe.nutrition_per_serving?.fat_g || 0;
+        const recipeProtein = nutritionData?.protein_g || 0;
+        const recipeCarbs = nutritionData?.carbs_g || 0;
+        const recipeFat = nutritionData?.fat_g || 0;
         const recipeMacroPercentages = {
           protein_pct: Math.round(((recipeProtein * 4) / baseCalories) * 100),
           carbs_pct: Math.round(((recipeCarbs * 4) / baseCalories) * 100),
@@ -363,12 +343,15 @@ export default async function DashboardPage() {
           proteinScore * 0.5 + carbsScore * 0.3 + fatScore * 0.2,
         );
 
+        // For pre-iftar: force score to 0 so they appear LAST in sorted list
+        const finalScore = isPreIftar ? 0 : macroSimilarityScore;
+
         suitableRecipes.push({
           ...(recipe as RecipeRecord),
           scale_factor: Math.round(scaleFactor * 100) / 100,
           scaled_calories: targetCalories, // Always equals target after scaling
           original_calories: baseCalories,
-          macro_similarity_score: macroSimilarityScore, // Add score for sorting
+          macro_similarity_score: finalScore, // Pre-iftar gets 0, others get calculated score
         });
       }
 
