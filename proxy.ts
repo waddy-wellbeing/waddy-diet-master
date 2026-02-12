@@ -30,9 +30,22 @@ export default async function proxy(request: NextRequest) {
   const pathname = request.nextUrl.pathname
 
   // Public routes that don't require auth
-  const publicRoutes = ['/', '/login', '/signup', '/health', '/get-started']
+  const publicRoutes = [
+    '/',
+    '/login',
+    '/signup',
+    '/forgot-password',
+    '/update-password',
+    '/health',
+    '/get-started',
+    '/auth/callback',
+  ]
   const isPublicRoute = publicRoutes.some(
-    (route) => pathname === route || pathname.startsWith('/health') || pathname.startsWith('/get-started')
+    (route) =>
+      pathname === route ||
+      pathname.startsWith('/health') ||
+      pathname.startsWith('/get-started') ||
+      pathname.startsWith('/auth/callback')
   )
 
   // Auth routes (login/signup) - redirect to dashboard if already logged in
