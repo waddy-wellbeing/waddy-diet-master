@@ -5,7 +5,6 @@ import Link from 'next/link'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { forgotPasswordSchema, type ForgotPasswordFormData } from '@/lib/validators/auth'
-import { sendPasswordResetEmail } from '@/lib/actions/auth'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -27,17 +26,31 @@ export default function ForgotPasswordPage() {
   async function onSubmit(data: ForgotPasswordFormData) {
     setIsLoading(true)
 
-    const result = await sendPasswordResetEmail(data.email)
+    try {
+      const response = await fetch('/api/auth/reset-password', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ email: data.email }),
+      })
 
-    if (!result.success) {
-      toast.error(result.error)
+      const result = await response.json()
+
+      if (!result.success) {
+        toast.error(result.error || 'Failed to send reset email')
+        setIsLoading(false)
+        return
+      }
+
+      setEmailSent(true)
+      toast.success('Check your email for the reset link!')
+    } catch (error) {
+      toast.error('An error occurred. Please try again.')
+      console.error('Reset password error:', error)
+    } finally {
       setIsLoading(false)
-      return
     }
-
-    setEmailSent(true)
-    toast.success('Check your email for the reset link!')
-    setIsLoading(false)
   }
 
   return (
