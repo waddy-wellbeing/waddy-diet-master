@@ -79,7 +79,10 @@ export function usePushNotifications() {
           setSubscription(existingSub)
           setIsSubscribed(!!existingSub)
         } catch (err) {
-          console.error('Error checking subscription:', err)
+          // Silently handle timeout - not critical for app functionality
+          if (err instanceof Error && !err.message.includes('Timeout')) {
+            console.error('Error checking subscription:', err)
+          }
           // Don't show error to user for initial check failure
         }
       }

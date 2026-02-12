@@ -6,16 +6,18 @@ import type { DailyPlan, DailyTotals, PlanMealSlot, PlanSnackItem, RecipeNutriti
 
 interface SaveMealToPlanParams {
   date: string // YYYY-MM-DD format
-  mealType: 'breakfast' | 'lunch' | 'dinner' | 'snacks'
+  mealType: 'breakfast' | 'lunch' | 'dinner' | 'snacks' | 'pre-iftar' | 'iftar' | 'full-meal-taraweeh' | 'snack-taraweeh' | 'suhoor'
   recipeId: string
   servings: number
   swappedIngredients?: Record<string, { ingredient_id: string; name: string; quantity: number; unit: string }>
+  isFastingMode?: boolean // NEW: Indicates if this is a fasting plan
 }
 
 type SaveResult = { success: true } | { success: false; error: string }
 
 /**
  * Save or update a meal in the user's daily plan
+ * Saves to 'plan' column for regular mode, 'fasting_plan' column for fasting mode
  */
 export async function saveMealToPlan(params: SaveMealToPlanParams): Promise<SaveResult> {
   try {
@@ -31,13 +33,17 @@ export async function saveMealToPlan(params: SaveMealToPlanParams): Promise<Save
     }
 
     console.log('User authenticated:', user.id)
-    const { date, mealType, recipeId, servings, swappedIngredients } = params
+    const { date, mealType, recipeId, servings, swappedIngredients, isFastingMode } = params
     console.log('Recipe ID to save:', recipeId)
+    console.log('Fasting mode:', isFastingMode)
+
+    // Determine which plan column to use (always use daily_totals for totals)
+    const planColumn = isFastingMode ? 'fasting_plan' : 'plan'
 
     // Get existing plan for this date
     const { data: existingPlan } = await supabase
       .from('daily_plans')
-      .select('plan, daily_totals')
+      .select(`${planColumn}, daily_totals, mode`)
       .eq('user_id', user.id)
       .eq('plan_date', date)
       .maybeSingle()
@@ -59,7 +65,7 @@ export async function saveMealToPlan(params: SaveMealToPlanParams): Promise<Save
 
     if (existingPlan) {
       // Update existing plan
-      const plan = existingPlan.plan as DailyPlan
+      const plan = ((existingPlan as any)[planColumn] || {}) as DailyPlan
 
       if (mealType === 'snacks') {
         // Keep snacks stored as an array (schema convention). Update the first snack slot.
@@ -73,7 +79,7 @@ export async function saveMealToPlan(params: SaveMealToPlanParams): Promise<Save
         }
         plan.snacks = nextSnacks
       } else {
-        plan[mealType] = meal
+        ;(plan as any)[mealType] = meal
       }
 
       // Recalculate totals
@@ -101,15 +107,17 @@ export async function saveMealToPlan(params: SaveMealToPlanParams): Promise<Save
       updatedTotals = await calculateDailyTotals(updatedPlan)
     }
 
-    // Upsert the plan
+    // Upsert the plan - use dynamic column names based on mode
+    const upsertData: any = {
+      user_id: user.id,
+      plan_date: date,
+    }
+    upsertData[planColumn] = updatedPlan
+    upsertData['daily_totals'] = updatedTotals // Always use daily_totals, not fasting_daily_totals
+
     const { error: upsertError } = await supabase
       .from('daily_plans')
-      .upsert({
-        user_id: user.id,
-        plan_date: date,
-        plan: updatedPlan,
-        daily_totals: updatedTotals,
-      }, {
+      .upsert(upsertData, {
         onConflict: 'user_id,plan_date',
       })
 
@@ -142,9 +150,11 @@ async function calculateDailyTotals(plan: DailyPlan): Promise<DailyTotals> {
   let totalCarbs = 0
   let totalFat = 0
 
-  // Calculate for breakfast, lunch, dinner
-  for (const mealType of ['breakfast', 'lunch', 'dinner'] as const) {
-    const meal = plan[mealType]
+  // All single-slot meal types (both regular and fasting)
+  const singleSlotMeals = ['breakfast', 'lunch', 'dinner', 'pre-iftar', 'iftar', 'full-meal-taraweeh', 'suhoor'] as const
+
+  for (const mealType of singleSlotMeals) {
+    const meal = (plan as any)[mealType] as PlanMealSlot | undefined
     if (meal && meal.recipe_id) {
       const { data: recipe } = await supabase
         .from('recipes')
@@ -154,31 +164,37 @@ async function calculateDailyTotals(plan: DailyPlan): Promise<DailyTotals> {
 
       if (recipe && recipe.nutrition_per_serving) {
         const nutrition = recipe.nutrition_per_serving as unknown as RecipeNutrition
-        totalCalories += Math.round((nutrition.calories || 0) * meal.servings)
-        totalProtein += Math.round((nutrition.protein_g || 0) * meal.servings)
-        totalCarbs += Math.round((nutrition.carbs_g || 0) * meal.servings)
-        totalFat += Math.round((nutrition.fat_g || 0) * meal.servings)
+        const servings = meal.servings || 1
+        totalCalories += Math.round((nutrition.calories || 0) * servings)
+        totalProtein += Math.round((nutrition.protein_g || 0) * servings)
+        totalCarbs += Math.round((nutrition.carbs_g || 0) * servings)
+        totalFat += Math.round((nutrition.fat_g || 0) * servings)
       }
     }
   }
 
-  // Handle snacks (array of items)
-  if (plan.snacks && Array.isArray(plan.snacks)) {
-    for (const snack of plan.snacks) {
-      if (snack.recipe_id) {
-        const { data: recipe } = await supabase
-          .from('recipes')
-          .select('nutrition_per_serving')
-          .eq('id', snack.recipe_id)
-          .single()
+  // All array-slot meal types (snacks for regular, snack-taraweeh for fasting)
+  const arraySlotMeals = ['snacks', 'snack-taraweeh'] as const
 
-        if (recipe && recipe.nutrition_per_serving) {
-          const nutrition = recipe.nutrition_per_serving as unknown as RecipeNutrition
-          const servings = snack.servings || 1
-          totalCalories += Math.round((nutrition.calories || 0) * servings)
-          totalProtein += Math.round((nutrition.protein_g || 0) * servings)
-          totalCarbs += Math.round((nutrition.carbs_g || 0) * servings)
-          totalFat += Math.round((nutrition.fat_g || 0) * servings)
+  for (const mealType of arraySlotMeals) {
+    const snackArray = (plan as any)[mealType] as PlanSnackItem[] | undefined
+    if (snackArray && Array.isArray(snackArray)) {
+      for (const snack of snackArray) {
+        if (snack.recipe_id) {
+          const { data: recipe } = await supabase
+            .from('recipes')
+            .select('nutrition_per_serving')
+            .eq('id', snack.recipe_id)
+            .single()
+
+          if (recipe && recipe.nutrition_per_serving) {
+            const nutrition = recipe.nutrition_per_serving as unknown as RecipeNutrition
+            const servings = snack.servings || 1
+            totalCalories += Math.round((nutrition.calories || 0) * servings)
+            totalProtein += Math.round((nutrition.protein_g || 0) * servings)
+            totalCarbs += Math.round((nutrition.carbs_g || 0) * servings)
+            totalFat += Math.round((nutrition.fat_g || 0) * servings)
+          }
         }
       }
     }
@@ -255,7 +271,14 @@ export async function saveFullDayPlan(params: {
     lunch?: { recipeId: string; servings: number }
     dinner?: { recipeId: string; servings: number }
     snacks?: { recipeId: string; servings: number }
+    // Fasting meals
+    'pre-iftar'?: { recipeId: string; servings: number }
+    iftar?: { recipeId: string; servings: number }
+    'full-meal-taraweeh'?: { recipeId: string; servings: number }
+    'snack-taraweeh'?: { recipeId: string; servings: number }
+    suhoor?: { recipeId: string; servings: number }
   }
+  isFastingMode?: boolean // NEW: Indicates if this is a fasting plan
 }): Promise<SaveResult> {
   try {
     console.log('=== saveFullDayPlan called ===')
@@ -268,7 +291,7 @@ export async function saveFullDayPlan(params: {
       return { success: false, error: 'Not authenticated' }
     }
 
-    const { date, meals } = params
+    const { date, meals, isFastingMode } = params
 
     // Check if plan already exists for this date
     const { data: existingPlan } = await supabase
@@ -287,6 +310,7 @@ export async function saveFullDayPlan(params: {
     // Build the plan object
     const plan: DailyPlan = {}
     
+    // Regular meals
     if (meals.breakfast) {
       plan.breakfast = {
         recipe_id: meals.breakfast.recipeId,
@@ -315,18 +339,62 @@ export async function saveFullDayPlan(params: {
       }]
     }
 
+    // Fasting meals
+    if (meals['pre-iftar']) {
+      (plan as any)['pre-iftar'] = {
+        recipe_id: meals['pre-iftar'].recipeId,
+        servings: meals['pre-iftar'].servings,
+      }
+    }
+
+    if (meals.iftar) {
+      (plan as any).iftar = {
+        recipe_id: meals.iftar.recipeId,
+        servings: meals.iftar.servings,
+      }
+    }
+
+    if (meals['full-meal-taraweeh']) {
+      (plan as any)['full-meal-taraweeh'] = {
+        recipe_id: meals['full-meal-taraweeh'].recipeId,
+        servings: meals['full-meal-taraweeh'].servings,
+      }
+    }
+
+    if (meals['snack-taraweeh']) {
+      (plan as any)['snack-taraweeh'] = {
+        recipe_id: meals['snack-taraweeh'].recipeId,
+        servings: meals['snack-taraweeh'].servings,
+      }
+    }
+
+    if (meals.suhoor) {
+      (plan as any).suhoor = {
+        recipe_id: meals.suhoor.recipeId,
+        servings: meals.suhoor.servings,
+      }
+    }
+
     // Calculate totals
     const dailyTotals = await calculateDailyTotals(plan)
 
-    // Insert the plan
+    // Insert the plan - use appropriate columns based on mode
+    const insertData: any = {
+      user_id: user.id,
+      plan_date: date,
+    }
+
+    if (isFastingMode) {
+      insertData.fasting_plan = plan
+    } else {
+      insertData.plan = plan
+    }
+    // Always use daily_totals (no separate fasting_daily_totals column)
+    insertData.daily_totals = dailyTotals
+
     const { error: insertError } = await supabase
       .from('daily_plans')
-      .insert({
-        user_id: user.id,
-        plan_date: date,
-        plan,
-        daily_totals: dailyTotals,
-      })
+      .insert(insertData)
 
     if (insertError) {
       console.error('Error saving full day plan:', insertError)

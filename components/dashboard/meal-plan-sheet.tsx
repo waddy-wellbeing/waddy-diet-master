@@ -1,211 +1,277 @@
 /**
  * Meal Planning Sheet Component
- * 
+ *
  * Mobile-first bottom sheet for planning meals on a specific date
  * Integrates with dashboard calendar
  */
 
-'use client'
+"use client";
 
-import { useState, useEffect } from 'react'
-import { format } from 'date-fns'
-import { Loader2, Plus, Trash2, X, ArrowLeftRight } from 'lucide-react'
-import { toast } from 'sonner'
-import { cn } from '@/lib/utils'
-import { Button } from '@/components/ui/button'
+import { useState, useEffect } from "react";
+import { format } from "date-fns";
+import { Loader2, Plus, Trash2, X, ArrowLeftRight } from "lucide-react";
+import { toast } from "sonner";
+import { cn } from "@/lib/utils";
+import { Button } from "@/components/ui/button";
 import {
   Sheet,
   SheetContent,
   SheetDescription,
   SheetHeader,
   SheetTitle,
-} from '@/components/ui/sheet'
-import { RecipePickerSheet } from './recipe-picker-sheet'
-import { savePlanMeal, removePlanMeal, deletePlan, getPlan } from '@/lib/actions/meal-planning'
-import { formatPlanDateHeader } from '@/lib/utils/meal-planning'
-import type { DailyPlan, RecipeRecord } from '@/lib/types/nutri'
+} from "@/components/ui/sheet";
+import { RecipePickerSheet } from "./recipe-picker-sheet";
+import {
+  savePlanMeal,
+  removePlanMeal,
+  deletePlan,
+  getPlan,
+} from "@/lib/actions/meal-planning";
+import { formatPlanDateHeader } from "@/lib/utils/meal-planning";
+import type {
+  DailyPlan,
+  RecipeRecord,
+  PlanMealSlot,
+  PlanSnackItem,
+} from "@/lib/types/nutri";
 
 interface MealPlanSheetProps {
-  open: boolean
-  onOpenChange: (open: boolean) => void
-  date: Date | null
-  recipes: RecipeRecord[]
-  onPlanUpdated: () => void
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  date: Date | null;
+  recipes: RecipeRecord[];
+  onPlanUpdated: () => void;
+  isFastingMode?: boolean; // NEW: Indicates if this is for fasting meals
+  selectedMeals?: MealType[]; // NEW: User's selected meals to display
 }
 
-type MealType = 'breakfast' | 'lunch' | 'dinner' | 'snacks'
+type MealType =
+  | "breakfast"
+  | "lunch"
+  | "dinner"
+  | "snacks"
+  | "pre-iftar"
+  | "iftar"
+  | "full-meal-taraweeh"
+  | "snack-taraweeh"
+  | "suhoor";
 
-const MEAL_TYPES: { key: MealType; label: string; emoji: string }[] = [
-  { key: 'breakfast', label: 'Breakfast', emoji: '🍳' },
-  { key: 'lunch', label: 'Lunch', emoji: '🍱' },
-  { key: 'dinner', label: 'Dinner', emoji: '🍽️' },
-  { key: 'snacks', label: 'Snacks', emoji: '🍎' },
-]
+const REGULAR_MEAL_TYPES: { key: MealType; label: string; emoji: string }[] = [
+  { key: "breakfast", label: "Breakfast", emoji: "🍳" },
+  { key: "lunch", label: "Lunch", emoji: "🍱" },
+  { key: "dinner", label: "Dinner", emoji: "🍽️" },
+  { key: "snacks", label: "Snacks", emoji: "🍎" },
+];
 
-export function MealPlanSheet({ open, onOpenChange, date, recipes, onPlanUpdated }: MealPlanSheetProps) {
-  const [plan, setPlan] = useState<DailyPlan | null>(null)
-  const [loading, setLoading] = useState(false)
-  const [saving, setSaving] = useState(false)
-  const [pickerOpen, setPickerOpen] = useState(false)
-  const [activeMealType, setActiveMealType] = useState<MealType | null>(null)
-  const [swapMode, setSwapMode] = useState(false)
+const FASTING_MEAL_TYPES: { key: MealType; label: string; emoji: string }[] = [
+  { key: "pre-iftar", label: "كسر صيام", emoji: "🥤" },
+  { key: "iftar", label: "إفطار", emoji: "🍽️" },
+  { key: "full-meal-taraweeh", label: "وجبة بعد التراويح", emoji: "🍱" },
+  { key: "snack-taraweeh", label: "سناك بعد التراويح", emoji: "🍎" },
+  { key: "suhoor", label: "سحور", emoji: "🌙" },
+];
+
+export function MealPlanSheet({
+  open,
+  onOpenChange,
+  date,
+  recipes,
+  onPlanUpdated,
+  isFastingMode = false,
+  selectedMeals,
+}: MealPlanSheetProps) {
+  const [plan, setPlan] = useState<DailyPlan | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const [activeMealType, setActiveMealType] = useState<MealType | null>(null);
+  const [swapMode, setSwapMode] = useState(false);
+
+  // Select meal types based on mode and filter by selected meals
+  const allMealTypes = isFastingMode ? FASTING_MEAL_TYPES : REGULAR_MEAL_TYPES;
+  const mealTypes = selectedMeals
+    ? allMealTypes.filter((meal) => selectedMeals.includes(meal.key))
+    : allMealTypes;
 
   // Fetch plan when date changes
   useEffect(() => {
-    if (!open || !date) return
+    if (!open || !date) return;
 
     const fetchPlan = async () => {
-      setLoading(true)
-      const dateStr = format(date, 'yyyy-MM-dd')
-      const result = await getPlan(dateStr)
-      
-      if (result.success) {
-        setPlan(result.data)
-      } else {
-        toast.error('Failed to load plan')
-      }
-      setLoading(false)
-    }
+      setLoading(true);
+      const dateStr = format(date, "yyyy-MM-dd");
+      const result = await getPlan(dateStr, isFastingMode); // Pass mode to get correct plan column
 
-    fetchPlan()
-  }, [open, date])
+      if (result.success) {
+        setPlan(result.data);
+      } else {
+        toast.error("Failed to load plan");
+      }
+      setLoading(false);
+    };
+
+    fetchPlan();
+  }, [open, date, isFastingMode]);
 
   // Computed flags
-  const isPast = date ? (new Date(format(date, 'yyyy-MM-dd')) < new Date(format(new Date(), 'yyyy-MM-dd'))) : false
-  const isReadOnly = isPast
-
+  const isPast = date
+    ? new Date(format(date, "yyyy-MM-dd")) <
+      new Date(format(new Date(), "yyyy-MM-dd"))
+    : false;
+  const isReadOnly = isPast;
 
   const handleAddRecipe = (mealType: MealType, replace = false) => {
     if (isReadOnly) {
-      toast('This plan is read-only')
-      return
+      toast("This plan is read-only");
+      return;
     }
-    setActiveMealType(mealType)
-    setSwapMode(replace)
-    setPickerOpen(true)
-  }
+    setActiveMealType(mealType);
+    setSwapMode(replace);
+    setPickerOpen(true);
+  };
 
   const handleRecipeSelected = async (recipeId: string) => {
-    if (!date || !activeMealType) return
+    if (!date || !activeMealType) return;
 
-    console.log('[MealPlanSheet] Saving recipe:', { recipeId, mealType: activeMealType, date: format(date, 'yyyy-MM-dd') })
-    
-    setSaving(true)
-    const dateStr = format(date, 'yyyy-MM-dd')
+    console.log("[MealPlanSheet] Saving recipe:", {
+      recipeId,
+      mealType: activeMealType,
+      date: format(date, "yyyy-MM-dd"),
+      isFastingMode,
+    });
+
+    setSaving(true);
+    const dateStr = format(date, "yyyy-MM-dd");
     const result = await savePlanMeal({
       date: dateStr,
       mealType: activeMealType,
       recipeId,
-    })
+      isFastingMode, // Pass mode to save to correct column
+    });
 
-    console.log('[MealPlanSheet] Save result:', result)
+    console.log("[MealPlanSheet] Save result:", result);
 
     if (result.success) {
       // Refresh plan
-      const updated = await getPlan(dateStr)
-      console.log('[MealPlanSheet] Refreshed plan:', updated)
-      
+      const updated = await getPlan(dateStr, isFastingMode);
+      console.log("[MealPlanSheet] Refreshed plan:", updated);
+
       if (updated.success) {
-        setPlan(updated.data)
+        setPlan(updated.data);
       }
 
-      toast.success(swapMode ? 'Meal replaced in plan' : 'Meal added to plan')
-      
+      toast.success(swapMode ? "Meal replaced in plan" : "Meal added to plan");
+
       // Notify parent to refresh week indicators
-      onPlanUpdated()
+      onPlanUpdated();
     } else {
-      toast.error(result.error)
+      toast.error(result.error);
     }
 
-    setSaving(false)
-    setPickerOpen(false)
-    setActiveMealType(null)
-    setSwapMode(false)
-  }
+    setSaving(false);
+    setPickerOpen(false);
+    setActiveMealType(null);
+    setSwapMode(false);
+  };
 
   const handleRemoveRecipe = async (mealType: MealType) => {
-    if (!date) return
+    if (!date) return;
 
-    setSaving(true)
-    const dateStr = format(date, 'yyyy-MM-dd')
+    setSaving(true);
+    const dateStr = format(date, "yyyy-MM-dd");
     const result = await removePlanMeal({
       date: dateStr,
       mealType,
-    })
+      isFastingMode, // Pass mode to remove from correct column
+    });
 
     if (result.success) {
       // Refresh plan
-      const updated = await getPlan(dateStr)
+      const updated = await getPlan(dateStr, isFastingMode);
       if (updated.success) {
-        setPlan(updated.data)
+        setPlan(updated.data);
       }
-      toast.success('Meal removed from plan')
-      onPlanUpdated()
+      toast.success("Meal removed from plan");
+      onPlanUpdated();
     } else {
-      toast.error(result.error)
+      toast.error(result.error);
     }
 
-    setSaving(false)
-  }
+    setSaving(false);
+  };
 
   const handleClearAll = async () => {
     if (isReadOnly) {
-      toast('This plan is read-only')
-      return
+      toast("This plan is read-only");
+      return;
     }
 
-    if (!date || !plan) return
+    if (!date || !plan) return;
 
-    const confirmed = confirm('Are you sure you want to clear all meals from this plan?')
-    if (!confirmed) return
+    const confirmed = confirm(
+      "Are you sure you want to clear all meals from this plan?",
+    );
+    if (!confirmed) return;
 
-    setSaving(true)
-    const dateStr = format(date, 'yyyy-MM-dd')
-    const result = await deletePlan(dateStr)
+    setSaving(true);
+    const dateStr = format(date, "yyyy-MM-dd");
+    const result = await deletePlan(dateStr);
 
     if (result.success) {
-      setPlan(null)
-      toast.success('Plan cleared')
-      onPlanUpdated()
+      setPlan(null);
+      toast.success("Plan cleared");
+      onPlanUpdated();
     } else {
-      toast.error(result.error)
+      toast.error(result.error);
     }
 
-    setSaving(false)
-  }
+    setSaving(false);
+  };
 
   // Get recipe for a meal slot
   const getRecipeForMeal = (mealType: MealType): RecipeRecord | null => {
-    if (!plan) return null
+    if (!plan) return null;
 
-    let recipeId: string | undefined
+    let recipeId: string | undefined;
 
-    if (mealType === 'snacks') {
-      recipeId = plan.snacks?.[0]?.recipe_id
+    if (mealType === "snacks" || mealType === "snack-taraweeh") {
+      recipeId = (
+        plan[mealType as keyof DailyPlan] as PlanSnackItem[] | undefined
+      )?.[0]?.recipe_id;
     } else {
-      recipeId = plan[mealType]?.recipe_id
+      recipeId = (plan[mealType as keyof DailyPlan] as PlanMealSlot | undefined)
+        ?.recipe_id;
     }
 
-    if (!recipeId) return null
+    if (!recipeId) return null;
 
-    return recipes.find(r => r.id === recipeId) || null
-  }
+    return recipes.find((r) => r.id === recipeId) || null;
+  };
 
-  // Check if plan has any meals
-  const hasMeals = !!(
-    plan?.breakfast?.recipe_id ||
-    plan?.lunch?.recipe_id ||
-    plan?.dinner?.recipe_id ||
-    (plan?.snacks && plan.snacks[0]?.recipe_id)
-  )
+  // Check if plan has any meals - handle both regular and fasting modes
+  const hasMeals = isFastingMode
+    ? !!(
+        (plan?.["pre-iftar"] as PlanMealSlot | undefined)?.recipe_id ||
+        (plan?.iftar as PlanMealSlot | undefined)?.recipe_id ||
+        (plan?.["full-meal-taraweeh"] as PlanMealSlot | undefined)?.recipe_id ||
+        (plan?.["snack-taraweeh"] as PlanSnackItem[] | undefined)?.[0]
+          ?.recipe_id ||
+        (plan?.suhoor as PlanMealSlot | undefined)?.recipe_id
+      )
+    : !!(
+        plan?.breakfast?.recipe_id ||
+        plan?.lunch?.recipe_id ||
+        plan?.dinner?.recipe_id ||
+        (plan?.snacks && plan.snacks[0]?.recipe_id)
+      );
 
-  if (!date) return null
+  if (!date) return null;
 
   return (
     <>
       <Sheet open={open} onOpenChange={onOpenChange}>
-        <SheetContent 
-          side="bottom" 
+        <SheetContent
+          side="bottom"
           className="h-[75vh] max-h-[75vh] rounded-t-xl flex flex-col overflow-hidden"
         >
           <SheetHeader className="flex-shrink-0 border-b border-border px-4 py-3 sm:px-6 sm:py-4 space-y-1">
@@ -238,8 +304,8 @@ export function MealPlanSheet({ open, onOpenChange, date, recipes, onPlanUpdated
                 <Loader2 className="h-8 w-8 animate-spin text-primary" />
               </div>
             ) : (
-              MEAL_TYPES.map(({ key, label, emoji }) => {
-                const recipe = getRecipeForMeal(key)
+              mealTypes.map(({ key, label, emoji }) => {
+                const recipe = getRecipeForMeal(key);
 
                 return (
                   <div
@@ -265,7 +331,9 @@ export function MealPlanSheet({ open, onOpenChange, date, recipes, onPlanUpdated
                       )}
 
                       {isReadOnly && recipe && (
-                        <span className="text-xs text-muted-foreground">Read-only</span>
+                        <span className="text-xs text-muted-foreground">
+                          Read-only
+                        </span>
                       )}
                     </div>
 
@@ -281,29 +349,33 @@ export function MealPlanSheet({ open, onOpenChange, date, recipes, onPlanUpdated
                           />
                         )}
                         <div className="flex-1 min-w-0">
-                          <p className="font-medium text-sm sm:text-base line-clamp-2 leading-tight">{recipe.name}</p>
+                          <p className="font-medium text-sm sm:text-base line-clamp-2 leading-tight">
+                            {recipe.name}
+                          </p>
                           <p className="text-xs sm:text-sm text-muted-foreground mt-0.5">
-                            {(recipe as any).scaled_calories || recipe.nutrition_per_serving?.calories} kcal • 1 serving
+                            {(recipe as any).scaled_calories ||
+                              recipe.nutrition_per_serving?.calories}{" "}
+                            kcal • 1 serving
                           </p>
                         </div>
                       </div>
+                    ) : !isReadOnly ? (
+                      <Button
+                        variant="outline"
+                        className="w-full h-auto py-2.5 sm:py-3 border-dashed hover:border-primary hover:bg-primary/5 text-sm sm:text-base"
+                        onClick={() => handleAddRecipe(key)}
+                        disabled={saving}
+                      >
+                        <Plus className="h-4 w-4 sm:h-5 sm:w-5 mr-1.5 sm:mr-2" />
+                        Add Recipe
+                      </Button>
                     ) : (
-                      !isReadOnly ? (
-                        <Button
-                          variant="outline"
-                          className="w-full h-auto py-2.5 sm:py-3 border-dashed hover:border-primary hover:bg-primary/5 text-sm sm:text-base"
-                          onClick={() => handleAddRecipe(key)}
-                          disabled={saving}
-                        >
-                          <Plus className="h-4 w-4 sm:h-5 sm:w-5 mr-1.5 sm:mr-2" />
-                          Add Recipe
-                        </Button>
-                      ) : (
-                        <div className="w-full py-2 text-xs text-muted-foreground text-center">Read-only</div>
-                      )
+                      <div className="w-full py-2 text-xs text-muted-foreground text-center">
+                        Read-only
+                      </div>
                     )}
                   </div>
-                )
+                );
               })
             )}
           </div>
@@ -327,5 +399,5 @@ export function MealPlanSheet({ open, onOpenChange, date, recipes, onPlanUpdated
         onRecipeSelected={handleRecipeSelected}
       />
     </>
-  )
+  );
 }

@@ -32,15 +32,27 @@ export function getDayPlanState(
 }
 
 /**
- * Check if a plan has any meal content
+ * Check if a plan has any meal content (handles both regular and fasting meals)
  */
 function hasPlanContent(plan: DailyPlan): boolean {
-  return !!(
-    plan.breakfast?.recipe_id ||
-    plan.lunch?.recipe_id ||
-    plan.dinner?.recipe_id ||
-    plan.snacks?.some((snack) => snack?.recipe_id)
+  // Regular meal types (breakfast, lunch, dinner, snacks)
+  const hasRegularMeals = !!(
+    (plan as any).breakfast?.recipe_id ||
+    (plan as any).lunch?.recipe_id ||
+    (plan as any).dinner?.recipe_id ||
+    (plan as any).snacks?.some((snack: any) => snack?.recipe_id)
   )
+
+  // Fasting meal types (pre-iftar, iftar, full-meal-taraweeh, snack-taraweeh, suhoor)
+  const hasFastingMeals = !!(
+    (plan as any)['pre-iftar']?.recipe_id ||
+    (plan as any).iftar?.recipe_id ||
+    (plan as any)['full-meal-taraweeh']?.recipe_id ||
+    (plan as any)['snack-taraweeh']?.recipe_id ||
+    (plan as any).suhoor?.recipe_id
+  )
+
+  return hasRegularMeals || hasFastingMeals
 }
 
 /**

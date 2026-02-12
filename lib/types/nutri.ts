@@ -29,6 +29,8 @@ export interface ProfileTargets {
   // Calculated BMR and TDEE (stored for reference)
   bmr?: number
   tdee?: number
+  // NOTE: Same daily_calories used for both regular and fasting modes
+  // Separate calorie calculations deferred to future (too complex)
 }
 
 /** Single meal slot in the user's meal structure */
@@ -49,7 +51,12 @@ export interface ProfilePreferences {
   max_prep_time_minutes?: number
   // Meal structure - assigned by coach
   meals_per_day?: number           // User's requested meal count (from onboarding)
-  meal_structure?: MealSlot[]      // Assigned by coach with percentages
+  meal_structure?: MealSlot[]      // User's meal structure with percentages
+  // Fasting mode configuration
+  is_fasting?: boolean                // Toggle state: true = fasting mode ON, false/undefined = regular mode
+  fasting_selected_meals?: string[]   // Selected fasting meals (e.g., ['iftar', 'suhoor', 'snack-taraweeh'])
+  // NOTE: Mode toggle state is stored HERE in preferences, NOT in daily_plans.mode
+  // daily_plans.mode is only set when a plan is actually SAVED (not just toggled)
 }
 
 /** User goal information */
@@ -71,6 +78,7 @@ export interface Profile {
   user_id: string
   name: string | null
   mobile?: string | null
+  country_code?: string | null
   email: string | null
   avatar_url: string | null
   role: UserRole
@@ -216,10 +224,19 @@ export interface PlanSnackItem {
 
 /** Full daily plan structure */
 export interface DailyPlan {
+  // Regular mode meals
   breakfast?: PlanMealSlot
   lunch?: PlanMealSlot
   dinner?: PlanMealSlot
   snacks?: PlanSnackItem[]
+  // Fasting mode meals
+  'pre-iftar'?: PlanMealSlot
+  iftar?: PlanMealSlot
+  'full-meal-taraweeh'?: PlanMealSlot
+  'snack-taraweeh'?: PlanSnackItem[]
+  suhoor?: PlanMealSlot
+  // Metadata
+  mode?: 'regular' | 'fasting'     // Meal planning mode (stored per plan in database)
 }
 
 /** Daily nutrition totals */

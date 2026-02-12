@@ -22,6 +22,7 @@ export interface UserWithProfile {
     name: string | null
     email: string | null
     mobile?: string | null
+    country_code?: string | null
     avatar_url: string | null
     role: 'admin' | 'moderator' | 'client'
     plan_status: PlanStatus
@@ -172,6 +173,7 @@ export async function getUser(userId: string): Promise<{
         name: profile.name,
         email: profile.email,
         mobile: profile.mobile,
+        country_code: profile.country_code,
         avatar_url: profile.avatar_url,
         role: profile.role,
         plan_status: profile.plan_status,
@@ -266,6 +268,123 @@ export async function assignMealStructure(
     })
 
   revalidatePath('/admin/users')
+  return { success: true, error: null }
+}
+
+/**
+ * Set fasting mode preferences for a user
+ * Stores the selected fasting meals array in preferences
+ * Uses the same daily_calories from targets for both regular and fasting modes
+ * 
+ * @param userId - The user's ID
+ * @param selectedMeals - Array of selected meal names (e.g., ['iftar', 'suhoor'])
+ * @returns Success/error result
+ */
+export async function setFastingModePreferences(
+  userId: string,
+  selectedMeals: string[]
+): Promise<{ success: boolean; error: string | null }> {
+  const supabase = await createClient()
+
+  // Validate meal count (1-5 meals)
+  if (selectedMeals.length < 1 || selectedMeals.length > 5) {
+    return {
+      success: false,
+      error: 'Must select between 1 and 5 meals'
+    }
+  }
+
+  // Get current profile
+  const { data: profile, error: fetchError } = await supabase
+    .from('profiles')
+    .select('preferences')
+    .eq('user_id', userId)
+    .single()
+
+  if (fetchError) {
+    return { success: false, error: fetchError.message }
+  }
+
+  // Update preferences with selected meals array
+  const updatedPreferences = {
+    ...profile.preferences,
+    fasting_selected_meals: selectedMeals,
+  }
+
+  // Update profile
+  const { error: updateError } = await supabase
+    .from('profiles')
+    .update({
+      preferences: updatedPreferences,
+    })
+    .eq('user_id', userId)
+
+  if (updateError) {
+    return { success: false, error: updateError.message }
+  }
+
+  revalidatePath('/admin/users')
+  revalidatePath(`/admin/users/${userId}`)
+  return { success: true, error: null }
+}
+
+/**
+ * Toggle fasting mode preference for the user
+ * Sets is_fasting flag in user's preferences (NOT in daily_plans)
+ * This allows recommendations to show fasting meals before any plan is saved
+ * When user actually saves a plan, THEN daily_plans.mode will be set
+ * 
+ * @param userId - The user's ID
+ * @param isFasting - true for fasting mode, false for regular mode
+ * @returns Success/error result
+ */
+export async function togglePlanMode(
+  userId: string,
+  planDate: string,
+  mode: 'regular' | 'fasting'
+): Promise<{ success: boolean; error: string | null }> {
+  const supabase = await createClient()
+
+  // Validate mode
+  if (mode !== 'regular' && mode !== 'fasting') {
+    return {
+      success: false,
+      error: 'Mode must be either "regular" or "fasting"'
+    }
+  }
+
+  // Get current profile
+  const { data: profile, error: fetchError } = await supabase
+    .from('profiles')
+    .select('preferences')
+    .eq('user_id', userId)
+    .single()
+
+  if (fetchError) {
+    return { success: false, error: fetchError.message }
+  }
+
+  // Update preferences with is_fasting flag
+  const updatedPreferences = {
+    ...profile.preferences,
+    is_fasting: mode === 'fasting',
+  }
+
+  // Update profile preferences
+  const { error: updateError } = await supabase
+    .from('profiles')
+    .update({
+      preferences: updatedPreferences,
+    })
+    .eq('user_id', userId)
+
+  if (updateError) {
+    return { success: false, error: updateError.message }
+  }
+
+  revalidatePath('/dashboard')
+  revalidatePath('/profile')
+  revalidatePath(`/dashboard/${planDate}`)
   return { success: true, error: null }
 }
 
