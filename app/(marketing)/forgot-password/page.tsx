@@ -4,9 +4,8 @@ import { useState } from 'react'
 import Link from 'next/link'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
-import { createClient } from '@/lib/supabase/client'
 import { forgotPasswordSchema, type ForgotPasswordFormData } from '@/lib/validators/auth'
-import { getSiteUrl } from '@/lib/utils/site-url'
+import { sendPasswordResetEmail } from '@/lib/actions/auth'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -28,14 +27,10 @@ export default function ForgotPasswordPage() {
   async function onSubmit(data: ForgotPasswordFormData) {
     setIsLoading(true)
 
-    const supabase = createClient()
+    const result = await sendPasswordResetEmail(data.email)
 
-    const { error } = await supabase.auth.resetPasswordForEmail(data.email, {
-      redirectTo: `${getSiteUrl()}/auth/callback?next=/update-password`,
-    })
-
-    if (error) {
-      toast.error(error.message)
+    if (!result.success) {
+      toast.error(result.error)
       setIsLoading(false)
       return
     }
