@@ -670,7 +670,18 @@ export function DashboardContent({
     // Set loading state immediately
     setLoadingMeal(mealType);
 
-    const currentIdx = selectedIndices[mealType];
+    // Determine the real current index:
+    // - For planned days, selectedIndices tracks the position
+    // - For unplanned days, the displayed recipe comes from getSuggestedRecipeIndex
+    const currentPlan = dailyPlan?.plan as DailyPlan | undefined;
+    const isPlannedDay = !!currentPlan;
+    const currentIdx = isPlannedDay
+      ? selectedIndices[mealType]
+      : getSuggestedRecipeIndex(
+          format(selectedDate, "yyyy-MM-dd"),
+          mealType,
+          recipes.length,
+        );
     let newIdx: number;
 
     if (direction === "right") {
