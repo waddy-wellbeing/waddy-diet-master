@@ -471,15 +471,12 @@ export async function createDayPlan({
   userId,
   planDate,
   meals,
+  isFasting = false,
 }: {
   userId: string
   planDate: string
-  meals: {
-    breakfast?: string
-    lunch?: string
-    dinner?: string
-    snacks?: string[]
-  }
+  meals: Record<string, string | string[]>
+  isFasting?: boolean
 }): Promise<{
   success: boolean
   error?: string
@@ -487,33 +484,31 @@ export async function createDayPlan({
   try {
     const supabase = createAdminClient()
 
-    // Build the plan object
-    const plan: AdminUserPlan['plan'] = {}
-    
-    if (meals.breakfast) {
-      plan.breakfast = { recipe_id: meals.breakfast, servings: 1 }
-    }
-    
-    if (meals.lunch) {
-      plan.lunch = { recipe_id: meals.lunch, servings: 1 }
-    }
-    
-    if (meals.dinner) {
-      plan.dinner = { recipe_id: meals.dinner, servings: 1 }
-    }
-    
-    if (meals.snacks && meals.snacks.length > 0) {
-      plan.snacks = meals.snacks.map(recipeId => ({ recipe_id: recipeId, servings: 1 }))
+    // Build the plan object from the meals map
+    const planObj: Record<string, any> = {}
+
+    for (const [mealType, value] of Object.entries(meals)) {
+      if (!value) continue
+      if (Array.isArray(value)) {
+        // Snack arrays (snacks or snack-taraweeh)
+        planObj[mealType] = value.map(recipeId => ({ recipe_id: recipeId, servings: 1 }))
+      } else {
+        planObj[mealType] = { recipe_id: value, servings: 1 }
+      }
     }
 
-    // Insert new plan (should not exist for unplanned days)
+    // Write to the correct column based on fasting mode, upsert to avoid duplicate key
+    const columnKey = isFasting ? 'fasting_plan' : 'plan'
     const { error } = await supabase
       .from('daily_plans')
-      .insert({
-        user_id: userId,
-        plan_date: planDate,
-        plan,
-      })
+      .upsert(
+        {
+          user_id: userId,
+          plan_date: planDate,
+          [columnKey]: planObj,
+        },
+        { onConflict: 'user_id,plan_date' },
+      )
 
     if (error) {
       console.error('Error creating day plan:', error)

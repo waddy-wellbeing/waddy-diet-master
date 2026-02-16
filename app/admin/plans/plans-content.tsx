@@ -269,9 +269,7 @@ function DayPlanView({
   const isToday = dateStr === toLocalDateStr(new Date());
 
   // Strictly use the column matching the user's is_fasting preference — no fallback
-  const activePlan = isFasting
-    ? (plan as any)?.fasting_plan
-    : plan?.plan;
+  const activePlan = isFasting ? (plan as any)?.fasting_plan : plan?.plan;
   const hasData = activePlan && Object.keys(activePlan).length > 0;
   const isUnplanned = !plan || !hasData;
 
@@ -627,9 +625,7 @@ export function PlansContent({ initialUsers }: PlansContentProps) {
   const dateHasActivePlan = (date: Date): boolean => {
     const plan = getPlanForDate(date);
     if (!plan) return false;
-    const col = userIsFasting
-      ? (plan as any)?.fasting_plan
-      : plan?.plan;
+    const col = userIsFasting ? (plan as any)?.fasting_plan : plan?.plan;
     return col && Object.keys(col).length > 0;
   };
 
@@ -663,10 +659,10 @@ export function PlansContent({ initialUsers }: PlansContentProps) {
 
       if (!result.success) {
         toast.error(result.error || "Failed to update meal", {
-          duration: 3000,
+          duration: 2000,
         });
       } else {
-        toast.success("Meal updated successfully", { duration: 3000 });
+        toast.success("Meal updated successfully", { duration: 2000 });
 
         // Refresh the plan data immediately
         const refreshResult = await getDayPlan(selectedUser.user_id, dateStr);
@@ -687,7 +683,7 @@ export function PlansContent({ initialUsers }: PlansContentProps) {
       }
     } catch (error) {
       console.error("Error updating meal:", error);
-      toast.error("Failed to update meal", { duration: 3000 });
+      toast.error("Failed to update meal", { duration: 2000 });
     } finally {
       setLoadingMealKey(null);
       setActiveMealType(null);
@@ -708,7 +704,7 @@ export function PlansContent({ initialUsers }: PlansContentProps) {
 
       if (availableRecipes.length < 3) {
         toast.error("Not enough recipes available to create a plan", {
-          duration: 3000,
+          duration: 2000,
         });
         return;
       }
@@ -716,25 +712,38 @@ export function PlansContent({ initialUsers }: PlansContentProps) {
       // Randomly select recipes for each meal
       const shuffled = [...availableRecipes].sort(() => 0.5 - Math.random());
 
+      // Build meals object based on fasting mode
+      const meals: Record<string, string | string[]> = userIsFasting
+        ? {
+            "pre-iftar": shuffled[0]?.id,
+            iftar: shuffled[1]?.id,
+            "full-meal-taraweeh": shuffled[2]?.id,
+            "snack-taraweeh":
+              shuffled.length > 4 ? [shuffled[4].id] : [shuffled[0].id],
+            suhoor: shuffled.length > 3 ? shuffled[3]?.id : shuffled[0]?.id,
+          }
+        : {
+            breakfast: shuffled[0]?.id,
+            lunch: shuffled[1]?.id,
+            dinner: shuffled[2]?.id,
+            ...(shuffled.length > 3 ? { snacks: [shuffled[3].id] } : {}),
+          };
+
       const result = await createDayPlan({
         userId: selectedUser.user_id,
         planDate: dateStr,
-        meals: {
-          breakfast: shuffled[0]?.id,
-          lunch: shuffled[1]?.id,
-          dinner: shuffled[2]?.id,
-          snacks: shuffled.length > 3 ? [shuffled[3].id] : undefined,
-        },
+        meals,
+        isFasting: userIsFasting,
       });
 
       if (!result.success) {
         toast.error(result.error || "Failed to create plan", {
-          duration: 3000,
+          duration: 2000,
         });
       } else {
         toast.success(
           "Plan created successfully! You can now edit individual meals.",
-          { duration: 3000 },
+          { duration: 2000 },
         );
 
         // Refresh the plan data
@@ -756,7 +765,7 @@ export function PlansContent({ initialUsers }: PlansContentProps) {
       }
     } catch (error) {
       console.error("Error creating plan:", error);
-      toast.error("Failed to create plan", { duration: 3000 });
+      toast.error("Failed to create plan", { duration: 2000 });
     } finally {
       setLoadingMealKey(null);
     }
