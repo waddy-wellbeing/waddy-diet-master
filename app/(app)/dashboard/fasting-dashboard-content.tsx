@@ -302,7 +302,7 @@ export function FastingDashboardContent({
   // Get current recipe for each meal type based on selected index
   // Get current recipe for the selected day
   // - If the day has a fasting plan in database: show the PLANNED recipe
-  // - If the day has no plan: show the SUGGESTED recipe (uses selectedIndices for swapping)
+  // - If the day has no plan: show the SUGGESTED recipe (shuffled based on date)
   const getCurrentRecipe = (mealType: MealName): ScaledRecipe | null => {
     const recipes = recipesByMealType[mealType] || [];
     if (recipes.length === 0) return null;
@@ -330,9 +330,15 @@ export function FastingDashboardContent({
       }
     }
 
-    // ===== UNPLANNED DAY: Return recipe based on selectedIndices (allows swapping) =====
-    const currentIndex = selectedIndices[mealType] || 0;
-    return recipes[currentIndex] || recipes[0] || null;
+    // ===== UNPLANNED DAY: Return shuffled suggestion based on date =====
+    const dateStr = format(selectedDate, "yyyy-MM-dd");
+    const suggestedIndex = getSuggestedRecipeIndex(
+      dateStr,
+      mealType,
+      recipes.length,
+    );
+
+    return recipes[suggestedIndex] || recipes[0] || null;
   };
 
   // Get recipe count for each meal type

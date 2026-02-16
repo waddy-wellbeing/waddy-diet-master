@@ -13,6 +13,7 @@ import { Loader2, Plus, Trash2, X, ArrowLeftRight } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import {
   Sheet,
   SheetContent,
@@ -28,6 +29,7 @@ import {
   getPlan,
 } from "@/lib/actions/meal-planning";
 import { formatPlanDateHeader } from "@/lib/utils/meal-planning";
+import { getSuggestedRecipeIndex } from "@/lib/utils/meal-suggestions";
 import type {
   DailyPlan,
   RecipeRecord,
@@ -92,6 +94,37 @@ export function MealPlanSheet({
   const mealTypes = selectedMeals
     ? allMealTypes.filter((meal) => selectedMeals.includes(meal.key))
     : allMealTypes;
+
+  // Categorize recipes by meal type for suggestions
+  const recipesByMealType: Record<MealType, RecipeRecord[]> = {
+    breakfast: [],
+    lunch: [],
+    dinner: [],
+    snacks: [],
+    "pre-iftar": [],
+    iftar: [],
+    "full-meal-taraweeh": [],
+    "snack-taraweeh": [],
+    suhoor: [],
+  };
+
+  // Populate recipe categories
+  recipes.forEach((recipe) => {
+    // `recipe.meal_type` can be an array of tags (or undefined).
+    // Normalize to an array and add the recipe to any matching MealType bucket.
+    const candidateTypes: string[] = Array.isArray(recipe.meal_type)
+      ? recipe.meal_type
+      : recipe.meal_type
+      ? [recipe.meal_type]
+      : [];
+
+    for (const t of candidateTypes) {
+      if (!t) continue;
+      if (t in recipesByMealType) {
+        recipesByMealType[t as MealType].push(recipe);
+      }
+    }
+  });
 
   // Fetch plan when date changes
   useEffect(() => {
@@ -229,8 +262,47 @@ export function MealPlanSheet({
   };
 
   // Get recipe for a meal slot
+  // Returns planned recipe if exists, otherwise returns shuffled suggestion based on date
   const getRecipeForMeal = (mealType: MealType): RecipeRecord | null => {
-    if (!plan) return null;
+    // ===== STEP 1: Check if there's a saved plan =====
+    if (plan) {
+      let recipeId: string | undefined;
+
+      if (mealType === "snacks" || mealType === "snack-taraweeh") {
+        recipeId = (
+          plan[mealType as keyof DailyPlan] as PlanSnackItem[] | undefined
+        )?.[0]?.recipe_id;
+      } else {
+        recipeId = (
+          plan[mealType as keyof DailyPlan] as PlanMealSlot | undefined
+        )?.recipe_id;
+      }
+
+      if (recipeId) {
+        return recipes.find((r) => r.id === recipeId) || null;
+      }
+    }
+
+    // ===== STEP 2: No plan exists - return shuffled suggestion =====
+    if (!date) return null;
+
+    const availableRecipes = recipesByMealType[mealType] || [];
+    if (availableRecipes.length === 0) return null;
+
+    // Use date-based shuffle to get different suggestions for different dates
+    const dateStr = format(date, "yyyy-MM-dd");
+    const suggestedIndex = getSuggestedRecipeIndex(
+      dateStr,
+      mealType,
+      availableRecipes.length,
+    );
+
+    return availableRecipes[suggestedIndex] || availableRecipes[0] || null;
+  };
+
+  // Check if a meal is planned (in database) or suggested (shuffled)
+  const isMealPlanned = (mealType: MealType): boolean => {
+    if (!plan) return false;
 
     let recipeId: string | undefined;
 
@@ -243,9 +315,7 @@ export function MealPlanSheet({
         ?.recipe_id;
     }
 
-    if (!recipeId) return null;
-
-    return recipes.find((r) => r.id === recipeId) || null;
+    return !!recipeId;
   };
 
   // Check if plan has any meals - handle both regular and fasting modes
@@ -281,7 +351,9 @@ export function MealPlanSheet({
                   Plan Meals for {formatPlanDateHeader(date)}
                 </SheetTitle>
                 <SheetDescription className="text-xs leading-snug sm:text-sm mt-1">
-                  Select recipes for each meal (1 serving each)
+                  {!plan
+                    ? "Suggested meals shown - Exchange or keep them"
+                    : "Select recipes for each meal (1 serving each)"}
                 </SheetDescription>
               </div>
               {hasMeals && !saving && (
@@ -306,16 +378,29 @@ export function MealPlanSheet({
             ) : (
               mealTypes.map(({ key, label, emoji }) => {
                 const recipe = getRecipeForMeal(key);
+                const isPlanned = isMealPlanned(key);
+                const isSuggested = recipe && !isPlanned;
 
                 return (
                   <div
                     key={key}
-                    className="border border-border rounded-xl p-3 sm:p-4 bg-card"
+                    className={cn(
+                      "border rounded-xl p-3 sm:p-4 bg-card",
+                      isSuggested && "border-primary/30 bg-primary/5",
+                    )}
                   >
                     <div className="flex items-center justify-between mb-2 sm:mb-3">
                       <h3 className="text-base sm:text-lg font-semibold flex items-center gap-1.5 sm:gap-2">
                         <span className="text-lg sm:text-xl">{emoji}</span>
                         <span>{label}</span>
+                        {isSuggested && (
+                          <Badge
+                            variant="outline"
+                            className="ml-2 text-[10px] sm:text-xs px-1.5 py-0 h-4 sm:h-5 border-primary/50 text-primary"
+                          >
+                            Suggested
+                          </Badge>
+                        )}
                       </h3>
                       {recipe && !isReadOnly && (
                         <Button
