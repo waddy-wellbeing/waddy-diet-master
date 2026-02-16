@@ -181,11 +181,11 @@ export function FastingModeToggle({
           <div
             className={cn(
               "p-2 rounded-xl transition-colors",
-              isFastingOn ? "bg-purple-500/10" : "bg-muted",
+              isFastingOn ? "bg-primary/10" : "bg-muted",
             )}
           >
             {isFastingOn ? (
-              <Moon className="w-5 h-5 text-purple-500" />
+              <Moon className="w-5 h-5 text-primary" />
             ) : (
               <Moon className="w-5 h-5 text-muted-foreground" />
             )}
@@ -220,27 +220,27 @@ export function FastingModeToggle({
             onClick={handleToggle}
             disabled={isToggling}
             className={cn(
-              "relative inline-flex h-8 w-14 items-center rounded-full transition-all",
-              isFastingOn ? "bg-purple-500" : "bg-gray-300",
+              "relative inline-flex h-8 w-14 items-center rounded-full transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50",
+              isFastingOn ? "bg-primary" : "bg-muted",
               isToggling && "opacity-50 cursor-not-allowed",
             )}
           >
             {isToggling ? (
               <span className="absolute inset-0 flex items-center justify-center">
-                <Loader2 className="w-4 h-4 text-white animate-spin" />
+                <Loader2 className="w-4 h-4 text-primary-foreground animate-spin" />
               </span>
             ) : (
               <motion.span
-                className="inline-block h-6 w-6 transform rounded-full bg-white shadow-lg flex items-center justify-center"
+                className="inline-block h-6 w-6 transform rounded-full bg-background shadow-lg flex items-center justify-center"
                 animate={{
                   x: isFastingOn ? 28 : 4,
                 }}
                 transition={{ type: "spring", stiffness: 500, damping: 30 }}
               >
                 {isFastingOn ? (
-                  <Moon className="w-3 h-3 text-purple-500" />
+                  <Moon className="w-3 h-3 text-primary" />
                 ) : (
-                  <Moon className="w-3 h-3 text-gray-400" />
+                  <Moon className="w-3 h-3 text-muted-foreground" />
                 )}
               </motion.span>
             )}
@@ -267,10 +267,10 @@ export function FastingModeToggle({
                 <motion.div
                   key={option.value}
                   className={cn(
-                    "flex items-center space-x-3 space-x-reverse p-4 rounded-xl border transition-all",
+                    "flex items-center space-x-3 space-x-reverse p-4 rounded-xl border transition-all cursor-pointer",
                     isSelected
-                      ? "border-purple-500 bg-purple-500/5"
-                      : "border-border hover:border-purple-500/30",
+                      ? "border-primary bg-primary/5"
+                      : "border-border hover:border-primary/30 hover:bg-primary/2",
                   )}
                   whileTap={{ scale: 0.98 }}
                 >
@@ -283,7 +283,7 @@ export function FastingModeToggle({
                         {option.label_ar}
                       </Label>
                       {option.is_recommended && (
-                        <span className="text-xs text-green-600 bg-green-100 px-2 py-0.5 rounded-full">
+                        <span className="text-xs text-primary bg-primary/10 px-2 py-0.5 rounded-full font-medium">
                           موصى به
                         </span>
                       )}
@@ -296,10 +296,6 @@ export function FastingModeToggle({
                     id={option.value}
                     checked={isSelected}
                     onCheckedChange={() => toggleMealSelection(option.value)}
-                    className={cn(
-                      isSelected &&
-                        "data-[state=checked]:bg-purple-500 data-[state=checked]:border-purple-500",
-                    )}
                   />
                 </motion.div>
               );
@@ -308,7 +304,7 @@ export function FastingModeToggle({
             <div className="pt-2 border-t">
               <p className="text-sm text-center text-muted-foreground">
                 عدد الوجبات المختارة:{" "}
-                <span className="font-semibold text-purple-600">
+                <span className="font-semibold text-primary">
                   {selectedMeals.length}
                 </span>
               </p>
@@ -327,7 +323,7 @@ export function FastingModeToggle({
             <Button
               onClick={handleSaveMealConfig}
               disabled={isSavingConfig || selectedMeals.length < 1}
-              className="flex-1 bg-purple-500 hover:bg-purple-600"
+              className="flex-1"
             >
               {isSavingConfig ? (
                 <>
