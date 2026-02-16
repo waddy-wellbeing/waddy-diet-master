@@ -7,6 +7,7 @@ export interface AdminUserProfile {
   name: string | null
   email: string | null
   basic_info: Record<string, any> | null
+  preferences: Record<string, any> | null  // NEW: includes is_fasting flag
   created_at: string
   role: string
 }
@@ -19,6 +20,13 @@ export interface AdminUserPlan {
     lunch?: { recipe_id: string; servings: number }
     dinner?: { recipe_id: string; servings: number }
     snacks?: { recipe_id: string; servings: number }[]
+  }
+  fasting_plan?: {  // NEW: Fasting mode plan
+    'pre-iftar'?: { recipe_id: string; servings: number }
+    iftar?: { recipe_id: string; servings: number }
+    'full-meal-taraweeh'?: { recipe_id: string; servings: number }
+    'snack-taraweeh'?: { recipe_id: string; servings: number }[]
+    suhoor?: { recipe_id: string; servings: number }
   }
   daily_totals: {
     calories?: number
@@ -53,7 +61,7 @@ export async function getRecentUsers(limit = 20): Promise<{
     
     const { data, error } = await supabase
       .from('profiles')
-      .select('user_id, name, email, basic_info, created_at, role')
+      .select('user_id, name, email, basic_info, preferences, created_at, role')
       .eq('role', 'client')
       .order('created_at', { ascending: false })
       .limit(limit)
@@ -69,6 +77,34 @@ export async function getRecentUsers(limit = 20): Promise<{
     return { success: true, data: data as AdminUserProfile[] }
   } catch (error) {
     return { success: false, error: 'Failed to fetch users' }
+  }
+}
+
+/**
+ * Fetch a single user by ID (for session restore when user isn't in recent list)
+ */
+export async function getUserById(userId: string): Promise<{
+  success: boolean
+  data?: AdminUserProfile
+  error?: string
+}> {
+  try {
+    const supabase = createAdminClient()
+
+    const { data, error } = await supabase
+      .from('profiles')
+      .select('user_id, name, email, basic_info, preferences, created_at, role')
+      .eq('user_id', userId)
+      .single()
+
+    if (error) {
+      console.error('Error fetching user by ID:', error)
+      return { success: false, error: error.message }
+    }
+
+    return { success: true, data: data as AdminUserProfile }
+  } catch (error) {
+    return { success: false, error: 'Failed to fetch user' }
   }
 }
 
@@ -90,7 +126,7 @@ export async function searchUsers(query: string): Promise<{
 
     const { data, error } = await supabase
       .from('profiles')
-      .select('user_id, name, email, basic_info, created_at, role')
+      .select('user_id, name, email, basic_info, preferences, created_at, role')
       .or(`name.ilike.${searchTerm},email.ilike.${searchTerm}`)
       .order('created_at', { ascending: false })
       .limit(20)
@@ -134,10 +170,10 @@ export async function getUserPlans(userId: string, daysBack = 30, daysForward = 
 
     console.log(`Fetching plans for user ${userId} from ${startDateStr} to ${endDateStr}`)
 
-    // Fetch user's plans
+    // Fetch user's plans (query BOTH plan and fasting_plan columns)
     const { data: plans, error: plansError } = await supabase
       .from('daily_plans')
-      .select('id, plan_date, plan, daily_totals')
+      .select('id, plan_date, plan, fasting_plan, daily_totals')
       .eq('user_id', userId)
       .gte('plan_date', startDateStr)
       .lte('plan_date', endDateStr)
@@ -150,15 +186,29 @@ export async function getUserPlans(userId: string, daysBack = 30, daysForward = 
 
     console.log(`Fetched ${plans?.length || 0} plans for user ${userId}:`, plans)
 
-    // Extract all unique recipe IDs from plans
+    // Extract all unique recipe IDs from plans (check BOTH plan and fasting_plan)
     const recipeIds = new Set<string>()
     for (const plan of plans || []) {
       const p = plan.plan as AdminUserPlan['plan']
+      const fp = (plan as any).fasting_plan as AdminUserPlan['fasting_plan']
+      
+      // Extract from regular plan
       if (p?.breakfast?.recipe_id) recipeIds.add(p.breakfast.recipe_id)
       if (p?.lunch?.recipe_id) recipeIds.add(p.lunch.recipe_id)
       if (p?.dinner?.recipe_id) recipeIds.add(p.dinner.recipe_id)
       if (p?.snacks) {
         for (const snack of p.snacks) {
+          if (snack?.recipe_id) recipeIds.add(snack.recipe_id)
+        }
+      }
+      
+      // Extract from fasting plan
+      if (fp?.['pre-iftar']?.recipe_id) recipeIds.add(fp['pre-iftar'].recipe_id)
+      if (fp?.iftar?.recipe_id) recipeIds.add(fp.iftar.recipe_id)
+      if (fp?.['full-meal-taraweeh']?.recipe_id) recipeIds.add(fp['full-meal-taraweeh'].recipe_id)
+      if (fp?.suhoor?.recipe_id) recipeIds.add(fp.suhoor.recipe_id)
+      if (fp?.['snack-taraweeh']) {
+        for (const snack of fp['snack-taraweeh']) {
           if (snack?.recipe_id) recipeIds.add(snack.recipe_id)
         }
       }
@@ -183,10 +233,10 @@ export async function getUserPlans(userId: string, daysBack = 30, daysForward = 
       }
     }
 
-    // Fetch user profile
+    // Fetch user profile (includes preferences with is_fasting flag)
     const { data: profile } = await supabase
       .from('profiles')
-      .select('user_id, name, email, basic_info, created_at, role')
+      .select('user_id, name, email, basic_info, preferences, created_at, role')
       .eq('user_id', userId)
       .single()
 
@@ -255,10 +305,10 @@ export async function getDayPlan(userId: string, planDate: string): Promise<{
   try {
     const supabase = createAdminClient()
 
-    // Fetch the specific day's plan
+    // Fetch the specific day's plan (query BOTH columns)
     const { data: plan, error: planError } = await supabase
       .from('daily_plans')
-      .select('id, plan_date, plan, daily_totals')
+      .select('id, plan_date, plan, fasting_plan, daily_totals')
       .eq('user_id', userId)
       .eq('plan_date', planDate)
       .single()
@@ -280,15 +330,28 @@ export async function getDayPlan(userId: string, planDate: string): Promise<{
       }
     }
 
-    // Extract recipe IDs
+    // Extract recipe IDs (check BOTH plan and fasting_plan)
     const recipeIds = new Set<string>()
     const p = plan.plan as AdminUserPlan['plan']
+    const fp = (plan as any).fasting_plan as AdminUserPlan['fasting_plan']
     
+    // Extract from regular plan
     if (p?.breakfast?.recipe_id) recipeIds.add(p.breakfast.recipe_id)
     if (p?.lunch?.recipe_id) recipeIds.add(p.lunch.recipe_id)
     if (p?.dinner?.recipe_id) recipeIds.add(p.dinner.recipe_id)
     if (p?.snacks) {
       for (const snack of p.snacks) {
+        if (snack?.recipe_id) recipeIds.add(snack.recipe_id)
+      }
+    }
+    
+    // Extract from fasting plan
+    if (fp?.['pre-iftar']?.recipe_id) recipeIds.add(fp['pre-iftar'].recipe_id)
+    if (fp?.iftar?.recipe_id) recipeIds.add(fp.iftar.recipe_id)
+    if (fp?.['full-meal-taraweeh']?.recipe_id) recipeIds.add(fp['full-meal-taraweeh'].recipe_id)
+    if (fp?.suhoor?.recipe_id) recipeIds.add(fp.suhoor.recipe_id)
+    if (fp?.['snack-taraweeh']) {
+      for (const snack of fp['snack-taraweeh']) {
         if (snack?.recipe_id) recipeIds.add(snack.recipe_id)
       }
     }
@@ -343,42 +406,51 @@ export async function updateUserMeal({
   try {
     const supabase = createAdminClient()
 
-    // Get existing plan
+    // Fetch user's preferences to determine mode (regular vs fasting)
+    const { data: userProfile } = await supabase
+      .from('profiles')
+      .select('preferences')
+      .eq('user_id', userId)
+      .single()
+    
+    const isFastingMode = userProfile?.preferences?.is_fasting || false
+    const planColumn = isFastingMode ? 'fasting_plan' : 'plan'
+
+    // Get existing plan (query BOTH columns to safely handle data)
     const { data: existingPlan } = await supabase
       .from('daily_plans')
-      .select('plan, daily_totals')
+      .select(`plan, fasting_plan, daily_totals`)
       .eq('user_id', userId)
       .eq('plan_date', planDate)
       .maybeSingle()
 
-    // Build updated plan
-    const currentPlan = (existingPlan?.plan as any) || {}
+    // Build updated plan from the correct column
+    const currentPlan = (existingPlan?.[planColumn] as any) || {}
     const updatedPlan = { ...currentPlan }
 
-    // Update the specific meal
-    if (mealType === 'snacks' && snackIndex !== null && snackIndex !== undefined) {
+    // Update the specific meal (handle both regular and fasting meal types)
+    if ((mealType === 'snacks' || mealType === 'snack-taraweeh') && snackIndex !== null && snackIndex !== undefined) {
       // Update specific snack in array
-      const snacks = Array.isArray(updatedPlan.snacks) ? [...updatedPlan.snacks] : []
+      const snacks = Array.isArray(updatedPlan[mealType]) ? [...updatedPlan[mealType]] : []
       snacks[snackIndex] = { recipe_id: recipeId, servings: 1 }
-      updatedPlan.snacks = snacks
+      updatedPlan[mealType] = snacks
     } else {
-      // Update breakfast/lunch/dinner
+      // Update regular meals (breakfast, lunch, dinner) or fasting meals (pre-iftar, iftar, etc.)
       updatedPlan[mealType] = { recipe_id: recipeId, servings: 1 }
     }
 
-    // Save to database with conflict resolution on user_id + plan_date
+    // Save to database with correct column
+    const updateData: any = {
+      user_id: userId,
+      plan_date: planDate,
+    }
+    updateData[planColumn] = updatedPlan
+
     const { error } = await supabase
       .from('daily_plans')
-      .upsert(
-        {
-          user_id: userId,
-          plan_date: planDate,
-          plan: updatedPlan,
-        },
-        {
-          onConflict: 'user_id,plan_date', // Specify unique constraint columns
-        }
-      )
+      .upsert(updateData, {
+        onConflict: 'user_id,plan_date',
+      })
 
     if (error) {
       console.error('Error updating meal:', error)

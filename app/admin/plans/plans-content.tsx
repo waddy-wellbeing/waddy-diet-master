@@ -44,9 +44,17 @@ interface PlansContentProps {
   initialUsers: AdminUserProfile[];
 }
 
+// Convert a Date to local YYYY-MM-DD string (avoids UTC shift)
+function toLocalDateStr(date: Date): string {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
 // Format date for display
 function formatDate(dateStr: string): string {
-  const date = new Date(dateStr);
+  const date = new Date(dateStr + "T12:00:00");
   return date.toLocaleDateString("en-US", {
     weekday: "short",
     month: "short",
@@ -134,17 +142,34 @@ function MealCard({
     lunch: "☀️",
     dinner: "🌙",
     snacks: "🍿",
+    "pre-iftar": "🥤",
+    iftar: "🍽️",
+    "full-meal-taraweeh": "🍱",
+    "snack-taraweeh": "🍎",
+    suhoor: "🌙",
+  };
+
+  const formatMealType = (mealType: string): string => {
+    return mealType
+      .split("-")
+      .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+      .join(" ");
   };
 
   if (!recipe) {
     return (
-      <Card className="border-dashed hover:border-primary/50 transition-colors cursor-pointer" onClick={() => onEdit?.()}>
+      <Card
+        className="border-dashed hover:border-primary/50 transition-colors cursor-pointer"
+        onClick={() => onEdit?.()}
+      >
         <CardContent className="p-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
               <span className="text-2xl">{mealEmoji[mealType] || "🍽️"}</span>
               <div>
-                <p className="text-sm font-medium capitalize">{mealType}</p>
+                <p className="text-sm font-medium">
+                  {formatMealType(mealType)}
+                </p>
                 <p className="text-xs text-muted-foreground">No meal planned</p>
               </div>
             </div>
@@ -197,8 +222,8 @@ function MealCard({
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2">
               <span className="text-lg">{mealEmoji[mealType] || "🍽️"}</span>
-              <p className="text-xs text-muted-foreground capitalize">
-                {mealType}
+              <p className="text-xs text-muted-foreground">
+                {formatMealType(mealType)}
               </p>
             </div>
             <p className="font-medium text-sm truncate">{recipe.name}</p>
@@ -227,6 +252,7 @@ function DayPlanView({
   date,
   plan,
   recipes,
+  isFasting,
   onEditMeal,
   onCreatePlan,
   loadingMealKey,
@@ -234,13 +260,20 @@ function DayPlanView({
   date: Date;
   plan: AdminUserPlan | null;
   recipes: Record<string, AdminRecipeInfo>;
+  isFasting: boolean;
   onEditMeal?: (mealType: string, snackIndex?: number) => void;
   onCreatePlan?: () => void;
   loadingMealKey?: string | null;
 }) {
-  const dateStr = date.toISOString().split("T")[0];
-  const isToday = dateStr === new Date().toISOString().split("T")[0];
-  const isUnplanned = !plan;
+  const dateStr = toLocalDateStr(date);
+  const isToday = dateStr === toLocalDateStr(new Date());
+
+  // Strictly use the column matching the user's is_fasting preference — no fallback
+  const activePlan = isFasting
+    ? (plan as any)?.fasting_plan
+    : plan?.plan;
+  const hasData = activePlan && Object.keys(activePlan).length > 0;
+  const isUnplanned = !plan || !hasData;
 
   // Show "Create Plan" button for unplanned days
   if (isUnplanned) {
@@ -283,9 +316,9 @@ function DayPlanView({
   }
 
   const getMealRecipe = (
-    mealType: "breakfast" | "lunch" | "dinner",
+    mealType: string,
   ): { recipe: AdminRecipeInfo | null; servings: number } => {
-    const meal = plan?.plan?.[mealType];
+    const meal = activePlan?.[mealType];
     if (!meal?.recipe_id) return { recipe: null, servings: 0 };
     return {
       recipe: recipes[meal.recipe_id] || null,
@@ -293,21 +326,115 @@ function DayPlanView({
     };
   };
 
-  const getSnacks = (): Array<{
+  const getSnacks = (
+    snackKey: string,
+  ): Array<{
     recipe: AdminRecipeInfo | null;
     servings: number;
   }> => {
-    const snacksArray = (plan?.plan?.snacks as Array<any>) || [];
+    const snacksArray = (activePlan?.[snackKey] as Array<any>) || [];
     return snacksArray.map((snack) => ({
       recipe: snack?.recipe_id ? recipes[snack.recipe_id] || null : null,
       servings: snack?.servings || 1,
     }));
   };
 
+  // Render fasting mode meals
+  if (isFasting) {
+    const preIftar = getMealRecipe("pre-iftar");
+    const iftar = getMealRecipe("iftar");
+    const fullMealTaraweeh = getMealRecipe("full-meal-taraweeh");
+    const snackTaraweeh = getSnacks("snack-taraweeh");
+    const suhoor = getMealRecipe("suhoor");
+
+    return (
+      <div className="space-y-3">
+        <div className="flex items-center justify-between">
+          <div>
+            <p className="font-semibold">
+              {formatDate(dateStr)}
+              {isToday && <Badge className="ml-2 text-xs">Today</Badge>}
+              <Badge variant="outline" className="ml-2 text-xs">
+                Fasting
+              </Badge>
+            </p>
+            {plan?.daily_totals && (
+              <p className="text-xs text-muted-foreground">
+                {plan.daily_totals.calories || 0} kcal • P:{" "}
+                {plan.daily_totals.protein_g || 0}g • C:{" "}
+                {plan.daily_totals.carbs_g || 0}g • F:{" "}
+                {plan.daily_totals.fat_g || 0}g
+              </p>
+            )}
+          </div>
+        </div>
+
+        <div className="grid gap-2">
+          <MealCard
+            mealType="pre-iftar"
+            recipe={preIftar.recipe}
+            servings={preIftar.servings}
+            onEdit={() => onEditMeal?.("pre-iftar")}
+            isLoading={loadingMealKey === "pre-iftar"}
+          />
+          <MealCard
+            mealType="iftar"
+            recipe={iftar.recipe}
+            servings={iftar.servings}
+            onEdit={() => onEditMeal?.("iftar")}
+            isLoading={loadingMealKey === "iftar"}
+          />
+          <MealCard
+            mealType="full-meal-taraweeh"
+            recipe={fullMealTaraweeh.recipe}
+            servings={fullMealTaraweeh.servings}
+            onEdit={() => onEditMeal?.("full-meal-taraweeh")}
+            isLoading={loadingMealKey === "full-meal-taraweeh"}
+          />
+          <div className="mt-2 pt-2 border-t">
+            <p className="text-xs font-semibold text-muted-foreground mb-2">
+              Snacks After Taraweeh
+            </p>
+            <div className="space-y-2">
+              {snackTaraweeh.length === 0 ? (
+                <MealCard
+                  mealType="snack-taraweeh"
+                  recipe={null}
+                  servings={1}
+                  onEdit={() => onEditMeal?.("snack-taraweeh", 0)}
+                  isLoading={loadingMealKey === `snack-taraweeh-0`}
+                />
+              ) : (
+                snackTaraweeh.map((snack, index) => (
+                  <MealCard
+                    key={index}
+                    mealType="snack-taraweeh"
+                    recipe={snack.recipe}
+                    servings={snack.servings}
+                    onEdit={() => onEditMeal?.("snack-taraweeh", index)}
+                    isLoading={loadingMealKey === `snack-taraweeh-${index}`}
+                  />
+                ))
+              )}
+            </div>
+          </div>
+          <MealCard
+            mealType="suhoor"
+            recipe={suhoor.recipe}
+            servings={suhoor.servings}
+            onEdit={() => onEditMeal?.("suhoor")}
+            isLoading={loadingMealKey === "suhoor"}
+          />
+        </div>
+      </div>
+    );
+  }
+
+  // Render regular mode meals
   const breakfast = getMealRecipe("breakfast");
   const lunch = getMealRecipe("lunch");
   const dinner = getMealRecipe("dinner");
-  const snacks = getSnacks();
+  const snacks = getSnacks("snacks");
 
   return (
     <div className="space-y-3">
@@ -404,64 +531,21 @@ export function PlansContent({ initialUsers }: PlansContentProps) {
   const [activeSnackIndex, setActiveSnackIndex] = useState<number | null>(null);
   const [loadingMealKey, setLoadingMealKey] = useState<string | null>(null);
 
-  // Helper: Save session state to localStorage
-  const saveSessionState = useCallback(
-    (user: AdminUserProfile | null, week: Date, date: Date) => {
-      try {
-        localStorage.setItem(
-          "admin_plans_session",
-          JSON.stringify({
-            userId: user?.user_id || null,
-            currentWeek: week.toISOString(),
-            selectedDate: date.toISOString(),
-            userPlans,
-            recipes,
-          }),
-        );
-      } catch (error) {
-        console.error("Error saving session state:", error);
-      }
-    },
-    [userPlans, recipes],
-  );
-
-  // Load last opened session from localStorage on mount
+  // Restore last opened user from localStorage on mount (fetch fresh data)
   useEffect(() => {
     try {
-      const savedSession = localStorage.getItem("admin_plans_session");
-      if (savedSession) {
-        const session = JSON.parse(savedSession);
-        if (session.userId) {
-          // Find the user in initialUsers
-          const user = initialUsers.find((u) => u.user_id === session.userId);
-          if (user) {
-            // Restore UI state immediately
-            setSelectedUser(user);
-            setCurrentWeek(new Date(session.currentWeek));
-            setSelectedDate(new Date(session.selectedDate));
-            setUserPlans(session.userPlans || []);
-            setRecipes(session.recipes || {});
-          }
+      const savedUserId = localStorage.getItem("admin_plans_last_user_id");
+      if (savedUserId) {
+        const user = initialUsers.find((u) => u.user_id === savedUserId);
+        if (user) {
+          handleSelectUser(user);
         }
       }
     } catch (error) {
-      console.error("Error loading session from localStorage:", error);
+      console.error("Error restoring session:", error);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [initialUsers]);
-
-  // Save session whenever key state changes
-  useEffect(() => {
-    if (selectedUser) {
-      saveSessionState(selectedUser, currentWeek, selectedDate);
-    }
-  }, [
-    selectedUser,
-    currentWeek,
-    selectedDate,
-    userPlans,
-    recipes,
-    saveSessionState,
-  ]);
 
   // Fetch all recipes for the picker
   useEffect(() => {
@@ -495,9 +579,14 @@ export function PlansContent({ initialUsers }: PlansContentProps) {
   // Handle user selection
   const handleSelectUser = useCallback(async (user: AdminUserProfile) => {
     setSelectedUser(user);
-    // Save to localStorage for session persistence
-    localStorage.setItem("admin_plans_last_user_id", user.user_id);
     setIsLoadingPlans(true);
+
+    // Persist only the user ID — data is always fetched fresh
+    try {
+      localStorage.setItem("admin_plans_last_user_id", user.user_id);
+    } catch {
+      /* ignore quota errors */
+    }
 
     // Set date to today when user is selected
     const today = new Date();
@@ -508,6 +597,10 @@ export function PlansContent({ initialUsers }: PlansContentProps) {
     if (result.success && result.data) {
       setUserPlans(result.data.plans);
       setRecipes(result.data.recipes);
+      // Update selectedUser with full profile (includes preferences.is_fasting)
+      if (result.data.profile) {
+        setSelectedUser(result.data.profile);
+      }
     } else {
       setUserPlans([]);
       setRecipes({});
@@ -522,10 +615,22 @@ export function PlansContent({ initialUsers }: PlansContentProps) {
     setCurrentWeek(newDate);
   };
 
+  const userIsFasting = !!selectedUser?.preferences?.is_fasting;
+
   // Get plan for a specific date
   const getPlanForDate = (date: Date): AdminUserPlan | null => {
-    const dateStr = date.toISOString().split("T")[0];
+    const dateStr = toLocalDateStr(date);
     return userPlans.find((p) => p.plan_date === dateStr) || null;
+  };
+
+  // Check if a date has data in the active column (based on is_fasting)
+  const dateHasActivePlan = (date: Date): boolean => {
+    const plan = getPlanForDate(date);
+    if (!plan) return false;
+    const col = userIsFasting
+      ? (plan as any)?.fasting_plan
+      : plan?.plan;
+    return col && Object.keys(col).length > 0;
   };
 
   // Handle edit meal - opens recipe picker
@@ -539,7 +644,7 @@ export function PlansContent({ initialUsers }: PlansContentProps) {
   const handleRecipeSelected = async (recipeId: string) => {
     if (!selectedUser || !activeMealType) return;
 
-    const dateStr = selectedDate.toISOString().split("T")[0];
+    const dateStr = toLocalDateStr(selectedDate);
     const mealKey =
       activeSnackIndex !== null ? `snacks-${activeSnackIndex}` : activeMealType;
 
@@ -594,7 +699,7 @@ export function PlansContent({ initialUsers }: PlansContentProps) {
   const handleCreatePlan = async () => {
     if (!selectedUser) return;
 
-    const dateStr = selectedDate.toISOString().split("T")[0];
+    const dateStr = toLocalDateStr(selectedDate);
     setLoadingMealKey("create-plan");
 
     try {
@@ -755,8 +860,8 @@ export function PlansContent({ initialUsers }: PlansContentProps) {
                     <ChevronLeft className="h-5 w-5" />
                   </Button>
                   <p className="font-medium">
-                    {formatDate(weekDates[0].toISOString())} -{" "}
-                    {formatDate(weekDates[6].toISOString())}
+                    {formatDate(toLocalDateStr(weekDates[0]))} -{" "}
+                    {formatDate(toLocalDateStr(weekDates[6]))}
                   </p>
                   <Button
                     variant="ghost"
@@ -770,12 +875,11 @@ export function PlansContent({ initialUsers }: PlansContentProps) {
                 {/* Week Days */}
                 <div className="grid grid-cols-7 gap-1">
                   {weekDates.map((date) => {
-                    const dateStr = date.toISOString().split("T")[0];
-                    const todayStr = new Date().toISOString().split("T")[0];
+                    const dateStr = toLocalDateStr(date);
+                    const todayStr = toLocalDateStr(new Date());
                     const isToday = dateStr === todayStr;
-                    const isSelected =
-                      dateStr === selectedDate.toISOString().split("T")[0];
-                    const hasPlan = getPlanForDate(date) !== null;
+                    const isSelected = dateStr === toLocalDateStr(selectedDate);
+                    const hasPlan = dateHasActivePlan(date);
 
                     return (
                       <button
@@ -853,9 +957,11 @@ export function PlansContent({ initialUsers }: PlansContentProps) {
                   </div>
                 )}
                 <DayPlanView
+                  key={toLocalDateStr(selectedDate)}
                   date={selectedDate}
                   plan={getPlanForDate(selectedDate)}
                   recipes={recipes}
+                  isFasting={!!selectedUser?.preferences?.is_fasting}
                   onEditMeal={handleEditMeal}
                   onCreatePlan={handleCreatePlan}
                   loadingMealKey={loadingMealKey}

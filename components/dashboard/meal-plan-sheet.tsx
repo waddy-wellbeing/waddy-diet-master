@@ -7,7 +7,7 @@
 
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { format } from "date-fns";
 import { Loader2, Plus, Trash2, X, ArrowLeftRight } from "lucide-react";
 import { toast } from "sonner";
@@ -95,36 +95,37 @@ export function MealPlanSheet({
     ? allMealTypes.filter((meal) => selectedMeals.includes(meal.key))
     : allMealTypes;
 
-  // Categorize recipes by meal type for suggestions
-  const recipesByMealType: Record<MealType, RecipeRecord[]> = {
-    breakfast: [],
-    lunch: [],
-    dinner: [],
-    snacks: [],
-    "pre-iftar": [],
-    iftar: [],
-    "full-meal-taraweeh": [],
-    "snack-taraweeh": [],
-    suhoor: [],
-  };
+  // Categorize recipes by meal type for suggestions (memoized to avoid recalc on every render)
+  const recipesByMealType = useMemo(() => {
+    const map: Record<MealType, RecipeRecord[]> = {
+      breakfast: [],
+      lunch: [],
+      dinner: [],
+      snacks: [],
+      "pre-iftar": [],
+      iftar: [],
+      "full-meal-taraweeh": [],
+      "snack-taraweeh": [],
+      suhoor: [],
+    };
 
-  // Populate recipe categories
-  recipes.forEach((recipe) => {
-    // `recipe.meal_type` can be an array of tags (or undefined).
-    // Normalize to an array and add the recipe to any matching MealType bucket.
-    const candidateTypes: string[] = Array.isArray(recipe.meal_type)
-      ? recipe.meal_type
-      : recipe.meal_type
-      ? [recipe.meal_type]
-      : [];
+    recipes.forEach((recipe) => {
+      const candidateTypes: string[] = Array.isArray(recipe.meal_type)
+        ? recipe.meal_type
+        : recipe.meal_type
+          ? [recipe.meal_type]
+          : [];
 
-    for (const t of candidateTypes) {
-      if (!t) continue;
-      if (t in recipesByMealType) {
-        recipesByMealType[t as MealType].push(recipe);
+      for (const t of candidateTypes) {
+        if (!t) continue;
+        if (t in map) {
+          map[t as MealType].push(recipe);
+        }
       }
-    }
-  });
+    });
+
+    return map;
+  }, [recipes]);
 
   // Fetch plan when date changes
   useEffect(() => {
