@@ -1,7 +1,7 @@
 import { type NextRequest } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { corsOptionsResponse, jsonResponse, errorResponse } from '../_shared/cors'
-import type { DailyLog, LoggedMeal, LoggedItem, DailyTotals, MealType, MEAL_TYPES } from '@/lib/types/nutri'
+import type { DailyLog, LoggedMeal, DailyTotals, MealType } from '@/lib/types/nutri'
 
 export const dynamic = 'force-dynamic'
 
@@ -16,14 +16,23 @@ const VALID_MEAL_TYPES: readonly string[] = ['breakfast', 'lunch', 'dinner', 'sn
 /**
  * POST /api/mobile/log
  *
+ * Logs a recipe to the user's daily log with APPEND logic (matches web app).
+ * 
  * Body: {
- *   uid:      string        — User ID
- *   date:     string        — YYYY-MM-DD
- *   mealType: MealType      — breakfast | lunch | dinner | snacks
- *   items:    LoggedItem[]   — Array of recipe/ingredient entries
+ *   uid:          string  — User ID
+ *   date:         string  — YYYY-MM-DD
+ *   mealType:     string  — breakfast | lunch | dinner | snacks
+ *   recipe_id:    string  — Recipe UUID
+ *   recipe_name:  string  — Recipe name for display
+ *   scale_factor: number  — Servings multiplier (e.g., 1.5)
  * }
  *
- * Upserts the meal into the user's daily_logs row for the given date.
+ * Logic:
+ * 1. Fetch existing log for (uid, date)
+ * 2. Construct log entry with scale_factor as servings
+ * 3. APPEND to meal slot's items array (never replace)
+ * 4. Recalculate totals from ALL items in ALL slots
+ * 5. Upsert the log row
  */
 export async function POST(request: NextRequest) {
   let body: Record<string, unknown>
@@ -34,11 +43,13 @@ export async function POST(request: NextRequest) {
     return errorResponse('Invalid JSON body')
   }
 
-  const { uid, date, mealType, items } = body as {
+  const { uid, date, mealType, recipe_id, recipe_name, scale_factor } = body as {
     uid?: string
     date?: string
     mealType?: string
-    items?: LoggedItem[]
+    recipe_id?: string
+    recipe_name?: string
+    scale_factor?: unknown
   }
 
   // ── Validation ──────────────────────────────────────────────────────────
@@ -51,8 +62,14 @@ export async function POST(request: NextRequest) {
   if (!mealType || !VALID_MEAL_TYPES.includes(mealType)) {
     return errorResponse(`Invalid mealType. Expected one of: ${VALID_MEAL_TYPES.join(', ')}`)
   }
-  if (!Array.isArray(items) || items.length === 0) {
-    return errorResponse('items must be a non-empty array')
+  if (!recipe_id || typeof recipe_id !== 'string') {
+    return errorResponse('Missing or invalid field: recipe_id')
+  }
+  if (!recipe_name || typeof recipe_name !== 'string') {
+    return errorResponse('Missing or invalid field: recipe_name')
+  }
+  if (typeof scale_factor !== 'number' || scale_factor <= 0) {
+    return errorResponse('Invalid scale_factor (must be positive number)')
   }
 
   const supabase = createAdminClient()
@@ -66,31 +83,39 @@ export async function POST(request: NextRequest) {
     .eq('log_date', date)
     .maybeSingle()
 
-  const loggedMeal: LoggedMeal = {
+  // ── Construct log entry (matches web app structure) ─────────────────────
+  const newEntry = {
+    type: 'recipe' as const,
+    recipe_id,
+    recipe_name,
+    servings: scale_factor,       // Critical: Web uses scale_factor here
+    scale_factor,
+    from_plan: true,
     logged_at: new Date().toISOString(),
-    items,
   }
 
-  let updatedLog: DailyLog
-  let mealsLogged: number
+  // ── APPEND to existing items (never replace) ────────────────────────────
+  const existingLog = (existing?.log ?? {}) as DailyLog
+  const existingMeal = existingLog[meal]
+  const existingItems = existingMeal?.items || []
 
-  if (existing) {
-    // Merge new meal into existing log
-    const log = (existing.log ?? {}) as DailyLog
-    log[meal] = loggedMeal
-    updatedLog = log
-    mealsLogged = countMeals(updatedLog)
-  } else {
-    updatedLog = { [meal]: loggedMeal } as unknown as DailyLog
-    mealsLogged = 1
+  const updatedMeal: LoggedMeal = {
+    logged_at: new Date().toISOString(),
+    items: [...existingItems, newEntry], // APPEND logic
   }
 
-  // ── Calculate totals from logged items (best-effort) ────────────────────
-  // The frontend / coach may recalculate & patch accurate totals later.
+  const updatedLog: DailyLog = {
+    ...existingLog,
+    [meal]: updatedMeal,
+  }
+
+  // ── Recalculate totals from ALL items in ALL slots ──────────────────────
   const totals = await computeLoggedTotals(supabase, updatedLog)
+  const mealsLogged = countMeals(updatedLog)
 
-  // ── Upsert ──────────────────────────────────────────────────────────────
-  if (existing) {
+  // ── Upsert (INSERT on first log, UPDATE on subsequent) ──────────────────
+  if (existing?.id) {
+    // UPDATE existing log row
     const { error } = await supabase
       .from('daily_logs')
       .update({
@@ -106,6 +131,7 @@ export async function POST(request: NextRequest) {
       return errorResponse('Failed to update log', 500)
     }
   } else {
+    // INSERT new log row
     const { error } = await supabase
       .from('daily_logs')
       .insert({
@@ -122,7 +148,12 @@ export async function POST(request: NextRequest) {
     }
   }
 
-  return jsonResponse({ success: true, logged_totals: totals, meals_logged: mealsLogged }, 201)
+  return jsonResponse({ 
+    success: true, 
+    logged_totals: totals, 
+    meals_logged: mealsLogged,
+    logged_item: newEntry,
+  }, 201)
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -140,6 +171,8 @@ function countMeals(log: DailyLog): number {
 /**
  * Best-effort nutrition totals based on logged recipe/ingredient IDs.
  * Looks up recipes & ingredients from the DB and sums calories/macros.
+ * 
+ * Uses the 'servings' field from each item as the scale factor.
  */
 async function computeLoggedTotals(
   supabase: ReturnType<typeof createAdminClient>,
@@ -161,7 +194,7 @@ async function computeLoggedTotals(
     }
   }
 
-  // Batch-fetch recipes
+  // Batch-fetch recipes (only if we have recipe IDs)
   const recipeNutritionMap = new Map<string, { calories: number; protein_g: number; carbs_g: number; fat_g: number }>()
 
   if (recipeIds.size > 0) {
@@ -181,7 +214,7 @@ async function computeLoggedTotals(
     }
   }
 
-  // Batch-fetch ingredients
+  // Batch-fetch ingredients (only if we have ingredient IDs)
   const ingredientNutritionMap = new Map<string, { calories: number; protein_g: number; carbs_g: number; fat_g: number }>()
 
   if (ingredientIds.size > 0) {
@@ -205,21 +238,23 @@ async function computeLoggedTotals(
   for (const meal of meals) {
     if (!meal?.items) continue
     for (const item of meal.items) {
-      const servings = item.servings ?? 1
+      // Use servings field as scale factor (e.g., 1.5 servings = 1.5x nutrition)
+      const scaleFactor = item.servings ?? 1
 
       if (item.type === 'recipe' && item.recipe_id) {
         const n = recipeNutritionMap.get(item.recipe_id)
         if (n) {
-          totals.calories! += n.calories * servings
-          totals.protein_g! += n.protein_g * servings
-          totals.carbs_g! += n.carbs_g * servings
-          totals.fat_g! += n.fat_g * servings
+          totals.calories! += n.calories * scaleFactor
+          totals.protein_g! += n.protein_g * scaleFactor
+          totals.carbs_g! += n.carbs_g * scaleFactor
+          totals.fat_g! += n.fat_g * scaleFactor
         }
       }
 
       if (item.type === 'ingredient' && item.ingredient_id) {
         const n = ingredientNutritionMap.get(item.ingredient_id)
         if (n) {
+          // For ingredients, amount is typically in grams or units
           const amount = item.amount ?? 1
           totals.calories! += n.calories * amount
           totals.protein_g! += n.protein_g * amount
@@ -230,7 +265,7 @@ async function computeLoggedTotals(
     }
   }
 
-  // Round to integers
+  // Round to integers for cleaner display
   totals.calories = Math.round(totals.calories!)
   totals.protein_g = Math.round(totals.protein_g!)
   totals.carbs_g = Math.round(totals.carbs_g!)
