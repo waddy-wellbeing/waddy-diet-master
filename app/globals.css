@@ -171,3 +171,45 @@
   letter-spacing: 0;
   font-weight: 500;
 }
+
+/* ========== Ramadan Recommendation Badge ========== */
+@keyframes ramadan-gradient {
+  0% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
+}
+
+.ramadan-badge {
+  background: linear-gradient(
+    270deg,
+    oklch(0.78 0.18 85),   /* warm gold */
+    oklch(0.72 0.2 125),   /* lime green (primary) */
+    oklch(0.65 0.15 310),  /* soft purple/plum */
+    oklch(0.78 0.18 85)    /* warm gold */
+  );
+  background-size: 300% 100%;
+  animation: ramadan-gradient 4s ease infinite;
+  color: oklch(0.15 0.02 120);
+  border: 1px solid oklch(0.78 0.18 85 / 40%);
+  text-shadow: 0 0.5px 0 oklch(1 0 0 / 30%);
+}
+
+.dark .ramadan-badge {
+  background: linear-gradient(
+    270deg,
+    oklch(0.55 0.15 85),
+    oklch(0.5 0.15 125),
+    oklch(0.45 0.12 310),
+    oklch(0.55 0.15 85)
+  );
+  background-size: 300% 100%;
+  animation: ramadan-gradient 4s ease infinite;
+  color: oklch(0.95 0.01 85);
+  border: 1px solid oklch(0.55 0.15 85 / 40%);
+  text-shadow: none;
+}
+
+.ramadan-badge-icon {
+  font-size: 12px;
+  line-height: 1;
+}

@@ -360,9 +360,13 @@ export interface RecipeRecord {
   last_validated_at?: string
   created_by?: string
   is_public: boolean
+  recommendation_group?: string[] | null  // e.g. ['ramadan'] - groups this recipe belongs to for recommendations
   created_at: string
   updated_at: string
 }
+
+/** Valid recommendation group values */
+export type RecommendationGroup = 'ramadan'
 
 /** Recipe record with ingredients loaded from junction table */
 export interface RecipeWithIngredients extends RecipeRecord {

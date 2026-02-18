@@ -86,7 +86,8 @@ export async function generateFastingPlan(
         id,
         name,
         meal_type,
-        nutrition_per_serving
+        nutrition_per_serving,
+        recommendation_group
       `)
       .eq('is_public', true)
       .not('nutrition_per_serving', 'is', null)
@@ -108,6 +109,14 @@ export async function generateFastingPlan(
     const minScale = 0.5
     const maxScale = 2.0
 
+    // First pass: sort candidates per meal slot
+    const candidatesByMeal: Record<string, Array<{
+      id: string
+      scaleFactor: number
+      macroScore: number
+      isRamadanRec: boolean
+    }>> = {}
+
     for (const meal of fastingMealsWithCalories) {
       const targetCalories = meal.target_calories!
       const mealName = meal.name // e.g., 'iftar', 'suhoor', 'pre-iftar'
@@ -117,6 +126,7 @@ export async function generateFastingPlan(
         id: string
         scaleFactor: number
         macroScore: number
+        isRamadanRec: boolean
       }> = []
 
       for (const recipe of allRecipes) {
@@ -150,12 +160,16 @@ export async function generateFastingPlan(
         suitableRecipes.push({
           id: recipe.id,
           scaleFactor,
-          macroScore
+          macroScore,
+          isRamadanRec: Array.isArray(recipe.recommendation_group) && recipe.recommendation_group.includes('ramadan')
         })
       }
 
-      // Sort by: 1) Macro score (descending), 2) Scale factor closest to 1.0
+      // Sort by: 0) Ramadan recommendation, 1) Macro score (descending), 2) Scale factor closest to 1.0
       suitableRecipes.sort((a, b) => {
+        // Priority 0: Ramadan recommended recipes first
+        if (a.isRamadanRec !== b.isRamadanRec) return b.isRamadanRec ? 1 : -1
+
         const scoreDiff = b.macroScore - a.macroScore
         if (Math.abs(scoreDiff) > 5) return scoreDiff
 
@@ -164,17 +178,43 @@ export async function generateFastingPlan(
         return aDistFromOne - bDistFromOne
       })
 
-      // Assign the best recipe to this meal
-      if (suitableRecipes.length > 0) {
-        const bestRecipe = suitableRecipes[0]
-        assignedPlan[mealName] = {
-          recipe_id: bestRecipe.id,
-          servings: Math.round(bestRecipe.scaleFactor * 100) / 100
-        }
-        console.log(`Assigned ${mealName}:`, bestRecipe.id, `scale: ${bestRecipe.scaleFactor}`)
-      } else {
-        console.warn(`No suitable recipes found for ${mealName} (${targetCalories} cal)`)
+      candidatesByMeal[mealName] = suitableRecipes
+    }
+
+    // Second pass: distribute Ramadan picks to avoid the same recipe in every slot
+    const claimedRamadanIds = new Set<string>()
+
+    for (const meal of fastingMealsWithCalories) {
+      const mealName = meal.name
+      const suitableRecipes = candidatesByMeal[mealName] || []
+      if (suitableRecipes.length === 0) {
+        console.warn(`No suitable recipes found for ${mealName} (${meal.target_calories} cal)`)
+        continue
       }
+
+      let bestRecipe = suitableRecipes[0]
+
+      // If the top pick is a Ramadan recipe already claimed by another slot,
+      // try to find an unclaimed Ramadan recipe first
+      if (bestRecipe.isRamadanRec && claimedRamadanIds.has(bestRecipe.id)) {
+        const unclaimed = suitableRecipes.find(
+          (r) => r.isRamadanRec && !claimedRamadanIds.has(r.id)
+        )
+        if (unclaimed) {
+          bestRecipe = unclaimed
+        }
+        // If no unclaimed Ramadan recipe exists, allow duplication (few picks scenario)
+      }
+
+      if (bestRecipe.isRamadanRec) {
+        claimedRamadanIds.add(bestRecipe.id)
+      }
+
+      assignedPlan[mealName] = {
+        recipe_id: bestRecipe.id,
+        servings: Math.round(bestRecipe.scaleFactor * 100) / 100
+      }
+      console.log(`Assigned ${mealName}:`, bestRecipe.id, `scale: ${bestRecipe.scaleFactor}`)
     }
 
     // 6. Check if plan already exists

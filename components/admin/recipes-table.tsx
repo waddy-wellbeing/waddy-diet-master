@@ -53,14 +53,17 @@ import {
   ArrowUpDown,
   StickyNote,
   AlertTriangle,
+  Moon,
+  X,
 } from 'lucide-react'
+import { Checkbox } from '@/components/ui/checkbox'
 import {
   Tooltip,
   TooltipContent,
   TooltipProvider,
   TooltipTrigger,
 } from '@/components/ui/tooltip'
-import { deleteRecipe, type RecipeListItem } from '@/lib/actions/recipes'
+import { deleteRecipe, addRecommendationGroup, removeRecommendationGroup, type RecipeListItem } from '@/lib/actions/recipes'
 import { RecipeFormDialog } from './recipe-form-dialog'
 import { MEAL_TYPES } from '@/lib/validators/recipes'
 
@@ -92,8 +95,70 @@ export function RecipesTable({
   const [imagePreviewUrl, setImagePreviewUrl] = useState<string | null>(null)
   const [imagePreviewName, setImagePreviewName] = useState<string>('')
   const [recipeToEdit, setRecipeToEdit] = useState<RecipeListItem | null>(null)
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
+  const [bulkActionPending, setBulkActionPending] = useState(false)
 
   const totalPages = Math.ceil(total / pageSize)
+  const allSelected = recipes.length > 0 && recipes.every(r => selectedIds.has(r.id))
+  const someSelected = recipes.some(r => selectedIds.has(r.id))
+
+  function toggleSelectAll() {
+    if (allSelected) {
+      setSelectedIds(new Set())
+    } else {
+      setSelectedIds(new Set(recipes.map(r => r.id)))
+    }
+  }
+
+  function toggleSelect(id: string) {
+    setSelectedIds(prev => {
+      const next = new Set(prev)
+      if (next.has(id)) {
+        next.delete(id)
+      } else {
+        next.add(id)
+      }
+      return next
+    })
+  }
+
+  async function handleBulkAddRamadan() {
+    if (selectedIds.size === 0) return
+    setBulkActionPending(true)
+    try {
+      const result = await addRecommendationGroup(Array.from(selectedIds), 'ramadan')
+      if (result.success) {
+        toast.success('Ramadan Recommendation', {
+          description: `${result.data?.updated || 0} recipe(s) marked as Ramadan recommended.`,
+        })
+        setSelectedIds(new Set())
+        router.refresh()
+      } else {
+        toast.error('Error', { description: result.error })
+      }
+    } finally {
+      setBulkActionPending(false)
+    }
+  }
+
+  async function handleBulkRemoveRamadan() {
+    if (selectedIds.size === 0) return
+    setBulkActionPending(true)
+    try {
+      const result = await removeRecommendationGroup(Array.from(selectedIds), 'ramadan')
+      if (result.success) {
+        toast.success('Ramadan Recommendation Removed', {
+          description: `${result.data?.updated || 0} recipe(s) unmarked.`,
+        })
+        setSelectedIds(new Set())
+        router.refresh()
+      } else {
+        toast.error('Error', { description: result.error })
+      }
+    } finally {
+      setBulkActionPending(false)
+    }
+  }
   const currentMealType = searchParams.get('mealType') ?? ''
   const currentCuisine = searchParams.get('cuisine') ?? ''
   const currentSort = searchParams.get('sort') ?? ''
@@ -253,6 +318,45 @@ export function RecipesTable({
             {currentHasIssues ? 'Showing Issues' : 'Has Issues'}
           </Button>
         </div>
+
+        {/* Bulk Action Bar */}
+        {selectedIds.size > 0 && (
+          <div className="flex items-center gap-3 p-3 rounded-lg bg-primary/5 border border-primary/20">
+            <span className="text-sm font-medium text-primary">
+              {selectedIds.size} recipe{selectedIds.size > 1 ? 's' : ''} selected
+            </span>
+            <div className="flex gap-2 ml-auto">
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={bulkActionPending}
+                onClick={handleBulkAddRamadan}
+                className="gap-2 border-amber-300 text-amber-700 hover:bg-amber-50 dark:border-amber-600 dark:text-amber-400 dark:hover:bg-amber-950"
+              >
+                <Moon className="h-4 w-4" />
+                Mark Ramadan ☪
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={bulkActionPending}
+                onClick={handleBulkRemoveRamadan}
+                className="gap-2"
+              >
+                <X className="h-4 w-4" />
+                Remove Ramadan
+              </Button>
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={() => setSelectedIds(new Set())}
+                className="gap-2"
+              >
+                Clear Selection
+              </Button>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Table */}
@@ -260,6 +364,14 @@ export function RecipesTable({
         <Table>
           <TableHeader>
             <TableRow>
+              <TableHead className="w-[40px]">
+                <Checkbox
+                  checked={allSelected}
+                  onCheckedChange={toggleSelectAll}
+                  aria-label="Select all recipes"
+                  className={someSelected && !allSelected ? 'data-[state=unchecked]:bg-primary/20' : ''}
+                />
+              </TableHead>
               <TableHead className="w-[80px]">Image</TableHead>
               <TableHead className="w-[250px]">
                 <Button
@@ -314,7 +426,7 @@ export function RecipesTable({
           <TableBody>
             {recipes.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={9} className="h-32 text-center">
+                <TableCell colSpan={10} className="h-32 text-center">
                   <div className="flex flex-col items-center gap-2">
                     <p className="text-muted-foreground">No recipes found</p>
                     <Button
@@ -331,6 +443,13 @@ export function RecipesTable({
             ) : (
               recipes.map((recipe) => (
                 <TableRow key={recipe.id} className="group">
+                  <TableCell>
+                    <Checkbox
+                      checked={selectedIds.has(recipe.id)}
+                      onCheckedChange={() => toggleSelect(recipe.id)}
+                      aria-label={`Select ${recipe.name}`}
+                    />
+                  </TableCell>
                   <TableCell>
                     {recipe.image_url ? (
                       <button
@@ -375,11 +494,19 @@ export function RecipesTable({
                           </TooltipProvider>
                         )}
                       </div>
-                      {recipe.description && (
-                        <span className="text-xs text-muted-foreground line-clamp-1">
-                          {recipe.description}
-                        </span>
-                      )}
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        {recipe.description && (
+                          <span className="text-xs text-muted-foreground line-clamp-1">
+                            {recipe.description}
+                          </span>
+                        )}
+                        {recipe.recommendation_group?.includes('ramadan') && (
+                          <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-semibold bg-gradient-to-r from-amber-100 to-yellow-100 text-amber-800 dark:from-amber-900/40 dark:to-yellow-900/40 dark:text-amber-300 border border-amber-200/50 dark:border-amber-700/50">
+                            <Moon className="h-3 w-3" />
+                            Ramadan
+                          </span>
+                        )}
+                      </div>
                     </div>
                   </TableCell>
                   <TableCell>

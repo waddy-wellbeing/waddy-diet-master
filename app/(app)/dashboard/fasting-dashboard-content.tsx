@@ -155,6 +155,10 @@ export function FastingDashboardContent({
     return initial;
   });
 
+  // Track meals where user explicitly swapped away from a Ramadan recommendation
+  // This prevents the Ramadan override from fighting with user's manual swap within a session
+  const [userOverriddenMeals, setUserOverriddenMeals] = useState<Set<string>>(new Set());
+
   // Get targets from profile
   const targets = profile.targets;
   const dailyCalories = targets.daily_calories || 2000;
@@ -303,10 +307,57 @@ export function FastingDashboardContent({
     saveTodaysPlan();
   }, []); // Run only once on mount
 
+  // Persist Ramadan-recommended recipes into the plan on mount
+  // This updates specific meal slots where a Ramadan recipe should replace the current plan
+  useEffect(() => {
+    const updatePlanWithRamadanRecipes = async () => {
+      if (!isDateToday(selectedDate)) return;
+
+      const currentFastingPlan = (initialDailyPlan as any)?.fasting_plan as
+        | DailyPlan
+        | undefined;
+      if (!currentFastingPlan) return; // No plan to update (auto-save handles creation)
+
+      const { saveMealToPlan } = await import("@/lib/actions/daily-plans");
+      const dateStr = format(new Date(), "yyyy-MM-dd");
+      let updatedAny = false;
+
+      for (const slot of mealSlots) {
+        const topRecipe = recipesByMealType[slot.name]?.[0];
+        if (!topRecipe) continue;
+
+        const isRamadan = (
+          topRecipe.recommendation_group as string[] | null
+        )?.includes("ramadan");
+        if (!isRamadan) continue;
+
+        const planSlot = (currentFastingPlan as any)?.[slot.name];
+        if (planSlot?.recipe_id !== topRecipe.id) {
+          await saveMealToPlan({
+            date: dateStr,
+            mealType: slot.name as MealName,
+            recipeId: topRecipe.id,
+            servings: topRecipe.scale_factor || 1,
+            isFastingMode: true,
+          });
+          updatedAny = true;
+        }
+      }
+
+      // Refresh plan data if any slots were updated
+      if (updatedAny) {
+        fetchDayData(selectedDate);
+      }
+    };
+
+    updatePlanWithRamadanRecipes();
+  }, []); // Run only once on mount
+
   // Get current recipe for each meal type based on selected index
   // Get current recipe for the selected day
   // - If the day has a fasting plan in database: show the PLANNED recipe
   // - If the day has no plan: show the SUGGESTED recipe (uses selectedIndices for swapping)
+  // - Ramadan-recommended recipes take priority over stale plans (unless user explicitly swapped)
   const getCurrentRecipe = (mealType: MealName): ScaledRecipe | null => {
     const recipes = recipesByMealType[mealType] || [];
     if (recipes.length === 0) return null;
@@ -325,6 +376,16 @@ export function FastingDashboardContent({
       const recipeId = planSlot?.recipe_id;
 
       if (recipeId) {
+        // Check if a Ramadan-recommended recipe should take priority over the saved plan
+        // Only override if the user hasn't explicitly swapped this meal in this session
+        if (!userOverriddenMeals.has(mealType)) {
+          const topRecipe = recipes[0];
+          const topIsRamadan = (topRecipe?.recommendation_group as string[] | null)?.includes('ramadan');
+          if (topIsRamadan && recipeId !== topRecipe.id) {
+            return topRecipe;
+          }
+        }
+
         // Find the recipe in all available recipes
         const allRecipes = Object.values(recipesByMealType).flat();
         const plannedRecipe = allRecipes.find((r) => r.id === recipeId);
@@ -774,6 +835,9 @@ export function FastingDashboardContent({
       ...prev,
       [mealType]: newIdx,
     }));
+
+    // Track that user explicitly overrode this meal (prevents Ramadan auto-override for this session)
+    setUserOverriddenMeals((prev) => new Set(prev).add(mealType));
 
     // Save to daily plan if viewing today or any date with an existing plan
     const todayDateStr = format(new Date(), "yyyy-MM-dd");

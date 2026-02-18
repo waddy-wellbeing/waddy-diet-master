@@ -26,6 +26,7 @@ import {
   getPlanIndicatorLabel,
   canPlanDate,
 } from "@/lib/utils/meal-planning";
+import { RamadanBadge } from "@/components/dashboard/ramadan-badge";
 
 interface WeekDayCardProps {
   date: Date;
@@ -408,6 +409,7 @@ interface MealCardProps {
       };
       scale_factor?: number;
       scaled_calories?: number;
+      recommendation_group?: string[] | null;
     } | null;
     recipeCount: number;
     currentIndex: number;
@@ -668,6 +670,10 @@ export function MealCard({
                   >
                     {displayCalories} cal
                   </motion.p>
+                  {/* Ramadan recommendation badge */}
+                  {meal.recipe?.recommendation_group?.includes('ramadan') && (
+                    <RamadanBadge />
+                  )}
                   {meal.planSlot?.swapped &&
                     meal.planSlot?.swapped_ingredients &&
                     Object.keys(meal.planSlot.swapped_ingredients).length >

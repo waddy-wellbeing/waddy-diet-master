@@ -20,6 +20,7 @@ import {
   SheetTitle,
 } from "@/components/ui/sheet";
 import type { RecipeRecord } from "@/lib/types/nutri";
+import { RamadanBadge } from "@/components/dashboard/ramadan-badge";
 
 interface RecipePickerSheetProps {
   open: boolean;
@@ -86,7 +87,7 @@ export function RecipePickerSheet({
     const isCaloriesOnly = FASTING_CALORIES_ONLY_MEALS.includes(mealType);
     const acceptedTypes = mealTypeMapping[mealType] || [];
 
-    return recipes.filter((recipe) => {
+    const filtered = recipes.filter((recipe) => {
       // All meals now use meal_type filtering (FASTING_CALORIES_ONLY_MEALS is empty)
       const recipeMealTypes = recipe.meal_type || [];
       const matchesMealType = acceptedTypes.some((t) =>
@@ -107,6 +108,18 @@ export function RecipePickerSheet({
 
       return true;
     });
+
+    // Sort: Ramadan recommendations first (when viewing fasting meals)
+    const isFastingMeal = ['pre-iftar', 'iftar', 'full-meal-taraweeh', 'snack-taraweeh', 'suhoor'].includes(mealType);
+    if (isFastingMeal) {
+      filtered.sort((a, b) => {
+        const aRamadan = (a.recommendation_group as string[] | null)?.includes('ramadan') ? 1 : 0;
+        const bRamadan = (b.recommendation_group as string[] | null)?.includes('ramadan') ? 1 : 0;
+        return bRamadan - aRamadan;
+      });
+    }
+
+    return filtered;
   }, [recipes, mealType, searchQuery]);
 
   const handleRecipeClick = (recipeId: string) => {
@@ -201,6 +214,9 @@ export function RecipePickerSheet({
                     <h3 className="font-semibold truncate mb-1">
                       {recipe.name}
                     </h3>
+                    {(recipe.recommendation_group as string[] | null)?.includes('ramadan') && (
+                      <div className="mb-1"><RamadanBadge /></div>
+                    )}
 
                     <div className="flex items-center gap-3 text-sm text-muted-foreground">
                       {recipe.nutrition_per_serving?.calories && (

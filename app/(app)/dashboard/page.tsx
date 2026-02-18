@@ -375,8 +375,19 @@ export default async function DashboardPage() {
         });
       }
 
-      // Sort by: 1) Macro similarity (descending), 2) Primary meal type, 3) Scale factor closest to 1.0
+      // Sort by: 
+      // 0) Ramadan recommendation boost (when fasting mode is enabled)
+      // 1) Macro similarity (descending)
+      // 2) Primary meal type
+      // 3) Scale factor closest to 1.0
       suitableRecipes.sort((a, b) => {
+        // Priority 0: Ramadan recommendation boost (only when fasting mode is active)
+        if (isFastingModeCheck) {
+          const aRamadan = (a.recommendation_group as string[] | null)?.includes('ramadan') ? 1 : 0;
+          const bRamadan = (b.recommendation_group as string[] | null)?.includes('ramadan') ? 1 : 0;
+          if (bRamadan !== aRamadan) return bRamadan - aRamadan;
+        }
+
         // First priority: Macro similarity (higher is better)
         // Negative scores (out-of-range recipes) will appear last
         const macroScoreDiff =
@@ -402,6 +413,52 @@ export default async function DashboardPage() {
       });
 
       recipesByMealType[mealSlot] = suitableRecipes;
+    }
+  }
+
+  // ===== DISTRIBUTE RAMADAN PICKS ACROSS MEAL SLOTS (avoid same recipe in every slot) =====
+  // When multiple meal slots share the same Ramadan-recommended recipe at index 0,
+  // rotate picks so each slot gets a different one when possible.
+  // If there's only one Ramadan pick matching a group of slots, allow duplication.
+  if (isFastingModeCheck) {
+    // Track which Ramadan recipe IDs have been "claimed" as index-0 by a slot
+    const claimedRamadanIds = new Set<string>();
+
+    for (const slot of mealSlots) {
+      const recipes = recipesByMealType[slot];
+      if (!recipes || recipes.length === 0) continue;
+
+      // Collect all Ramadan recipes in this slot's list
+      const ramadanRecipes = recipes.filter((r) =>
+        (r.recommendation_group as string[] | null)?.includes('ramadan')
+      );
+
+      if (ramadanRecipes.length === 0) continue;
+
+      const topRecipe = recipes[0];
+      const isTopRamadan = (topRecipe.recommendation_group as string[] | null)?.includes('ramadan');
+      if (!isTopRamadan) continue;
+
+      // If the current top Ramadan recipe is already claimed by another slot,
+      // try to find an unclaimed Ramadan recipe to promote to index 0
+      if (claimedRamadanIds.has(topRecipe.id)) {
+        const unclaimed = ramadanRecipes.find((r) => !claimedRamadanIds.has(r.id));
+
+        if (unclaimed) {
+          // Move the unclaimed Ramadan recipe to index 0
+          const unclaimedIdx = recipes.indexOf(unclaimed);
+          if (unclaimedIdx > 0) {
+            recipes.splice(unclaimedIdx, 1);
+            recipes.unshift(unclaimed);
+          }
+          claimedRamadanIds.add(unclaimed.id);
+        } else {
+          // All Ramadan picks are already claimed — allow duplication (few Ramadan picks scenario)
+          claimedRamadanIds.add(topRecipe.id);
+        }
+      } else {
+        claimedRamadanIds.add(topRecipe.id);
+      }
     }
   }
 
