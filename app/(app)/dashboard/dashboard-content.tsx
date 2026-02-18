@@ -95,6 +95,7 @@ export function DashboardContent({
   const [weekLogsMap, setWeekLogsMap] = useState(initialWeekLogsMap);
   const [streak, setStreak] = useState(initialStreak);
   const [loadingMeal, setLoadingMeal] = useState<string | null>(null); // Track which meal is being logged
+  const [showDebug, setShowDebug] = useState(false);
   const [loadingDayData, setLoadingDayData] = useState(false); // Track day data loading
 
   // Meal planning sheet state
@@ -946,7 +947,7 @@ export function DashboardContent({
         />
 
         {/* Debug Panel - Admin/Moderator Only */}
-        {(profile.role === "admin" || profile.role === "moderator") &&
+        {showDebug && (profile.role === "admin" || profile.role === "moderator") &&
           (() => {
             // Calculate macro quality for each meal
             const getMacroQuality = (recipe: ScaledRecipe | null) => {
@@ -1199,9 +1200,17 @@ export function DashboardContent({
 
         {/* Admin link if applicable */}
         {(profile.role === "admin" || profile.role === "moderator") && (
-          <div className="pt-4 border-t border-border">
+          <div className="pt-4 border-t border-border space-y-2">
             <Button variant="outline" className="w-full" asChild>
               <Link href="/admin">Go to Admin Panel</Link>
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="w-full text-xs text-muted-foreground"
+              onClick={() => setShowDebug((v) => !v)}
+            >
+              {showDebug ? "Hide Debug Mode" : "🐛 Debug Mode"}
             </Button>
           </div>
         )}
