@@ -600,12 +600,14 @@ export function MealCard({
           whileTap={{ scale: isDragging ? 1 : 0.99 }}
         >
           <div className="flex">
-            {/* Recipe image */}
-            <div
+            {/* Recipe image - link to meal builder with recipe preloaded */}
+            <Link
+              href={`/meal-builder?meal=${meal.name}&recipe=${meal.recipe?.id || ''}`}
               className={cn(
-                "relative w-24 h-24 flex-shrink-0 bg-muted",
+                "relative w-24 h-24 flex-shrink-0 bg-muted block overflow-hidden",
                 !isToday && "grayscale",
               )}
+              onClick={(e) => e.stopPropagation()}
             >
               {meal.recipe?.image_url ? (
                 <img
@@ -624,7 +626,7 @@ export function MealCard({
               <span className="absolute bottom-1 left-1 px-1.5 py-0.5 bg-background/90 rounded text-[10px] font-medium">
                 {meal.label}
               </span>
-            </div>
+            </Link>
 
             {/* Recipe info */}
             <div className="flex-1 p-3 flex flex-col justify-between">
@@ -775,7 +777,7 @@ export function MealCard({
                   meal.planSlot?.swapped_ingredients &&
                   Object.keys(meal.planSlot.swapped_ingredients).length > 0 && (
                     <Link
-                      href={`/meal-builder?meal=${meal.name}`}
+                      href={`/meal-builder?meal=${meal.name}&recipe=${meal.recipe?.id || ''}`}
                       onClick={(e) => e.stopPropagation()}
                     >
                       <Button

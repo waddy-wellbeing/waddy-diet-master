@@ -93,6 +93,9 @@ export default async function MealBuilderPage({ searchParams }: PageProps) {
   const dailyCarbs = profile.targets?.carbs_g || 250;
   const dailyFat = profile.targets?.fat_g || 65;
 
+  // Fasting mode detection
+  const isFasting = profile.preferences?.is_fasting || false;
+
   // Use user's saved meal structure if available, otherwise default percentages
   const userMealStructure = profile.preferences?.meal_structure;
   const mealTargets: Record<
@@ -100,15 +103,55 @@ export default async function MealBuilderPage({ searchParams }: PageProps) {
     { calories: number; protein: number; carbs: number; fat: number }
   > = {};
 
-  // Build meal slots from saved structure or use defaults
-  const mealSlots: string[] =
-    userMealStructure && userMealStructure.length > 0
-      ? (userMealStructure as Array<{ name: string; percentage: number }>).map(
-          (slot) => slot.name,
-        )
-      : ["breakfast", "lunch", "dinner", "snacks"];
+  // Fasting meal order (canonical)
+  const FASTING_MEAL_ORDER = [
+    "pre-iftar",
+    "iftar",
+    "full-meal-taraweeh",
+    "snack-taraweeh",
+    "suhoor",
+  ];
 
-  if (userMealStructure && userMealStructure.length > 0) {
+  // Build meal slots based on mode
+  let mealSlots: string[];
+  if (isFasting) {
+    const selectedFastingMeals: string[] =
+      profile.preferences?.fasting_selected_meals || [];
+    mealSlots =
+      selectedFastingMeals.length > 0
+        ? FASTING_MEAL_ORDER.filter((m) => selectedFastingMeals.includes(m))
+        : FASTING_MEAL_ORDER;
+  } else if (userMealStructure && userMealStructure.length > 0) {
+    mealSlots = (userMealStructure as Array<{ name: string }>).map(
+      (slot) => slot.name,
+    );
+  } else {
+    mealSlots = ["breakfast", "lunch", "dinner", "snacks"];
+  }
+
+  if (isFasting) {
+    // Fasting calorie distribution (mirrors dashboard page logic)
+    const fastingDistribution: Record<string, number> = {
+      "pre-iftar": 0.1,
+      iftar: 0.4,
+      "full-meal-taraweeh": 0.3,
+      "snack-taraweeh": 0.1,
+      suhoor: 0.25,
+    };
+    const totalPct = mealSlots.reduce(
+      (sum, meal) => sum + (fastingDistribution[meal] ?? 0.2),
+      0,
+    );
+    for (const meal of mealSlots) {
+      const normalizedPct = (fastingDistribution[meal] ?? 0.2) / totalPct;
+      mealTargets[meal] = {
+        calories: Math.round(dailyCalories * normalizedPct),
+        protein: Math.round(dailyProtein * normalizedPct),
+        carbs: Math.round(dailyCarbs * normalizedPct),
+        fat: Math.round(dailyFat * normalizedPct),
+      };
+    }
+  } else if (userMealStructure && userMealStructure.length > 0) {
     for (const slot of userMealStructure as Array<{
       name: string;
       percentage: number;
@@ -162,6 +205,12 @@ export default async function MealBuilderPage({ searchParams }: PageProps) {
     snack_2: ["snack", "snacks & sweetes", "smoothies"],
     snack_3: ["snack", "snacks & sweetes", "smoothies"],
     evening: ["snack", "snacks & sweetes", "smoothies"],
+    // Fasting meal types
+    "pre-iftar": ["snack", "snacks & sweetes", "smoothies"],
+    iftar: ["lunch", "dinner", "one pot", "side dishes", "breakfast"],
+    "full-meal-taraweeh": ["dinner", "lunch", "one pot", "side dishes"],
+    "snack-taraweeh": ["snack", "snacks & sweetes", "smoothies"],
+    suhoor: ["breakfast", "smoothies"],
   };
 
   const minScale = 0.5;
