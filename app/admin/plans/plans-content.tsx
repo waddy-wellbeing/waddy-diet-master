@@ -215,7 +215,7 @@ function MealCard({
             <p className="font-medium text-sm truncate">{recipe.name}</p>
             <p className="text-xs text-muted-foreground">
               {servings} serving{servings !== 1 ? "s" : ""} •{" "}
-              {recipe.nutrition_per_serving?.calories || 0} kcal
+              {Math.round((recipe.nutrition_per_serving?.calories || 0) * servings)} kcal
             </p>
           </div>
           <Button
@@ -332,8 +332,7 @@ function DayPlanView({
 
   const mealSlots = isFastingMode
     ? (fastingSelectedMeals || []).sort(
-        (a, b) =>
-          FASTING_MEAL_ORDER.indexOf(a) - FASTING_MEAL_ORDER.indexOf(b),
+        (a, b) => FASTING_MEAL_ORDER.indexOf(a) - FASTING_MEAL_ORDER.indexOf(b),
       )
     : ["breakfast", "lunch", "dinner", "snacks"];
 
@@ -488,6 +487,8 @@ export function PlansContent({ initialUsers }: PlansContentProps) {
   // Recipe picker state
   const [pickerOpen, setPickerOpen] = useState(false);
   const [allRecipes, setAllRecipes] = useState<any[]>([]);
+  const [scaledRecipes, setScaledRecipes] = useState<any[]>([]); // Scaled recipes for current meal
+  const [isLoadingRecipes, setIsLoadingRecipes] = useState(false);
   const [activeMealType, setActiveMealType] = useState<string | null>(null);
   const [activeMealTypeForPicker, setActiveMealTypeForPicker] = useState<
     string | null
@@ -496,6 +497,7 @@ export function PlansContent({ initialUsers }: PlansContentProps) {
   const [loadingMealKey, setLoadingMealKey] = useState<string | null>(null);
 
   // Helper: Save session state to localStorage
+  // Only save user_id and is_fasting - fetch fresh data from DB on restore
   const saveSessionState = useCallback(
     (user: AdminUserProfile | null, week: Date, date: Date) => {
       try {
@@ -505,58 +507,68 @@ export function PlansContent({ initialUsers }: PlansContentProps) {
             userId: user?.user_id || null,
             currentWeek: week.toISOString(),
             selectedDate: date.toISOString(),
-            userPlans,
-            recipes,
             isFastingMode,
-            fastingSelectedMeals,
+            // Don't cache plans/recipes - always fetch fresh from DB
           }),
         );
       } catch (error) {
         console.error("Error saving session state:", error);
       }
     },
-    [userPlans, recipes, isFastingMode, fastingSelectedMeals],
+    [isFastingMode],
   );
 
   // Load last opened session from localStorage on mount
   useEffect(() => {
-    try {
-      const savedSession = localStorage.getItem("admin_plans_session");
-      if (savedSession) {
-        const session = JSON.parse(savedSession);
-        if (session.userId) {
-          // Find the user in initialUsers
-          const user = initialUsers.find((u) => u.user_id === session.userId);
-          if (user) {
-            // Restore UI state immediately
-            setSelectedUser(user);
-            setCurrentWeek(new Date(session.currentWeek));
-            setSelectedDate(new Date(session.selectedDate));
-            setUserPlans(session.userPlans || []);
-            setRecipes(session.recipes || {});
-            setIsFastingMode(session.isFastingMode || false);
-            setFastingSelectedMeals(session.fastingSelectedMeals || []);
+    const restoreSession = async () => {
+      try {
+        const savedSession = localStorage.getItem("admin_plans_session");
+        if (savedSession) {
+          const session = JSON.parse(savedSession);
+          if (session.userId) {
+            // Find the user in initialUsers
+            const user = initialUsers.find((u) => u.user_id === session.userId);
+            if (user) {
+              // Set UI state
+              setSelectedUser(user);
+              setCurrentWeek(new Date(session.currentWeek));
+              setSelectedDate(new Date(session.selectedDate));
+              setIsFastingMode(session.isFastingMode || false);
+
+              // Fetch FRESH data from database
+              setIsLoadingPlans(true);
+              const result = await getUserPlans(user.user_id);
+              if (result.success && result.data) {
+                setUserPlans(result.data.plans);
+                setRecipes(result.data.recipes);
+                // Update isFastingMode from DB (source of truth)
+                setIsFastingMode(result.data.isFastingMode);
+                setFastingSelectedMeals(result.data.fastingSelectedMeals);
+              } else {
+                setUserPlans([]);
+                setRecipes({});
+                setFastingSelectedMeals([]);
+              }
+              setIsLoadingPlans(false);
+            }
           }
         }
+      } catch (error) {
+        console.error("Error loading session from localStorage:", error);
+        setIsLoadingPlans(false);
       }
-    } catch (error) {
-      console.error("Error loading session from localStorage:", error);
-    }
+    };
+
+    restoreSession();
   }, [initialUsers]);
 
   // Save session whenever key state changes
+  // Only save UI state - data always fetched fresh from DB
   useEffect(() => {
     if (selectedUser) {
       saveSessionState(selectedUser, currentWeek, selectedDate);
     }
-  }, [
-    selectedUser,
-    currentWeek,
-    selectedDate,
-    userPlans,
-    recipes,
-    saveSessionState,
-  ]);
+  }, [selectedUser, currentWeek, selectedDate, saveSessionState]);
 
   // Fetch all recipes for the picker
   useEffect(() => {
@@ -590,8 +602,6 @@ export function PlansContent({ initialUsers }: PlansContentProps) {
   // Handle user selection
   const handleSelectUser = useCallback(async (user: AdminUserProfile) => {
     setSelectedUser(user);
-    // Save to localStorage for session persistence
-    localStorage.setItem("admin_plans_last_user_id", user.user_id);
     setIsLoadingPlans(true);
 
     // Set date to today when user is selected
@@ -627,25 +637,37 @@ export function PlansContent({ initialUsers }: PlansContentProps) {
     return userPlans.find((p) => p.plan_date === dateStr) || null;
   };
 
-  // Handle edit meal - opens recipe picker
-  const handleEditMeal = (mealType: string, snackIndex?: number) => {
-    // Map fasting meal slots to recipe meal_type for filtering
-    let recipeMealType = mealType;
-    if (isFastingMode) {
-      const fastingMealTypeMap: Record<string, string> = {
-        "pre-iftar": "pre-iftar",
-        iftar: "lunch",
-        "full-meal-taraweeh": "dinner",
-        "snack-taraweeh": "snack",
-        suhoor: "breakfast",
-      };
-      recipeMealType = fastingMealTypeMap[mealType] || mealType;
-    }
+  // Handle edit meal - opens recipe picker with scaled recipes
+  const handleEditMeal = async (mealType: string, snackIndex?: number) => {
+    if (!selectedUser) return;
 
-    setActiveMealType(mealType); // Store original meal slot name for saving
-    setActiveMealTypeForPicker(recipeMealType); // Mapped type for recipe filtering
+    setActiveMealType(mealType);
     setActiveSnackIndex(snackIndex ?? null);
+    setIsLoadingRecipes(true);
     setPickerOpen(true);
+
+    try {
+      // Fetch scaled recipes for this meal type
+      const { getScaledRecipesForMeal } = await import("@/lib/actions/admin-plans");
+      const result = await getScaledRecipesForMeal({
+        userId: selectedUser.user_id,
+        mealType,
+        isFastingMode,
+      });
+
+      if (result.success && result.data) {
+        setScaledRecipes(result.data);
+      } else {
+        console.error("Failed to load scaled recipes:", result.error);
+        // Fallback to unscaled recipes
+        setScaledRecipes(allRecipes);
+      }
+    } catch (error) {
+      console.error("Error loading scaled recipes:", error);
+      setScaledRecipes(allRecipes);
+    } finally {
+      setIsLoadingRecipes(false);
+    }
   };
 
   // Handle recipe selected from picker
@@ -987,9 +1009,10 @@ export function PlansContent({ initialUsers }: PlansContentProps) {
       <RecipePickerSheet
         open={pickerOpen}
         onOpenChange={setPickerOpen}
-        recipes={allRecipes}
+        recipes={scaledRecipes.length > 0 ? scaledRecipes : allRecipes}
         onRecipeSelected={handleRecipeSelected}
-        mealType={activeMealTypeForPicker as any}
+        mealType={activeMealType as any}
+        isLoading={isLoadingRecipes}
       />
     </div>
   );
