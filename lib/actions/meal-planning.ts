@@ -68,8 +68,8 @@ export async function savePlanMeal(params: SavePlanMealParams): Promise<ActionRe
     let updatedPlan: DailyPlan
 
     if (existingPlan) {
-      // Update existing plan
-      updatedPlan = (existingPlan as any)[planColumn] as DailyPlan
+      // Update existing plan - FIX: Handle case where fasting_plan column is null
+      updatedPlan = ((existingPlan as any)[planColumn] || {}) as DailyPlan
 
       if (mealType === 'snacks' || mealType === 'snack-taraweeh') {
         // Snacks are stored as array; currently we overwrite with the new snack
@@ -160,7 +160,13 @@ export async function removePlanMeal(params: RemovePlanMealParams): Promise<Acti
       return { success: false, error: 'Plan not found' }
     }
 
-    const updatedPlan = (existingPlan as any)[planColumn] as DailyPlan
+    // FIX: Handle case where fasting_plan column is null
+    const updatedPlan = ((existingPlan as any)[planColumn] || {}) as DailyPlan
+    
+    // If the plan column is empty, nothing to remove
+    if (Object.keys(updatedPlan).length === 0) {
+      return { success: false, error: 'Plan is empty - no meals to remove' }
+    }
 
     // Remove the meal
     if (mealType === 'snacks' || mealType === 'snack-taraweeh') {

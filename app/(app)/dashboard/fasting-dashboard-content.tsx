@@ -43,10 +43,16 @@ import type {
   DailyPlan,
   DailyTotals,
   RecipeRecord,
-  MealType,
 } from "@/lib/types/nutri";
 
-type MealName = MealType;
+// Fasting meal types for this dashboard
+type FastingMealType =
+  | "pre-iftar"
+  | "iftar"
+  | "full-meal-taraweeh"
+  | "snack-taraweeh"
+  | "suhoor";
+type MealName = FastingMealType | "breakfast" | "lunch" | "dinner" | "snacks";
 
 // Scaled recipe includes scale_factor and scaled_calories
 interface ScaledRecipe extends RecipeRecord {
@@ -145,20 +151,26 @@ export function FastingDashboardContent({
     }));
   })();
 
-  // Track current recipe index for each meal type (for swiping)
-  const [selectedIndices, setSelectedIndices] = useState<
-    Record<string, number>
-  >(() => {
-    const initial: Record<string, number> = {};
-    for (const slot of mealSlots) {
-      initial[slot.name] = initialSelectedIndices[slot.name] || 0;
-    }
-    return initial;
-  });
+  // Sync state when initial props change (e.g., after router.refresh())
+  useEffect(() => {
+    setDailyPlan(initialDailyPlan);
+  }, [initialDailyPlan]);
 
-  // Track meals where user explicitly swapped away from a Ramadan recommendation
-  // This prevents the Ramadan override from fighting with user's manual swap within a session
-  const [userOverriddenMeals, setUserOverriddenMeals] = useState<Set<string>>(new Set());
+  useEffect(() => {
+    setDailyLog(initialDailyLog);
+  }, [initialDailyLog]);
+
+  useEffect(() => {
+    setWeekPlans(initialWeekPlans);
+  }, [initialWeekPlans]);
+
+  useEffect(() => {
+    setWeekLogsMap(initialWeekLogsMap);
+  }, [initialWeekLogsMap]);
+
+  useEffect(() => {
+    setWeekData(initialWeekLogs);
+  }, [initialWeekLogs]);
 
   // Get targets from profile
   const targets = profile.targets;
@@ -195,14 +207,6 @@ export function FastingDashboardContent({
         // Set to null if no data (important for unplanned days)
         setDailyLog(logData || null);
         setDailyPlan(planData || null);
-
-        // NOTE: We intentionally do NOT update selectedIndices here!
-        // selectedIndices is for suggested recipes (days without plans)
-        // Planned days use dailyPlan.plan directly in getCurrentRecipe()
-        // This separation prevents one day's plan from overwriting all days' displays
-
-        // Wait a bit for React to re-render and images to start loading
-        await new Promise((resolve) => setTimeout(resolve, 800));
       } catch (error) {
         console.error("Error fetching day data:", error);
       } finally {
@@ -249,11 +253,27 @@ export function FastingDashboardContent({
     fetchWeekData(selectedDate);
   }, [selectedDate, fetchDayData, fetchWeekData]);
 
-  // Auto-save today's plan on mount if it doesn't exist
+  // Auto-save today's plan on mount if it doesn't exist in DATABASE
+  // Fixed: Check DB directly instead of relying on potentially stale initial props
   useEffect(() => {
     const saveTodaysPlan = async () => {
-      // Only save if viewing today and no plan exists yet
-      if (!isDateToday(selectedDate) || initialDailyPlan) {
+      // Only save if viewing today
+      if (!isDateToday(selectedDate)) {
+        return;
+      }
+
+      // Check database first to avoid overwriting existing plan
+      const supabase = createClient();
+      const todayStr = format(new Date(), "yyyy-MM-dd");
+      const { data: existingPlan } = await supabase
+        .from("daily_plans")
+        .select("fasting_plan")
+        .eq("user_id", profile.user_id)
+        .eq("plan_date", todayStr)
+        .maybeSingle();
+
+      // If plan already exists in DB, don't overwrite
+      if (existingPlan?.fasting_plan) {
         return;
       }
 
@@ -308,97 +328,51 @@ export function FastingDashboardContent({
     saveTodaysPlan();
   }, []); // Run only once on mount
 
-  // Persist Ramadan-recommended recipes into the plan on mount
-  // This updates specific meal slots where a Ramadan recipe should replace the current plan
-  useEffect(() => {
-    const updatePlanWithRamadanRecipes = async () => {
-      if (!isDateToday(selectedDate)) return;
-
-      const currentFastingPlan = (initialDailyPlan as any)?.fasting_plan as
-        | DailyPlan
-        | undefined;
-      if (!currentFastingPlan) return; // No plan to update (auto-save handles creation)
-
-      const { saveMealToPlan } = await import("@/lib/actions/daily-plans");
-      const dateStr = format(new Date(), "yyyy-MM-dd");
-      let updatedAny = false;
-
-      for (const slot of mealSlots) {
-        const topRecipe = recipesByMealType[slot.name]?.[0];
-        if (!topRecipe) continue;
-
-        const isRamadan = (
-          topRecipe.recommendation_group as string[] | null
-        )?.includes("ramadan");
-        if (!isRamadan) continue;
-
-        const planSlot = (currentFastingPlan as any)?.[slot.name];
-        if (planSlot?.recipe_id !== topRecipe.id) {
-          await saveMealToPlan({
-            date: dateStr,
-            mealType: slot.name as MealName,
-            recipeId: topRecipe.id,
-            servings: topRecipe.scale_factor || 1,
-            isFastingMode: true,
-          });
-          updatedAny = true;
-        }
-      }
-
-      // Refresh plan data if any slots were updated
-      if (updatedAny) {
-        fetchDayData(selectedDate);
-      }
-    };
-
-    updatePlanWithRamadanRecipes();
-  }, []); // Run only once on mount
+  // NOTE: Removed updatePlanWithRamadanRecipes effect - it was overwriting user's
+  // swapped meals on every mount/navigation. User's explicit meal choices should
+  // be preserved. Ramadan recommendations are already shown via recipesByMealType
+  // sorting on the server side.
 
   // Get current recipe for each meal type based on selected index
   // Get current recipe for the selected day
+  // SIMPLIFIED: Get current recipe ONLY from database plan or fallback to first suggestion
   // - If the day has a fasting plan in database: show the PLANNED recipe
-  // - If the day has no plan: show the SUGGESTED recipe (uses selectedIndices for swapping)
-  // - Ramadan-recommended recipes take priority over stale plans (unless user explicitly swapped)
+  // - If the day has no plan: show the FIRST recipe from suggestions
   const getCurrentRecipe = (mealType: MealName): ScaledRecipe | null => {
     const recipes = recipesByMealType[mealType] || [];
     if (recipes.length === 0) return null;
 
-    // Get the fasting plan (fasting mode only)
+    // Get the fasting plan from database (dailyPlan is fetched from DB)
     const currentPlan = (dailyPlan as any)?.fasting_plan as
       | DailyPlan
       | undefined;
 
-    // ===== PLANNED DAY: Return recipe from database fasting plan =====
+    // ===== DATABASE PLANNED: Return exact recipe from fasting_plan =====
     if (currentPlan) {
       const planSlot =
-        mealType === "snacks"
-          ? currentPlan.snacks?.[0]
+        mealType === "snacks" || mealType === "snack-taraweeh"
+          ? currentPlan[mealType]?.[0]
           : (currentPlan as any)?.[mealType];
       const recipeId = planSlot?.recipe_id;
 
       if (recipeId) {
-        // Check if a Ramadan-recommended recipe should take priority over the saved plan
-        // Only override if the user hasn't explicitly swapped this meal in this session
-        if (!userOverriddenMeals.has(mealType)) {
-          const topRecipe = recipes[0];
-          const topIsRamadan = (topRecipe?.recommendation_group as string[] | null)?.includes('ramadan');
-          if (topIsRamadan && recipeId !== topRecipe.id) {
-            return topRecipe;
-          }
+        // Find the recipe in THIS meal type's list first (correct scaling)
+        let plannedRecipe = recipes.find((r) => r.id === recipeId);
+
+        // Fallback: search all recipes if not found in current meal type
+        if (!plannedRecipe) {
+          const allRecipes = Object.values(recipesByMealType).flat();
+          plannedRecipe = allRecipes.find((r) => r.id === recipeId);
         }
 
-        // Find the recipe in all available recipes
-        const allRecipes = Object.values(recipesByMealType).flat();
-        const plannedRecipe = allRecipes.find((r) => r.id === recipeId);
         if (plannedRecipe) {
           return plannedRecipe;
         }
       }
     }
 
-    // ===== UNPLANNED DAY: Return recipe based on selectedIndices (allows swapping) =====
-    const currentIndex = selectedIndices[mealType] || 0;
-    return recipes[currentIndex] || recipes[0] || null;
+    // ===== NO DATABASE PLAN: Return first suggested recipe =====
+    return recipes[0] || null;
   };
 
   // Get recipe count for each meal type
@@ -486,18 +460,33 @@ export function FastingDashboardContent({
   };
 
   // Build meals array dynamically from mealSlots
-  const meals = mealSlots.map((slot: { name: string; label?: string }) => ({
-    name: slot.name as MealType,
-    label: slot.label || slot.name,
-    targetCalories: mealTargets[slot.name],
-    consumedCalories: getLoggedCalories(slot.name),
-    isLogged: !!log?.[slot.name as keyof DailyLog]?.items?.length,
-    loggedRecipeName: getLoggedRecipeName(log?.[slot.name as keyof DailyLog]),
-    recipe: getCurrentRecipe(slot.name as MealName),
-    recipeCount: getRecipeCount(slot.name as MealName),
-    currentIndex: selectedIndices[slot.name] || 0,
-    planSlot: (plan as any)?.[slot.name],
-  }));
+  const meals = mealSlots.map((slot: { name: string; label?: string }) => {
+    const mealType = slot.name;
+    const recipes = recipesByMealType[mealType] || [];
+
+    // Compute currentIndex from database plan
+    const planSlotRaw =
+      mealType === "snacks" || mealType === "snack-taraweeh"
+        ? (plan as any)?.[mealType]?.[0]
+        : (plan as any)?.[mealType];
+    const currentRecipeId = planSlotRaw?.recipe_id;
+    const currentIdx = currentRecipeId
+      ? recipes.findIndex((r) => r.id === currentRecipeId)
+      : 0;
+
+    return {
+      name: slot.name as MealName,
+      label: slot.label || slot.name,
+      targetCalories: mealTargets[slot.name],
+      consumedCalories: getLoggedCalories(slot.name),
+      isLogged: !!log?.[slot.name as keyof DailyLog]?.items?.length,
+      loggedRecipeName: getLoggedRecipeName(log?.[slot.name as keyof DailyLog]),
+      recipe: getCurrentRecipe(slot.name as MealName),
+      recipeCount: getRecipeCount(slot.name as MealName),
+      currentIndex: currentIdx >= 0 ? currentIdx : 0,
+      planSlot: planSlotRaw,
+    };
+  });
 
   const greeting = () => {
     const hour = new Date().getHours();
@@ -765,22 +754,35 @@ export function FastingDashboardContent({
     const recipes = recipesByMealType[mealType] || [];
     if (recipes.length <= 1) return; // Nothing to swap to
 
-    // Set loading state immediately
-    setLoadingMeal(mealType);
+    // Set loading state - this will show the loading overlay
+    setLoadingDayData(true);
 
-    const currentIdx = selectedIndices[mealType];
+    // Calculate current index from plan or default to 0
+    const currentPlan = (dailyPlan as any)?.fasting_plan as
+      | DailyPlan
+      | undefined;
+    const planSlot =
+      mealType === "snacks" || mealType === "snack-taraweeh"
+        ? currentPlan?.[mealType]?.[0]
+        : (currentPlan as any)?.[mealType];
+    const currentRecipeId = planSlot?.recipe_id;
+    const currentIdx = currentRecipeId
+      ? recipes.findIndex((r) => r.id === currentRecipeId)
+      : 0;
+    const safeCurrentIdx = currentIdx >= 0 ? currentIdx : 0;
+
     let newIdx: number;
 
     if (direction === "right") {
       // Next recipe (wrap around)
-      newIdx = (currentIdx + 1) % recipes.length;
+      newIdx = (safeCurrentIdx + 1) % recipes.length;
     } else {
       // Previous recipe (wrap around)
-      newIdx = currentIdx === 0 ? recipes.length - 1 : currentIdx - 1;
+      newIdx = safeCurrentIdx === 0 ? recipes.length - 1 : safeCurrentIdx - 1;
     }
 
     // Get old and new recipes for comparison
-    const oldRecipe = recipes[currentIdx];
+    const oldRecipe = recipes[safeCurrentIdx];
     const newRecipe = recipes[newIdx];
 
     // Show macro comparison toast
@@ -831,63 +833,52 @@ export function FastingDashboardContent({
       }
     }
 
-    // Update local UI first for instant feedback
-    setSelectedIndices((prev) => ({
-      ...prev,
-      [mealType]: newIdx,
-    }));
-
-    // Track that user explicitly overrode this meal (prevents Ramadan auto-override for this session)
-    setUserOverriddenMeals((prev) => new Set(prev).add(mealType));
-
-    // Save to daily plan if viewing today or any date with an existing plan
-    const todayDateStr = format(new Date(), "yyyy-MM-dd");
+    // Save to daily plan - DATABASE IS THE SINGLE SOURCE OF TRUTH
+    // Use savePlanMeal from meal-planning.ts (same as Plan Today sheet)
     const selectedDateStr = format(selectedDate, "yyyy-MM-dd");
 
-    if (todayDateStr === selectedDateStr || dailyPlan) {
-      // Get the new recipe and save it to plan
-      const newRecipe = recipes[newIdx];
-      if (newRecipe) {
-        try {
-          const { saveMealToPlan } = await import("@/lib/actions/daily-plans");
-          await saveMealToPlan({
-            date: selectedDateStr,
-            mealType,
-            recipeId: newRecipe.id,
-            servings: newRecipe.scale_factor || 1,
-            isFastingMode: true, // NEW: Save to fasting_plan column
-          });
-          // Refresh data to show the updated plan immediately
-          await fetchDayData(selectedDate);
-          await fetchWeekData(selectedDate);
-
-          // Track recipe swap event
-          trackEvent(
-            buildButtonClickEvent(
-              "meal_builder",
-              "swap_recipe",
-              getCurrentPagePath(),
-              {
-                meal_type: mealType,
-                recipe_id: newRecipe.id,
-                recipe_name: newRecipe.name,
-                direction,
-                calories:
-                  newRecipe.scaled_calories || newRecipe.original_calories,
-              },
-            ),
-          );
-        } catch (error) {
-          captureError(
-            buildMealLogError(
-              mealType,
-              error instanceof Error ? error.message : "Unknown error",
-            ),
-          );
-        } finally {
-          setLoadingMeal(null);
-        }
+    try {
+      const { savePlanMeal } = await import("@/lib/actions/meal-planning");
+      const result = await savePlanMeal({
+        date: selectedDateStr,
+        mealType: mealType as any,
+        recipeId: newRecipe.id,
+        isFastingMode: true, // Save to fasting_plan column
+      });
+      
+      if (!result.success) {
+        throw new Error(result.error || "Failed to save");
       }
+      
+      // Refresh data to show the updated plan immediately
+      await fetchDayData(selectedDate);
+      await fetchWeekData(selectedDate);
+
+      // Track recipe swap event
+      trackEvent(
+        buildButtonClickEvent(
+          "meal_builder",
+          "swap_recipe",
+          getCurrentPagePath(),
+          {
+            meal_type: mealType,
+            recipe_id: newRecipe.id,
+            recipe_name: newRecipe.name,
+            direction,
+            calories: newRecipe.scaled_calories || newRecipe.original_calories,
+          },
+        ),
+      );
+    } catch (error) {
+      captureError(
+        buildMealLogError(
+          mealType,
+          error instanceof Error ? error.message : "Unknown error",
+        ),
+      );
+      toast.error("Failed to swap recipe. Please try again.");
+    } finally {
+      setLoadingDayData(false);
     }
   };
 
@@ -895,10 +886,13 @@ export function FastingDashboardContent({
   const handleShuffleMeals = async () => {
     if (!isSelectedToday) return;
 
-    setLoadingMeal("shuffle");
+    setLoadingDayData(true);
     try {
-      const { saveMealToPlan } = await import("@/lib/actions/daily-plans");
+      const { savePlanMeal } = await import("@/lib/actions/meal-planning");
       const dateStr = format(selectedDate, "yyyy-MM-dd");
+      const currentPlan = (dailyPlan as any)?.fasting_plan as
+        | DailyPlan
+        | undefined;
 
       // For each meal type, try to find the next available recipe with better macro match
       const updates = [];
@@ -907,27 +901,30 @@ export function FastingDashboardContent({
         const recipes = recipesByMealType[mealType] || [];
         if (recipes.length === 0) continue;
 
-        const currentIndex = selectedIndices[mealType] || 0;
+        // Get current recipe from database plan
+        const planSlot =
+          mealType === "snacks" || mealType === "snack-taraweeh"
+            ? (currentPlan as any)?.[mealType]?.[0]
+            : (currentPlan as any)?.[mealType];
+        const currentRecipeId = planSlot?.recipe_id;
+        const currentIndex = currentRecipeId
+          ? recipes.findIndex((r) => r.id === currentRecipeId)
+          : 0;
+        const safeCurrentIndex = currentIndex >= 0 ? currentIndex : 0;
+
         // Try the next recipe, or wrap around to start
-        const nextIndex = (currentIndex + 1) % recipes.length;
+        const nextIndex = (safeCurrentIndex + 1) % recipes.length;
         const nextRecipe = recipes[nextIndex];
 
         if (nextRecipe) {
           updates.push(
-            saveMealToPlan({
+            savePlanMeal({
               date: dateStr,
               mealType: mealType as any,
               recipeId: nextRecipe.id,
-              servings: nextRecipe.scale_factor || 1,
-              isFastingMode: true, // NEW: Save to fasting_plan column
+              isFastingMode: true, // Save to fasting_plan column
             }),
           );
-
-          // Update the selected index
-          setSelectedIndices((prev) => ({
-            ...prev,
-            [mealType]: nextIndex,
-          }));
         }
       }
 
@@ -964,7 +961,7 @@ export function FastingDashboardContent({
         description: "Please try again",
       });
     } finally {
-      setLoadingMeal(null);
+      setLoadingDayData(false);
     }
   };
 
@@ -1041,7 +1038,8 @@ export function FastingDashboardContent({
         />
 
         {/* Debug Panel - Admin/Moderator Only */}
-        {showDebug && (profile.role === "admin" || profile.role === "moderator") &&
+        {showDebug &&
+          (profile.role === "admin" || profile.role === "moderator") &&
           (() => {
             // Calculate macro quality for each meal
             const getMacroQuality = (recipe: ScaledRecipe | null) => {
@@ -1329,7 +1327,7 @@ export function FastingDashboardContent({
         })()}
         onPlanUpdated={handlePlanUpdated}
         isFastingMode={true}
-        selectedMeals={mealSlots.map((slot) => slot.name as MealType)} // Pass selected meals
+        selectedMeals={mealSlots.map((slot) => slot.name as MealName)} // Pass selected meals
       />
     </div>
   );

@@ -56,13 +56,17 @@ export default async function MealBuilderPage({ searchParams }: PageProps) {
 
   // Fetch profile, recipes, and today's plan in parallel
   const todayStr = new Date().toISOString().split("T")[0];
-  const [{ data: profile }, { data: allRecipes }, { data: todaysPlan }] =
-    await Promise.all([
-      supabase.from("profiles").select("*").eq("user_id", user.id).single(),
-      supabase
-        .from("recipes")
-        .select(
-          `
+  const [
+    { data: profile },
+    { data: allRecipes },
+    { data: todaysPlan },
+    { data: specificRecipe },
+  ] = await Promise.all([
+    supabase.from("profiles").select("*").eq("user_id", user.id).single(),
+    supabase
+      .from("recipes")
+      .select(
+        `
         *,
         recipe_ingredients (
           id, ingredient_id, raw_name, quantity, unit, is_spice, is_optional,
@@ -71,17 +75,36 @@ export default async function MealBuilderPage({ searchParams }: PageProps) {
           )
         )
       `,
-        )
-        .eq("is_public", true)
-        .not("nutrition_per_serving", "is", null)
-        .order("name"),
-      supabase
-        .from("daily_plans")
-        .select("plan")
-        .eq("user_id", user.id)
-        .eq("plan_date", todayStr)
-        .maybeSingle(),
-    ]);
+      )
+      .eq("is_public", true)
+      .not("nutrition_per_serving", "is", null)
+      .order("name"),
+    supabase
+      .from("daily_plans")
+      .select("plan, fasting_plan")
+      .eq("user_id", user.id)
+      .eq("plan_date", todayStr)
+      .maybeSingle(),
+    // Fetch specific recipe if ID is provided in URL
+    initialRecipeId
+      ? supabase
+          .from("recipes")
+          .select(
+            `
+            *,
+            recipe_ingredients (
+              id, ingredient_id, raw_name, quantity, unit, is_spice, is_optional,
+              ingredient:ingredients!recipe_ingredients_ingredient_id_fkey (
+                id, name, name_ar, food_group
+              )
+            )
+          `,
+          )
+          .eq("id", initialRecipeId)
+          .eq("is_public", true)
+          .maybeSingle()
+      : Promise.resolve({ data: null }),
+  ]);
 
   if (!profile?.onboarding_completed) {
     redirect("/onboarding");
@@ -95,6 +118,11 @@ export default async function MealBuilderPage({ searchParams }: PageProps) {
 
   // Fasting mode detection
   const isFasting = profile.preferences?.is_fasting || false;
+
+  // Read from correct plan column based on fasting mode
+  const todaysActivePlan = isFasting
+    ? todaysPlan?.fasting_plan
+    : todaysPlan?.plan;
 
   // Use user's saved meal structure if available, otherwise default percentages
   const userMealStructure = profile.preferences?.meal_structure;
@@ -206,11 +234,11 @@ export default async function MealBuilderPage({ searchParams }: PageProps) {
     snack_3: ["snack", "snacks & sweetes", "smoothies"],
     evening: ["snack", "snacks & sweetes", "smoothies"],
     // Fasting meal types
-    "pre-iftar": ["snack", "snacks & sweetes", "smoothies"],
-    iftar: ["lunch", "dinner", "one pot", "side dishes", "breakfast"],
-    "full-meal-taraweeh": ["dinner", "lunch", "one pot", "side dishes"],
-    "snack-taraweeh": ["snack", "snacks & sweetes", "smoothies"],
-    suhoor: ["breakfast", "smoothies"],
+    "pre-iftar": ["pre-iftar", "smoothies"], // Pre-iftar first, then smoothies as fallback
+    iftar: ["lunch"], // Main breaking fast meal - lunch recipes only
+    "full-meal-taraweeh": ["lunch", "dinner"], // Full meal after prayers - lunch or dinner
+    "snack-taraweeh": ["snack"], // Snack after prayers - snack recipes only
+    suhoor: ["breakfast", "dinner"], // Pre-dawn meal - breakfast or dinner
   };
 
   const minScale = 0.5;
@@ -357,6 +385,97 @@ export default async function MealBuilderPage({ searchParams }: PageProps) {
     }
   }
 
+  // **FIX: Ensure specific recipe from URL is ALWAYS included in the meal type's recipe list**
+  // This ensures clicking a recipe in dashboard shows the EXACT same recipe in meal-builder
+  if (specificRecipe && initialMeal && mealSlots.includes(initialMeal)) {
+    const targetCalories = mealTargets[initialMeal]?.calories;
+    const existingRecipes = recipesByMealType[initialMeal] || [];
+
+    // Check if recipe is already in the list
+    const alreadyExists = existingRecipes.some(
+      (r) => r.id === specificRecipe.id,
+    );
+
+    if (!alreadyExists && targetCalories) {
+      const baseCalories = specificRecipe.nutrition_per_serving?.calories;
+      if (baseCalories && baseCalories > 0) {
+        const scaleFactor = targetCalories / baseCalories;
+
+        // Calculate recipe's macro similarity score
+        const recipeProtein =
+          specificRecipe.nutrition_per_serving?.protein_g || 0;
+        const recipeCarbs = specificRecipe.nutrition_per_serving?.carbs_g || 0;
+        const recipeFat = specificRecipe.nutrition_per_serving?.fat_g || 0;
+        const recipeMacroPercentages = {
+          protein_pct: Math.round(((recipeProtein * 4) / baseCalories) * 100),
+          carbs_pct: Math.round(((recipeCarbs * 4) / baseCalories) * 100),
+          fat_pct: Math.round(((recipeFat * 9) / baseCalories) * 100),
+        };
+
+        const proteinDiff = Math.abs(
+          targetMacroPercentages.protein_pct -
+            recipeMacroPercentages.protein_pct,
+        );
+        const carbsDiff = Math.abs(
+          targetMacroPercentages.carbs_pct - recipeMacroPercentages.carbs_pct,
+        );
+        const fatDiff = Math.abs(
+          targetMacroPercentages.fat_pct - recipeMacroPercentages.fat_pct,
+        );
+
+        const proteinScore = Math.max(0, 100 - proteinDiff * 1.5);
+        const carbsScore = Math.max(0, 100 - carbsDiff * 1.5);
+        const fatScore = Math.max(0, 100 - fatDiff * 1.5);
+
+        const macroSimilarityScore = Math.round(
+          proteinScore * 0.5 + carbsScore * 0.3 + fatScore * 0.2,
+        );
+
+        // Scale ingredients
+        const scaledIngredients = (specificRecipe.recipe_ingredients || []).map(
+          (ri: any) => ({
+            id: ri.id,
+            ingredient_id: ri.ingredient_id,
+            raw_name: ri.raw_name,
+            quantity: ri.quantity,
+            scaled_quantity: ri.quantity
+              ? roundForMeasuring(ri.quantity * scaleFactor)
+              : null,
+            unit: ri.unit,
+            is_spice: ri.is_spice,
+            is_optional: ri.is_optional,
+            ingredient: ri.ingredient || null,
+          }),
+        );
+
+        // Parse instructions
+        let parsedInstructions: { step: number; instruction: string }[] = [];
+        if (Array.isArray(specificRecipe.instructions)) {
+          parsedInstructions = specificRecipe.instructions.map(
+            (item: any, idx: number) => ({
+              step: item.step || idx + 1,
+              instruction:
+                typeof item === "string"
+                  ? item
+                  : item.instruction || String(item),
+            }),
+          );
+        }
+
+        // Add the specific recipe to the beginning of the list
+        recipesByMealType[initialMeal].unshift({
+          ...(specificRecipe as RecipeRecord),
+          scale_factor: Math.round(scaleFactor * 100) / 100,
+          scaled_calories: targetCalories,
+          original_calories: baseCalories,
+          macro_similarity_score: macroSimilarityScore,
+          recipe_ingredients: scaledIngredients,
+          parsed_instructions: parsedInstructions,
+        });
+      }
+    }
+  }
+
   // Validate initial meal param
   const selectedMeal =
     initialMeal && mealSlots.includes(initialMeal) ? initialMeal : null;
@@ -369,7 +488,8 @@ export default async function MealBuilderPage({ searchParams }: PageProps) {
       userRole={profile?.role || "user"}
       initialMeal={selectedMeal as string | null}
       initialRecipeId={initialRecipeId || null}
-      todaysPlan={todaysPlan?.plan}
+      todaysPlan={todaysActivePlan || null}
+      isFastingMode={isFasting}
     />
   );
 }

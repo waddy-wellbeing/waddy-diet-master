@@ -56,6 +56,7 @@ interface MealBuilderContentProps {
   initialMeal?: MealType | null;
   initialRecipeId?: string | null;
   todaysPlan?: DailyPlan | null;
+  isFastingMode?: boolean;
 }
 
 const mealLabels: Record<string, string> = {
@@ -72,6 +73,7 @@ export function MealBuilderContent({
   initialRecipeId = null,
   todaysPlan,
   userRole = "user",
+  isFastingMode = false,
 }: MealBuilderContentProps) {
   const router = useRouter();
 
@@ -488,19 +490,30 @@ export function MealBuilderContent({
 
     const result = await saveMealToPlan({
       date: format(new Date(), "yyyy-MM-dd"),
-      mealType: selectedMeal as "breakfast" | "lunch" | "dinner" | "snacks",
+      mealType: selectedMeal as
+        | "breakfast"
+        | "lunch"
+        | "dinner"
+        | "snacks"
+        | "pre-iftar"
+        | "iftar"
+        | "full-meal-taraweeh"
+        | "snack-taraweeh"
+        | "suhoor",
       recipeId: currentRecipe.id,
       servings: currentRecipe.scale_factor,
       swappedIngredients:
         Object.keys(swappedIngredients).length > 0
           ? swappedIngredients
           : undefined,
+      isFastingMode,
     });
 
     setSaving(false);
 
     if (result.success) {
-      // Redirect to dashboard to show the saved meal
+      // Refresh server component data and redirect to dashboard
+      router.refresh();
       router.push("/dashboard");
     } else {
       alert(result.error || "Failed to save meal. Please try again.");

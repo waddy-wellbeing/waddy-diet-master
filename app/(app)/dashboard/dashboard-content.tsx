@@ -137,6 +137,15 @@ export function DashboardContent({
     return initial;
   });
 
+  // Sync state when initial props change (e.g., after router.refresh())
+  useEffect(() => {
+    setDailyPlan(initialDailyPlan);
+  }, [initialDailyPlan]);
+
+  useEffect(() => {
+    setDailyLog(initialDailyLog);
+  }, [initialDailyLog]);
+
   // Get targets from profile
   const targets = profile.targets;
   const dailyCalories = targets.daily_calories || 2000;
@@ -288,9 +297,16 @@ export function DashboardContent({
       const recipeId = planSlot?.recipe_id;
 
       if (recipeId) {
-        // Find the recipe in all available recipes
-        const allRecipes = Object.values(recipesByMealType).flat();
-        const plannedRecipe = allRecipes.find((r) => r.id === recipeId);
+        // Find the recipe in THIS meal type's list first (correct scaling for this meal)
+        let plannedRecipe = recipes.find((r) => r.id === recipeId);
+
+        // Fallback: search all recipes only if not found in current meal type
+        // (handles edge cases where plan has a recipe no longer in the filtered list)
+        if (!plannedRecipe) {
+          const allRecipes = Object.values(recipesByMealType).flat();
+          plannedRecipe = allRecipes.find((r) => r.id === recipeId);
+        }
+
         if (plannedRecipe) {
           return plannedRecipe;
         }
@@ -947,7 +963,8 @@ export function DashboardContent({
         />
 
         {/* Debug Panel - Admin/Moderator Only */}
-        {showDebug && (profile.role === "admin" || profile.role === "moderator") &&
+        {showDebug &&
+          (profile.role === "admin" || profile.role === "moderator") &&
           (() => {
             // Calculate macro quality for each meal
             const getMacroQuality = (recipe: ScaledRecipe | null) => {
