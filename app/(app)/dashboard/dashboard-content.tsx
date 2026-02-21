@@ -137,6 +137,15 @@ export function DashboardContent({
     return initial;
   });
 
+  // Sync state when initial props change (e.g., after router.refresh())
+  useEffect(() => {
+    setDailyPlan(initialDailyPlan);
+  }, [initialDailyPlan]);
+
+  useEffect(() => {
+    setDailyLog(initialDailyLog);
+  }, [initialDailyLog]);
+
   // Get targets from profile
   const targets = profile.targets;
   const dailyCalories = targets.daily_calories || 2000;

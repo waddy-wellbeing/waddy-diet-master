@@ -375,7 +375,7 @@ export default async function DashboardPage() {
         });
       }
 
-      // Sort by: 
+      // Sort by:
       // 0) Ramadan recommendation boost (when fasting mode is enabled)
       // 1) Macro similarity (descending)
       // 2) Primary meal type
@@ -383,8 +383,16 @@ export default async function DashboardPage() {
       suitableRecipes.sort((a, b) => {
         // Priority 0: Ramadan recommendation boost (only when fasting mode is active)
         if (isFastingModeCheck) {
-          const aRamadan = (a.recommendation_group as string[] | null)?.includes('ramadan') ? 1 : 0;
-          const bRamadan = (b.recommendation_group as string[] | null)?.includes('ramadan') ? 1 : 0;
+          const aRamadan = (
+            a.recommendation_group as string[] | null
+          )?.includes("ramadan")
+            ? 1
+            : 0;
+          const bRamadan = (
+            b.recommendation_group as string[] | null
+          )?.includes("ramadan")
+            ? 1
+            : 0;
           if (bRamadan !== aRamadan) return bRamadan - aRamadan;
         }
 
@@ -430,19 +438,23 @@ export default async function DashboardPage() {
 
       // Collect all Ramadan recipes in this slot's list
       const ramadanRecipes = recipes.filter((r) =>
-        (r.recommendation_group as string[] | null)?.includes('ramadan')
+        (r.recommendation_group as string[] | null)?.includes("ramadan"),
       );
 
       if (ramadanRecipes.length === 0) continue;
 
       const topRecipe = recipes[0];
-      const isTopRamadan = (topRecipe.recommendation_group as string[] | null)?.includes('ramadan');
+      const isTopRamadan = (
+        topRecipe.recommendation_group as string[] | null
+      )?.includes("ramadan");
       if (!isTopRamadan) continue;
 
       // If the current top Ramadan recipe is already claimed by another slot,
       // try to find an unclaimed Ramadan recipe to promote to index 0
       if (claimedRamadanIds.has(topRecipe.id)) {
-        const unclaimed = ramadanRecipes.find((r) => !claimedRamadanIds.has(r.id));
+        const unclaimed = ramadanRecipes.find(
+          (r) => !claimedRamadanIds.has(r.id),
+        );
 
         if (unclaimed) {
           // Move the unclaimed Ramadan recipe to index 0

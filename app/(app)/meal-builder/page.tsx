@@ -81,7 +81,7 @@ export default async function MealBuilderPage({ searchParams }: PageProps) {
       .order("name"),
     supabase
       .from("daily_plans")
-      .select("plan")
+      .select("plan, fasting_plan")
       .eq("user_id", user.id)
       .eq("plan_date", todayStr)
       .maybeSingle(),
@@ -118,6 +118,11 @@ export default async function MealBuilderPage({ searchParams }: PageProps) {
 
   // Fasting mode detection
   const isFasting = profile.preferences?.is_fasting || false;
+
+  // Read from correct plan column based on fasting mode
+  const todaysActivePlan = isFasting
+    ? todaysPlan?.fasting_plan
+    : todaysPlan?.plan;
 
   // Use user's saved meal structure if available, otherwise default percentages
   const userMealStructure = profile.preferences?.meal_structure;
@@ -483,7 +488,8 @@ export default async function MealBuilderPage({ searchParams }: PageProps) {
       userRole={profile?.role || "user"}
       initialMeal={selectedMeal as string | null}
       initialRecipeId={initialRecipeId || null}
-      todaysPlan={todaysPlan?.plan}
+      todaysPlan={todaysActivePlan || null}
+      isFastingMode={isFasting}
     />
   );
 }
