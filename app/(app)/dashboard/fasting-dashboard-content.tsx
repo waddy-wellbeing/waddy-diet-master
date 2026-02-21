@@ -158,7 +158,9 @@ export function FastingDashboardContent({
 
   // Track meals where user explicitly swapped away from a Ramadan recommendation
   // This prevents the Ramadan override from fighting with user's manual swap within a session
-  const [userOverriddenMeals, setUserOverriddenMeals] = useState<Set<string>>(new Set());
+  const [userOverriddenMeals, setUserOverriddenMeals] = useState<Set<string>>(
+    new Set(),
+  );
 
   // Get targets from profile
   const targets = profile.targets;
@@ -381,15 +383,24 @@ export function FastingDashboardContent({
         // Only override if the user hasn't explicitly swapped this meal in this session
         if (!userOverriddenMeals.has(mealType)) {
           const topRecipe = recipes[0];
-          const topIsRamadan = (topRecipe?.recommendation_group as string[] | null)?.includes('ramadan');
+          const topIsRamadan = (
+            topRecipe?.recommendation_group as string[] | null
+          )?.includes("ramadan");
           if (topIsRamadan && recipeId !== topRecipe.id) {
             return topRecipe;
           }
         }
 
-        // Find the recipe in all available recipes
-        const allRecipes = Object.values(recipesByMealType).flat();
-        const plannedRecipe = allRecipes.find((r) => r.id === recipeId);
+        // Find the recipe in THIS meal type's list first (correct scaling for this meal)
+        let plannedRecipe = recipes.find((r) => r.id === recipeId);
+
+        // Fallback: search all recipes only if not found in current meal type
+        // (handles edge cases where plan has a recipe no longer in the filtered list)
+        if (!plannedRecipe) {
+          const allRecipes = Object.values(recipesByMealType).flat();
+          plannedRecipe = allRecipes.find((r) => r.id === recipeId);
+        }
+
         if (plannedRecipe) {
           return plannedRecipe;
         }
@@ -1041,7 +1052,8 @@ export function FastingDashboardContent({
         />
 
         {/* Debug Panel - Admin/Moderator Only */}
-        {showDebug && (profile.role === "admin" || profile.role === "moderator") &&
+        {showDebug &&
+          (profile.role === "admin" || profile.role === "moderator") &&
           (() => {
             // Calculate macro quality for each meal
             const getMacroQuality = (recipe: ScaledRecipe | null) => {
