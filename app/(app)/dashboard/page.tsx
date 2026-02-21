@@ -16,6 +16,9 @@ export const metadata: Metadata = {
   description: "Your daily nutrition overview",
 };
 
+// Force dynamic rendering - always fetch fresh data from database
+export const dynamic = 'force-dynamic';
+
 export default async function DashboardPage() {
   const supabase = await createClient();
   const {
