@@ -165,7 +165,7 @@ export async function removePlanMeal(params: RemovePlanMealParams): Promise<Acti
     
     // If the plan column is empty, nothing to remove
     if (Object.keys(updatedPlan).length === 0) {
-      return { success: false, error: 'Plan not found' }
+      return { success: false, error: 'Plan is empty - no meals to remove' }
     }
 
     // Remove the meal
