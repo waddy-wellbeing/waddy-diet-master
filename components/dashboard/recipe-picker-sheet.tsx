@@ -38,6 +38,7 @@ interface RecipePickerSheetProps {
     | "suhoor"
     | null;
   onRecipeSelected: (recipeId: string) => void;
+  isLoading?: boolean;
 }
 
 const MEAL_TYPE_LABELS: Record<string, string> = {
@@ -59,6 +60,7 @@ export function RecipePickerSheet({
   recipes,
   mealType,
   onRecipeSelected,
+  isLoading = false,
 }: RecipePickerSheetProps) {
   const [searchQuery, setSearchQuery] = useState("");
 
@@ -110,11 +112,25 @@ export function RecipePickerSheet({
     });
 
     // Sort: Ramadan recommendations first (when viewing fasting meals)
-    const isFastingMeal = ['pre-iftar', 'iftar', 'full-meal-taraweeh', 'snack-taraweeh', 'suhoor'].includes(mealType);
+    const isFastingMeal = [
+      "pre-iftar",
+      "iftar",
+      "full-meal-taraweeh",
+      "snack-taraweeh",
+      "suhoor",
+    ].includes(mealType);
     if (isFastingMeal) {
       filtered.sort((a, b) => {
-        const aRamadan = (a.recommendation_group as string[] | null)?.includes('ramadan') ? 1 : 0;
-        const bRamadan = (b.recommendation_group as string[] | null)?.includes('ramadan') ? 1 : 0;
+        const aRamadan = (a.recommendation_group as string[] | null)?.includes(
+          "ramadan",
+        )
+          ? 1
+          : 0;
+        const bRamadan = (b.recommendation_group as string[] | null)?.includes(
+          "ramadan",
+        )
+          ? 1
+          : 0;
         return bRamadan - aRamadan;
       });
     }
@@ -171,7 +187,14 @@ export function RecipePickerSheet({
         </SheetHeader>
 
         <div className="flex-1 overflow-y-auto p-4">
-          {filteredRecipes.length === 0 ? (
+          {isLoading ? (
+            <div className="flex flex-col items-center justify-center py-12">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mb-3"></div>
+              <p className="text-sm text-muted-foreground">
+                Loading recipes...
+              </p>
+            </div>
+          ) : filteredRecipes.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-12 text-center">
               <p className="text-muted-foreground mb-2">No recipes found</p>
               {searchQuery && (
@@ -214,18 +237,34 @@ export function RecipePickerSheet({
                     <h3 className="font-semibold truncate mb-1">
                       {recipe.name}
                     </h3>
-                    {(recipe.recommendation_group as string[] | null)?.includes('ramadan') && (
-                      <div className="mb-1"><RamadanBadge /></div>
+                    {(recipe.recommendation_group as string[] | null)?.includes(
+                      "ramadan",
+                    ) && (
+                      <div className="mb-1">
+                        <RamadanBadge />
+                      </div>
                     )}
 
-                    <div className="flex items-center gap-3 text-sm text-muted-foreground">
-                      {recipe.nutrition_per_serving?.calories && (
+                    <div className="flex items-center gap-3 text-sm text-muted-foreground flex-wrap">
+                      {/* Show scaled calories if available, otherwise original */}
+                      {((recipe as any).scaled_calories ||
+                        recipe.nutrition_per_serving?.calories) && (
                         <div className="flex items-center gap-1">
                           <Flame className="h-3.5 w-3.5" />
-                          <span>
-                            {Math.round(recipe.nutrition_per_serving.calories)}{" "}
+                          <span className="font-semibold text-primary">
+                            {Math.round(
+                              (recipe as any).scaled_calories ||
+                                recipe.nutrition_per_serving.calories,
+                            )}{" "}
                             kcal
                           </span>
+                          {/* Show scale factor badge if scaled */}
+                          {(recipe as any).scale_factor &&
+                            (recipe as any).scale_factor !== 1 && (
+                              <span className="text-xs px-1.5 py-0.5 bg-primary/10 text-primary rounded">
+                                {(recipe as any).scale_factor}×
+                              </span>
+                            )}
                         </div>
                       )}
                       {recipe.prep_time_minutes && (

@@ -130,12 +130,14 @@ function MealCard({
   servings,
   onEdit,
   isLoading,
+  targetCalories, // NEW: Pass target calories for display
 }: {
   mealType: string;
   recipe: AdminRecipeInfo | null;
   servings: number;
   onEdit?: () => void;
   isLoading?: boolean;
+  targetCalories?: number; // NEW: Optional target calories
 }) {
   const mealEmoji: Record<string, string> = {
     breakfast: "🌅",
@@ -215,7 +217,10 @@ function MealCard({
             <p className="font-medium text-sm truncate">{recipe.name}</p>
             <p className="text-xs text-muted-foreground">
               {servings} serving{servings !== 1 ? "s" : ""} •{" "}
-              {Math.round((recipe.nutrition_per_serving?.calories || 0) * servings)} kcal
+              {/* Display targetCalories if provided (scaled to user's daily target), otherwise fallback to base × servings */}
+              {targetCalories
+                ? `${Math.round(targetCalories)} kcal`
+                : `${Math.round((recipe.nutrition_per_serving?.calories || 0) * servings)} kcal`}
             </p>
           </div>
           <Button
@@ -243,6 +248,8 @@ function DayPlanView({
   loadingMealKey,
   isFastingMode,
   fastingSelectedMeals,
+  dailyCalories,
+  targets,
 }: {
   date: Date;
   plan: AdminUserPlan | null;
@@ -252,6 +259,8 @@ function DayPlanView({
   loadingMealKey?: string | null;
   isFastingMode?: boolean;
   fastingSelectedMeals?: string[];
+  dailyCalories?: number;
+  targets?: any;
 }) {
   const dateStr = getLocalDateString(date);
   const isToday = dateStr === getLocalDateString(new Date());
@@ -297,11 +306,78 @@ function DayPlanView({
     );
   }
 
+  // Helper: Calculate meal target calories (matches backend distribution logic)
+  const getMealTargetCalories = (mealType: string): number => {
+    if (isFastingMode) {
+      // Fasting distribution (matches admin-plans.ts)
+      const fastingDistribution: Record<string, number> = {
+        "pre-iftar": 0.1,
+        iftar: 0.4,
+        "full-meal-taraweeh": 0.3,
+        "snack-taraweeh": 0.1,
+        suhoor: 0.25,
+      };
+
+      const safeFasting = fastingSelectedMeals || [];
+      const mealsToUse =
+        safeFasting.length > 0 ? safeFasting : Object.keys(fastingDistribution);
+
+      // Calculate total percentage and normalize
+      const totalPercentage = mealsToUse.reduce(
+        (sum: number, meal: string) => sum + (fastingDistribution[meal] || 0),
+        0,
+      );
+
+      const normalizedPercentage =
+        (fastingDistribution[mealType] || 0.2) / totalPercentage;
+      return Math.round((dailyCalories || 0) * normalizedPercentage);
+    } else {
+      // Regular mode - use meal structure from targets or defaults
+      const mealStructure = targets?.meal_structure || [
+        { name: "breakfast", percentage: 25 },
+        { name: "lunch", percentage: 35 },
+        { name: "dinner", percentage: 30 },
+        { name: "snacks", percentage: 10 },
+      ];
+      const mealSlot = mealStructure.find((m: any) => m.name === mealType);
+      if (mealSlot) {
+        return Math.round((dailyCalories || 0) * (mealSlot.percentage / 100));
+      }
+      return Math.round((dailyCalories || 0) * 0.2); // Default fallback
+    }
+  };
+
   const getMealRecipe = (
     mealType: string,
   ): { recipe: AdminRecipeInfo | null; servings: number } => {
     // Choose plan based on fasting mode
     const activePlan = isFastingMode ? plan?.fasting_plan : plan?.plan;
+
+    // Handle array-based meal types (snacks in regular mode, snack-taraweeh in fasting mode)
+    if (mealType === "snacks" || mealType === "snack-taraweeh") {
+      const mealData = (activePlan as any)?.[mealType];
+
+      // Handle both array format (correct) and object format (legacy bug)
+      if (Array.isArray(mealData) && mealData.length > 0) {
+        // Correct format: array
+        const firstSnack = mealData[0];
+        if (!firstSnack?.recipe_id) return { recipe: null, servings: 0 };
+        return {
+          recipe: recipes[firstSnack.recipe_id] || null,
+          servings: firstSnack.servings || 1,
+        };
+      } else if (mealData && !Array.isArray(mealData) && mealData.recipe_id) {
+        // Legacy format: single object (backwards compatibility)
+        return {
+          recipe: recipes[mealData.recipe_id] || null,
+          servings: mealData.servings || 1,
+        };
+      }
+
+      return { recipe: null, servings: 0 };
+    }
+
+    // Handle single-slot meal types (all other meals)
     const meal = (activePlan as any)?.[mealType];
     if (!meal?.recipe_id) return { recipe: null, servings: 0 };
     return {
@@ -331,9 +407,12 @@ function DayPlanView({
   ];
 
   const mealSlots = isFastingMode
-    ? (fastingSelectedMeals || []).sort(
-        (a, b) => FASTING_MEAL_ORDER.indexOf(a) - FASTING_MEAL_ORDER.indexOf(b),
-      )
+    ? fastingSelectedMeals && fastingSelectedMeals.length > 0
+      ? fastingSelectedMeals.sort(
+          (a, b) =>
+            FASTING_MEAL_ORDER.indexOf(a) - FASTING_MEAL_ORDER.indexOf(b),
+        )
+      : FASTING_MEAL_ORDER // Show all fasting meals if none selected
     : ["breakfast", "lunch", "dinner", "snacks"];
 
   // Fasting meal emoji mapping
@@ -394,6 +473,7 @@ function DayPlanView({
                   mealType={mealSlot}
                   recipe={meal.recipe}
                   servings={meal.servings}
+                  targetCalories={getMealTargetCalories(mealSlot)}
                   onEdit={() => onEditMeal?.(mealSlot)}
                   isLoading={loadingMealKey === mealSlot}
                 />
@@ -412,6 +492,7 @@ function DayPlanView({
               mealType="breakfast"
               recipe={getMealRecipe("breakfast").recipe}
               servings={getMealRecipe("breakfast").servings}
+              targetCalories={getMealTargetCalories("breakfast")}
               onEdit={() => onEditMeal?.("breakfast")}
               isLoading={loadingMealKey === "breakfast"}
             />
@@ -419,6 +500,7 @@ function DayPlanView({
               mealType="lunch"
               recipe={getMealRecipe("lunch").recipe}
               servings={getMealRecipe("lunch").servings}
+              targetCalories={getMealTargetCalories("lunch")}
               onEdit={() => onEditMeal?.("lunch")}
               isLoading={loadingMealKey === "lunch"}
             />
@@ -426,6 +508,7 @@ function DayPlanView({
               mealType="dinner"
               recipe={getMealRecipe("dinner").recipe}
               servings={getMealRecipe("dinner").servings}
+              targetCalories={getMealTargetCalories("dinner")}
               onEdit={() => onEditMeal?.("dinner")}
               isLoading={loadingMealKey === "dinner"}
             />
@@ -439,6 +522,7 @@ function DayPlanView({
                     mealType="snacks"
                     recipe={null}
                     servings={1}
+                    targetCalories={getMealTargetCalories("snacks")}
                     onEdit={() => onEditMeal?.("snacks", 0)}
                     isLoading={loadingMealKey === `snacks-0`}
                   />
@@ -449,6 +533,7 @@ function DayPlanView({
                       mealType="snacks"
                       recipe={snack.recipe}
                       servings={snack.servings}
+                      targetCalories={getMealTargetCalories("snacks")}
                       onEdit={() => onEditMeal?.("snacks", index)}
                       isLoading={loadingMealKey === `snacks-${index}`}
                     />
@@ -483,6 +568,8 @@ export function PlansContent({ initialUsers }: PlansContentProps) {
   const [fastingSelectedMeals, setFastingSelectedMeals] = useState<string[]>(
     [],
   );
+  const [dailyCalories, setDailyCalories] = useState(2000);
+  const [targets, setTargets] = useState<any>({});
 
   // Recipe picker state
   const [pickerOpen, setPickerOpen] = useState(false);
@@ -544,10 +631,14 @@ export function PlansContent({ initialUsers }: PlansContentProps) {
                 // Update isFastingMode from DB (source of truth)
                 setIsFastingMode(result.data.isFastingMode);
                 setFastingSelectedMeals(result.data.fastingSelectedMeals);
+                setDailyCalories(result.data.dailyCalories);
+                setTargets(result.data.targets);
               } else {
                 setUserPlans([]);
                 setRecipes({});
                 setFastingSelectedMeals([]);
+                setDailyCalories(2000);
+                setTargets({});
               }
               setIsLoadingPlans(false);
             }
@@ -615,11 +706,15 @@ export function PlansContent({ initialUsers }: PlansContentProps) {
       setRecipes(result.data.recipes);
       setIsFastingMode(result.data.isFastingMode);
       setFastingSelectedMeals(result.data.fastingSelectedMeals);
+      setDailyCalories(result.data.dailyCalories);
+      setTargets(result.data.targets);
     } else {
       setUserPlans([]);
       setRecipes({});
       setIsFastingMode(false);
       setFastingSelectedMeals([]);
+      setDailyCalories(2000);
+      setTargets({});
     }
     setIsLoadingPlans(false);
   }, []);
@@ -648,7 +743,8 @@ export function PlansContent({ initialUsers }: PlansContentProps) {
 
     try {
       // Fetch scaled recipes for this meal type
-      const { getScaledRecipesForMeal } = await import("@/lib/actions/admin-plans");
+      const { getScaledRecipesForMeal } =
+        await import("@/lib/actions/admin-plans");
       const result = await getScaledRecipesForMeal({
         userId: selectedUser.user_id,
         mealType,
@@ -998,6 +1094,8 @@ export function PlansContent({ initialUsers }: PlansContentProps) {
                   loadingMealKey={loadingMealKey}
                   isFastingMode={isFastingMode}
                   fastingSelectedMeals={fastingSelectedMeals}
+                  dailyCalories={dailyCalories}
+                  targets={targets}
                 />
               </CardContent>
             </Card>
