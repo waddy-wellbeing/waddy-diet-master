@@ -467,11 +467,24 @@ export async function updateUserMeal({
         ? fastingSelectedMeals 
         : Object.keys(fastingDistribution)
 
+      // Validate mealsToUse contains only valid distribution keys
+      const invalidMeals = mealsToUse.filter((m: string) => !(m in fastingDistribution))
+      if (invalidMeals.length > 0) {
+        console.error(`Invalid fasting meals: ${invalidMeals.join(', ')}`)
+        return { success: false, error: `Invalid fasting meal types: ${invalidMeals.join(', ')}` }
+      }
+
       // Calculate total percentage and normalize
       const totalPercentage = mealsToUse.reduce(
         (sum: number, meal: string) => sum + (fastingDistribution[meal] || 0),
         0
       )
+
+      // Guard against divide-by-zero
+      if (totalPercentage <= 0) {
+        console.error('Total percentage is zero or negative', { mealsToUse, totalPercentage })
+        return { success: false, error: 'Invalid fasting meal distribution' }
+      }
 
       const normalizedPercentage = (fastingDistribution[mealType] || 0.2) / totalPercentage
       targetCalories = Math.round(dailyCalories * normalizedPercentage)
@@ -701,11 +714,24 @@ export async function getScaledRecipesForMeal({
         ? fastingSelectedMeals 
         : Object.keys(fastingDistribution)
 
+      // Validate mealsToUse contains only valid distribution keys
+      const invalidMeals = mealsToUse.filter((m: string) => !(m in fastingDistribution))
+      if (invalidMeals.length > 0) {
+        console.error(`Invalid fasting meals: ${invalidMeals.join(', ')}`)
+        return { success: false, error: `Invalid fasting meal types: ${invalidMeals.join(', ')}` }
+      }
+
       // Calculate total percentage and normalize
       const totalPercentage = mealsToUse.reduce(
         (sum: number, meal: string) => sum + (fastingDistribution[meal] || 0),
         0
       )
+
+      // Guard against divide-by-zero
+      if (totalPercentage <= 0) {
+        console.error('Total percentage is zero or negative', { mealsToUse, totalPercentage })
+        return { success: false, error: 'Invalid fasting meal distribution' }
+      }
 
       const normalizedPercentage = (fastingDistribution[mealType] || 0.2) / totalPercentage
       targetCalories = Math.round(dailyCalories * normalizedPercentage)
