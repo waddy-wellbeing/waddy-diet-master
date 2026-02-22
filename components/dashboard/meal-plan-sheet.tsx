@@ -394,7 +394,6 @@ export function MealPlanSheet({
       <RecipePickerSheet
         open={pickerOpen}
         onOpenChange={setPickerOpen}
-        recipes={recipes}
         mealType={activeMealType}
         onRecipeSelected={handleRecipeSelected}
       />

@@ -433,6 +433,30 @@ function DayPlanView({
     suhoor: "السحور",
   };
 
+  // Calculate CORRECT daily totals using USER'S TARGET MACROS from database
+  // NOT scaled recipe macros - those can vary based on recipe choices
+  const calculateDailyTotals = (): {
+    calories: number;
+    protein_g: number;
+    carbs_g: number;
+    fat_g: number;
+  } => {
+    // Use user's actual macro targets from database
+    const targetProtein = targets?.protein_g || 0;
+    const targetCarbs = targets?.carbs_g || 0;
+    const targetFat = targets?.fat_g || 0;
+    const targetCalories = dailyCalories || 0;
+
+    return {
+      calories: Math.round(targetCalories),
+      protein_g: Math.round(targetProtein),
+      carbs_g: Math.round(targetCarbs),
+      fat_g: Math.round(targetFat),
+    };
+  };
+
+  const dailyTotals = calculateDailyTotals();
+
   return (
     <div className="space-y-3">
       <div className="flex items-center justify-between">
@@ -446,12 +470,10 @@ function DayPlanView({
               </Badge>
             )}
           </p>
-          {plan?.daily_totals && (
+          {dailyTotals.calories > 0 && (
             <p className="text-xs text-muted-foreground">
-              {plan.daily_totals.calories || 0} kcal • P:{" "}
-              {plan.daily_totals.protein_g || 0}g • C:{" "}
-              {plan.daily_totals.carbs_g || 0}g • F:{" "}
-              {plan.daily_totals.fat_g || 0}g
+              {dailyTotals.calories} kcal • P: {dailyTotals.protein_g}g • C:{" "}
+              {dailyTotals.carbs_g}g • F: {dailyTotals.fat_g}g
             </p>
           )}
         </div>
@@ -1107,10 +1129,8 @@ export function PlansContent({ initialUsers }: PlansContentProps) {
       <RecipePickerSheet
         open={pickerOpen}
         onOpenChange={setPickerOpen}
-        recipes={scaledRecipes.length > 0 ? scaledRecipes : allRecipes}
         onRecipeSelected={handleRecipeSelected}
         mealType={activeMealType as any}
-        isLoading={isLoadingRecipes}
       />
     </div>
   );
