@@ -42,10 +42,16 @@ export async function searchRecipes({
     if (isSearching) {
       const searchTerm = `%${query.trim()}%`
       dbQuery = dbQuery.or(`name.ilike.${searchTerm},description.ilike.${searchTerm}`)
+      // When searching: NO meal_type filter (return all matching recipes)
+    } else if (acceptedTypes.length > 0) {
+      // When NOT searching: Filter by meal_type at DATABASE level (avoid fetching 500 rows)
+      // Use PostgreSQL array overlap operator to check if meal_type && acceptedTypes
+      dbQuery = dbQuery.overlaps('meal_type', acceptedTypes)
     }
     
-    // Fetch recipes
-    const { data: recipes, error } = await dbQuery.limit(500)
+    // Fetch recipes - limit based on use case
+    const fetchLimit = isSearching ? 500 : 100
+    const { data: recipes, error } = await dbQuery.limit(fetchLimit)
     
     if (error) {
       console.error('Error searching recipes:', error)
@@ -56,21 +62,8 @@ export async function searchRecipes({
       return []
     }
     
-    // MEAL TYPE FILTERING LOGIC:
-    // - If NOT searching (empty query): FILTER by meal_type (show only appropriate recipes)
-    // - If searching (has query): NO FILTERING (show all matching recipes)
-    let filtered = recipes
-    
-    if (!isSearching && acceptedTypes.length > 0) {
-      // Initial display - filter by meal_type mapping
-      filtered = recipes.filter((recipe) => {
-        const recipeMealTypes = recipe.meal_type || []
-        return acceptedTypes.some((t) =>
-          recipeMealTypes.some((rmt: string) => rmt.toLowerCase() === t.toLowerCase())
-        )
-      })
-    }
-    // else: searching mode - return all recipes matching query
+    // No need for JavaScript filtering - meal_type filter applied at database level when not searching
+    const filtered = recipes
     
     // Sort recipes: Ramadan recommendations first for fasting meals
     const isFastingMeal = ['pre-iftar', 'iftar', 'full-meal-taraweeh', 'snack-taraweeh', 'suhoor'].includes(mealType)
