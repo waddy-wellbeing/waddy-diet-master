@@ -19,7 +19,7 @@ export async function searchRecipes({
       breakfast: ["breakfast", "smoothies"],
       lunch: ["lunch", "one pot", "side dishes"],
       dinner: ["dinner", "one pot", "side dishes"],
-      snacks: ["snack", "snacks & sweetes", "smoothies"],
+      snacks: ["snack", "snacks & sweets", "smoothies"],
       // Fasting meal mappings
       "pre-iftar": ["pre-iftar", "smoothies"],
       "iftar": ["lunch"],
