@@ -2,13 +2,14 @@
  * Recipe Picker Sheet Component
  *
  * Nested sheet for selecting recipes when planning meals
- * Includes search and displays all available recipes
+ * Database-driven search with debouncing for better performance
  */
 
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Search, ChevronLeft, Clock, Flame } from "lucide-react";
+import { searchRecipes } from "@/lib/actions/recipe-search";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -25,7 +26,6 @@ import { RamadanBadge } from "@/components/dashboard/ramadan-badge";
 interface RecipePickerSheetProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  recipes: RecipeRecord[];
   mealType:
     | "breakfast"
     | "lunch"
@@ -56,71 +56,48 @@ const MEAL_TYPE_LABELS: Record<string, string> = {
 export function RecipePickerSheet({
   open,
   onOpenChange,
-  recipes,
   mealType,
   onRecipeSelected,
 }: RecipePickerSheetProps) {
   const [searchQuery, setSearchQuery] = useState("");
+  const [searchResults, setSearchResults] = useState<RecipeRecord[]>([]);
+  const [isSearching, setIsSearching] = useState(false);
+  const requestIdRef = useRef(0);
 
-  // All fasting meals now use meal_type filtering
-  // Only keeping this array for structure consistency (but it's empty)
-  const FASTING_CALORIES_ONLY_MEALS: string[] = [];
-
-  // Filter recipes based on meal type and search query
-  const filteredRecipes = useMemo(() => {
-    if (!mealType) return [];
-
-    // Meal type mapping for all meals (regular + fasting)
-    const mealTypeMapping: Record<string, string[]> = {
-      breakfast: ["breakfast", "smoothies"],
-      lunch: ["lunch", "one pot", "side dishes"],
-      dinner: ["dinner", "one pot", "side dishes"],
-      snacks: ["snack", "snacks & sweetes", "smoothies"],
-      // Fasting meal mappings
-      "pre-iftar": ["pre-iftar", "smoothies"], // Pre-iftar first, then smoothies as fallback
-      iftar: ["lunch"], // Main breaking fast meal - lunch recipes only
-      "full-meal-taraweeh": ["lunch", "dinner"], // Full meal after prayers - lunch or dinner
-      "snack-taraweeh": ["snack"], // Snack after prayers - snack recipes only
-      suhoor: ["breakfast", "dinner"], // Pre-dawn meal - breakfast or dinner
-    };
-
-    const isCaloriesOnly = FASTING_CALORIES_ONLY_MEALS.includes(mealType);
-    const acceptedTypes = mealTypeMapping[mealType] || [];
-
-    const filtered = recipes.filter((recipe) => {
-      // All meals now use meal_type filtering (FASTING_CALORIES_ONLY_MEALS is empty)
-      const recipeMealTypes = recipe.meal_type || [];
-      const matchesMealType = acceptedTypes.some((t) =>
-        recipeMealTypes.some(
-          (rmt: string) => rmt.toLowerCase() === t.toLowerCase(),
-        ),
-      );
-      if (!matchesMealType) return false;
-
-      // Filter by search query
-      if (searchQuery.trim()) {
-        const query = searchQuery.toLowerCase();
-        const name = recipe.name.toLowerCase();
-        const description = recipe.description?.toLowerCase() || "";
-
-        return name.includes(query) || description.includes(query);
-      }
-
-      return true;
-    });
-
-    // Sort: Ramadan recommendations first (when viewing fasting meals)
-    const isFastingMeal = ['pre-iftar', 'iftar', 'full-meal-taraweeh', 'snack-taraweeh', 'suhoor'].includes(mealType);
-    if (isFastingMeal) {
-      filtered.sort((a, b) => {
-        const aRamadan = (a.recommendation_group as string[] | null)?.includes('ramadan') ? 1 : 0;
-        const bRamadan = (b.recommendation_group as string[] | null)?.includes('ramadan') ? 1 : 0;
-        return bRamadan - aRamadan;
-      });
+  // Database-driven search with debouncing and race condition protection
+  useEffect(() => {
+    if (!mealType) {
+      setSearchResults([]);
+      return;
     }
 
-    return filtered;
-  }, [recipes, mealType, searchQuery]);
+    const timer = setTimeout(async () => {
+      const requestId = ++requestIdRef.current;
+      setIsSearching(true);
+      try {
+        const results = await searchRecipes({
+          query: searchQuery,
+          mealType,
+          limit: 100,
+        });
+        // Only update if this is still the latest request
+        if (requestId === requestIdRef.current) {
+          setSearchResults(results);
+        }
+      } catch (error) {
+        console.error("Error searching recipes:", error);
+        if (requestId === requestIdRef.current) {
+          setSearchResults([]);
+        }
+      } finally {
+        if (requestId === requestIdRef.current) {
+          setIsSearching(false);
+        }
+      }
+    }, 300); // 300ms debounce
+
+    return () => clearTimeout(timer);
+  }, [searchQuery, mealType]);
 
   const handleRecipeClick = (recipeId: string) => {
     onRecipeSelected(recipeId);
@@ -171,7 +148,14 @@ export function RecipePickerSheet({
         </SheetHeader>
 
         <div className="flex-1 overflow-y-auto p-4">
-          {filteredRecipes.length === 0 ? (
+          {isSearching ? (
+            <div className="flex flex-col items-center justify-center py-12">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mb-3"></div>
+              <p className="text-sm text-muted-foreground">
+                Loading recipes...
+              </p>
+            </div>
+          ) : searchResults.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-12 text-center">
               <p className="text-muted-foreground mb-2">No recipes found</p>
               {searchQuery && (
@@ -186,7 +170,7 @@ export function RecipePickerSheet({
             </div>
           ) : (
             <div className="grid grid-cols-1 gap-3">
-              {filteredRecipes.map((recipe) => (
+              {searchResults.map((recipe) => (
                 <button
                   key={recipe.id}
                   onClick={() => handleRecipeClick(recipe.id)}
@@ -214,18 +198,34 @@ export function RecipePickerSheet({
                     <h3 className="font-semibold truncate mb-1">
                       {recipe.name}
                     </h3>
-                    {(recipe.recommendation_group as string[] | null)?.includes('ramadan') && (
-                      <div className="mb-1"><RamadanBadge /></div>
+                    {(recipe.recommendation_group as string[] | null)?.includes(
+                      "ramadan",
+                    ) && (
+                      <div className="mb-1">
+                        <RamadanBadge />
+                      </div>
                     )}
 
-                    <div className="flex items-center gap-3 text-sm text-muted-foreground">
-                      {recipe.nutrition_per_serving?.calories && (
+                    <div className="flex items-center gap-3 text-sm text-muted-foreground flex-wrap">
+                      {/* Show scaled calories if available, otherwise original */}
+                      {((recipe as any).scaled_calories ||
+                        recipe.nutrition_per_serving?.calories) && (
                         <div className="flex items-center gap-1">
                           <Flame className="h-3.5 w-3.5" />
-                          <span>
-                            {Math.round(recipe.nutrition_per_serving.calories)}{" "}
+                          <span className="font-semibold text-primary">
+                            {Math.round(
+                              (recipe as any).scaled_calories ||
+                                recipe.nutrition_per_serving.calories,
+                            )}{" "}
                             kcal
                           </span>
+                          {/* Show scale factor badge if scaled */}
+                          {(recipe as any).scale_factor &&
+                            (recipe as any).scale_factor !== 1 && (
+                              <span className="text-xs px-1.5 py-0.5 bg-primary/10 text-primary rounded">
+                                {(recipe as any).scale_factor}×
+                              </span>
+                            )}
                         </div>
                       )}
                       {recipe.prep_time_minutes && (
@@ -268,8 +268,8 @@ export function RecipePickerSheet({
 
         <div className="p-4 border-t border-border bg-muted/20">
           <p className="text-xs text-center text-muted-foreground">
-            {filteredRecipes.length} recipe
-            {filteredRecipes.length !== 1 ? "s" : ""} available
+            {searchResults.length} recipe
+            {searchResults.length !== 1 ? "s" : ""} available
           </p>
         </div>
       </SheetContent>

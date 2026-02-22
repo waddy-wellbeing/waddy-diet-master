@@ -124,6 +124,9 @@ export async function getUserPlans(userId: string, daysBack = 30, daysForward = 
     profile: AdminUserProfile | null
     isFastingMode: boolean
     fastingSelectedMeals: string[]
+    dailyCalories: number
+    fastingMealsPerDay?: number
+    targets: any
   }
   error?: string
 }> {
@@ -179,7 +182,18 @@ export async function getUserPlans(userId: string, daysBack = 30, daysForward = 
         if (fp['pre-iftar']?.recipe_id) recipeIds.add(fp['pre-iftar'].recipe_id)
         if (fp['iftar']?.recipe_id) recipeIds.add(fp['iftar'].recipe_id)
         if (fp['full-meal-taraweeh']?.recipe_id) recipeIds.add(fp['full-meal-taraweeh'].recipe_id)
-        if (fp['snack-taraweeh']?.recipe_id) recipeIds.add(fp['snack-taraweeh'].recipe_id)
+        // snack-taraweeh is an array (like regular snacks)
+        if (fp['snack-taraweeh']) {
+          const snackData = fp['snack-taraweeh'] as any
+          if (Array.isArray(snackData)) {
+            for (const snack of snackData) {
+              if (snack?.recipe_id) recipeIds.add(snack.recipe_id)
+            }
+          } else if (snackData?.recipe_id) {
+            // Legacy format fallback
+            recipeIds.add(snackData.recipe_id)
+          }
+        }
         if (fp['suhoor']?.recipe_id) recipeIds.add(fp['suhoor'].recipe_id)
       }
     }
@@ -203,19 +217,22 @@ export async function getUserPlans(userId: string, daysBack = 30, daysForward = 
       }
     }
 
-    // Fetch user profile with preferences
+    // Fetch user profile with preferences and targets
     const { data: profile } = await supabase
       .from('profiles')
-      .select('user_id, name, email, basic_info, preferences, created_at, role')
+      .select('user_id, name, email, basic_info, preferences, targets, created_at, role')
       .eq('user_id', userId)
       .single()
 
     console.log('User profile:', profile)
 
-    // Extract fasting preferences
+    // Extract fasting preferences and targets
     const preferences = (profile as any)?.preferences || {}
+    const targets = (profile as any)?.targets || {}
     const isFastingMode = preferences.is_fasting || false
     const fastingSelectedMeals = preferences.fasting_selected_meals || []
+    const dailyCalories = targets.daily_calories || 2000
+    const fastingMealsPerDay = preferences.fasting_meals_per_day
 
     return {
       success: true,
@@ -225,6 +242,9 @@ export async function getUserPlans(userId: string, daysBack = 30, daysForward = 
         profile: profile as AdminUserProfile | null,
         isFastingMode,
         fastingSelectedMeals,
+        dailyCalories,
+        fastingMealsPerDay,
+        targets,
       },
     }
   } catch (error) {
@@ -360,6 +380,7 @@ export async function getDayPlan(userId: string, planDate: string): Promise<{
 
 /**
  * Update a specific meal in a user's plan (admin action)
+ * Now includes proper calorie scaling based on meal targets
  */
 export async function updateUserMeal({
   userId,
@@ -382,6 +403,22 @@ export async function updateUserMeal({
   try {
     const supabase = createAdminClient()
 
+    // Fetch user profile to get calorie targets
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('targets, preferences')
+      .eq('user_id', userId)
+      .single()
+
+    if (!profile) {
+      return { success: false, error: 'User profile not found' }
+    }
+
+    const targets = (profile as any)?.targets || {}
+    const preferences = (profile as any)?.preferences || {}
+    const dailyCalories = targets.daily_calories || 2000
+    const fastingMealsPerDay = preferences.fasting_meals_per_day
+
     // Get existing plan (both regular and fasting)
     const { data: existingPlan } = await supabase
       .from('daily_plans')
@@ -397,16 +434,94 @@ export async function updateUserMeal({
     const currentPlan = (existingPlan?.[columnName] as any) || {}
     const updatedPlan = { ...currentPlan }
 
-    // Update the specific meal
+    // Fetch recipe to get base calories for scaling
+    const { data: recipe } = await supabase
+      .from('recipes')
+      .select('nutrition_per_serving')
+      .eq('id', recipeId)
+      .single()
+
+    if (!recipe) {
+      return { success: false, error: 'Recipe not found' }
+    }
+
+    const nutritionData = typeof recipe.nutrition_per_serving === 'string' 
+      ? JSON.parse(recipe.nutrition_per_serving) 
+      : recipe.nutrition_per_serving
+    const baseCalories = nutritionData?.calories || 0
+
+    // Calculate target calories for this meal slot
+    let targetCalories = 0
+    if (isFastingMode) {
+      // Use normalized distribution based on selected meals (mirrors dashboard logic)
+      const fastingSelectedMeals = preferences.fasting_selected_meals || []
+      const fastingDistribution: Record<string, number> = {
+        "pre-iftar": 0.1,
+        iftar: 0.4,
+        "full-meal-taraweeh": 0.3,
+        "snack-taraweeh": 0.1,
+        suhoor: 0.25,
+      }
+
+      const mealsToUse = fastingSelectedMeals.length > 0 
+        ? fastingSelectedMeals 
+        : Object.keys(fastingDistribution)
+
+      // Validate mealsToUse contains only valid distribution keys
+      const invalidMeals = mealsToUse.filter((m: string) => !(m in fastingDistribution))
+      if (invalidMeals.length > 0) {
+        console.error(`Invalid fasting meals: ${invalidMeals.join(', ')}`)
+        return { success: false, error: `Invalid fasting meal types: ${invalidMeals.join(', ')}` }
+      }
+
+      // Calculate total percentage and normalize
+      const totalPercentage = mealsToUse.reduce(
+        (sum: number, meal: string) => sum + (fastingDistribution[meal] || 0),
+        0
+      )
+
+      // Guard against divide-by-zero
+      if (totalPercentage <= 0) {
+        console.error('Total percentage is zero or negative', { mealsToUse, totalPercentage })
+        return { success: false, error: 'Invalid fasting meal distribution' }
+      }
+
+      const normalizedPercentage = (fastingDistribution[mealType] || 0.2) / totalPercentage
+      targetCalories = Math.round(dailyCalories * normalizedPercentage)
+    } else {
+      // Regular mode - use meal structure or defaults
+      const mealStructure = targets.meal_structure || [
+        { name: 'breakfast', percentage: 25 },
+        { name: 'lunch', percentage: 35 },
+        { name: 'dinner', percentage: 30 },
+        { name: 'snacks', percentage: 10 },
+      ]
+      const mealSlot = mealStructure.find((m: any) => m.name === mealType)
+      if (mealSlot) {
+        targetCalories = Math.round(dailyCalories * (mealSlot.percentage / 100))
+      }
+    }
+
+    // Calculate scale factor (servings) to hit target calories
+    // Scale factor = targetCalories / baseCalories
+    const scaleFactor = baseCalories > 0 ? targetCalories / baseCalories : 1
+    const servings = Math.round(scaleFactor * 100) / 100 // Round to 2 decimals
+
+    // Update the specific meal with calculated servings
     if (mealType === 'snacks' && snackIndex !== null && snackIndex !== undefined) {
       // Update specific snack in array (regular mode only)
       const snacks = Array.isArray(updatedPlan.snacks) ? [...updatedPlan.snacks] : []
-      snacks[snackIndex] = { recipe_id: recipeId, servings: 1 }
+      snacks[snackIndex] = { recipe_id: recipeId, servings }
       updatedPlan.snacks = snacks
+    } else if (mealType === 'snack-taraweeh') {
+      // snack-taraweeh is ALWAYS an array (matches user dashboard behavior)
+      updatedPlan['snack-taraweeh'] = [{ recipe_id: recipeId, servings }]
     } else {
-      // Update meal (breakfast/lunch/dinner or fasting meals)
-      updatedPlan[mealType] = { recipe_id: recipeId, servings: 1 }
+      // Update meal (breakfast/lunch/dinner or other fasting meals)
+      updatedPlan[mealType] = { recipe_id: recipeId, servings }
     }
+
+    console.log(`[Admin] Updated ${mealType} with recipe ${recipeId}, servings: ${servings} (target: ${targetCalories} cal, base: ${baseCalories} cal)`)
 
     // Preserve the other column (don't overwrite it)
     const otherColumnData = existingPlan?.[otherColumnName] || null
@@ -532,5 +647,220 @@ export async function getAllRecipes(): Promise<{
   } catch (error) {
     console.error('Error in getAllRecipes:', error)
     return { success: false, error: 'Failed to fetch recipes' }
+  }
+}
+
+/**
+ * Get scaled recipes for a specific meal type (admin)
+ * Applies same scaling logic as user dashboard
+ */
+export async function getScaledRecipesForMeal({
+  userId,
+  mealType,
+  isFastingMode,
+}: {
+  userId: string
+  mealType: string
+  isFastingMode?: boolean
+}): Promise<{
+  success: boolean
+  data?: Array<{
+    id: string
+    name: string
+    image_url: string | null
+    meal_type: string[] | null
+    recommendation_group: string[] | null
+    nutrition_per_serving: any
+    scale_factor: number
+    scaled_calories: number
+    original_calories: number
+    macro_similarity_score: number
+  }>
+  error?: string
+}> {
+  try {
+    const supabase = createAdminClient()
+
+    // Fetch user profile for targets
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('targets, preferences')
+      .eq('user_id', userId)
+      .single()
+
+    if (!profile) {
+      return { success: false, error: 'User profile not found' }
+    }
+
+    const targets = (profile as any)?.targets || {}
+    const preferences = (profile as any)?.preferences || {}
+    const dailyCalories = targets.daily_calories || 2000
+    const fastingMealsPerDay = preferences.fasting_meals_per_day
+    const fastingSelectedMeals = preferences.fasting_selected_meals || []
+
+    // Calculate target calories for this meal slot
+    let targetCalories = 0
+    if (isFastingMode) {
+      // Use normalized distribution based on selected meals (mirrors dashboard logic)
+      const fastingDistribution: Record<string, number> = {
+        "pre-iftar": 0.1,
+        iftar: 0.4,
+        "full-meal-taraweeh": 0.3,
+        "snack-taraweeh": 0.1,
+        suhoor: 0.25,
+      }
+
+      const mealsToUse = fastingSelectedMeals.length > 0 
+        ? fastingSelectedMeals 
+        : Object.keys(fastingDistribution)
+
+      // Validate mealsToUse contains only valid distribution keys
+      const invalidMeals = mealsToUse.filter((m: string) => !(m in fastingDistribution))
+      if (invalidMeals.length > 0) {
+        console.error(`Invalid fasting meals: ${invalidMeals.join(', ')}`)
+        return { success: false, error: `Invalid fasting meal types: ${invalidMeals.join(', ')}` }
+      }
+
+      // Calculate total percentage and normalize
+      const totalPercentage = mealsToUse.reduce(
+        (sum: number, meal: string) => sum + (fastingDistribution[meal] || 0),
+        0
+      )
+
+      // Guard against divide-by-zero
+      if (totalPercentage <= 0) {
+        console.error('Total percentage is zero or negative', { mealsToUse, totalPercentage })
+        return { success: false, error: 'Invalid fasting meal distribution' }
+      }
+
+      const normalizedPercentage = (fastingDistribution[mealType] || 0.2) / totalPercentage
+      targetCalories = Math.round(dailyCalories * normalizedPercentage)
+
+      if (!fastingDistribution[mealType] && !mealsToUse.includes(mealType)) {
+        console.error(`Meal type "${mealType}" not in fasting distribution or selected meals`)
+        console.error('Available meals:', mealsToUse)
+        return { success: false, error: `Invalid fasting meal type: ${mealType}` }
+      }
+    } else {
+      const mealStructure = targets.meal_structure || [
+        { name: 'breakfast', percentage: 25 },
+        { name: 'lunch', percentage: 35 },
+        { name: 'dinner', percentage: 30 },
+        { name: 'snacks', percentage: 10 },
+      ]
+      const mealSlot = mealStructure.find((m: any) => m.name === mealType)
+      if (mealSlot) {
+        targetCalories = Math.round(dailyCalories * (mealSlot.percentage / 100))
+      } else {
+        console.error(`Meal type "${mealType}" not found in regular meal structure`)
+        console.error('Available meals:', mealStructure.map((m: any) => m.name))
+      }
+    }
+
+    if (targetCalories === 0) {
+      return { success: false, error: `Could not determine target calories for meal type "${mealType}"` }
+    }
+
+    // Fetch all recipes
+    const { data: allRecipes, error: recipesError } = await supabase
+      .from('recipes')
+      .select('id, name, image_url, meal_type, recommendation_group, nutrition_per_serving')
+      .eq('is_public', true)
+      .not('nutrition_per_serving', 'is', null)
+
+    if (recipesError) {
+      return { success: false, error: recipesError.message }
+    }
+
+    if (!allRecipes || allRecipes.length === 0) {
+      return { success: true, data: [] }
+    }
+
+    // Scale and score recipes
+    const minScale = 0.5
+    const maxScale = 2.0
+    const targetMacroPercentages = {
+      protein_pct: 30,
+      carbs_pct: 40,
+      fat_pct: 30,
+    }
+
+    const scaledRecipes = []
+
+    for (const recipe of allRecipes) {
+      const nutritionData = typeof recipe.nutrition_per_serving === 'string'
+        ? JSON.parse(recipe.nutrition_per_serving)
+        : recipe.nutrition_per_serving
+
+      const baseCalories = nutritionData?.calories
+      if (!baseCalories || baseCalories <= 0) continue
+
+      // Calculate scale factor
+      const scaleFactor = targetCalories / baseCalories
+
+      // Check if within acceptable range
+      const isWithinCalorieRange = scaleFactor >= minScale && scaleFactor <= maxScale
+
+      // Calculate macro similarity score
+      const recipeProtein = nutritionData?.protein_g || 0
+      const recipeCarbs = nutritionData?.carbs_g || 0
+      const recipeFat = nutritionData?.fat_g || 0
+
+      const proteinPct = Math.round(((recipeProtein * 4) / baseCalories) * 100)
+      const carbsPct = Math.round(((recipeCarbs * 4) / baseCalories) * 100)
+      const fatPct = Math.round(((recipeFat * 9) / baseCalories) * 100)
+
+      const proteinDiff = Math.abs(targetMacroPercentages.protein_pct - proteinPct)
+      const carbsDiff = Math.abs(targetMacroPercentages.carbs_pct - carbsPct)
+      const fatDiff = Math.abs(targetMacroPercentages.fat_pct - fatPct)
+
+      const proteinScore = Math.max(0, 100 - proteinDiff * 1.5)
+      const carbsScore = Math.max(0, 100 - carbsDiff * 1.5)
+      const fatScore = Math.max(0, 100 - fatDiff * 1.5)
+
+      const macroSimilarityScore = Math.round(
+        proteinScore * 0.5 + carbsScore * 0.3 + fatScore * 0.2,
+      )
+
+      // Out-of-range recipes get lower score
+      const finalScore = !isWithinCalorieRange ? -1 : macroSimilarityScore
+
+      scaledRecipes.push({
+        id: recipe.id,
+        name: recipe.name,
+        image_url: recipe.image_url,
+        meal_type: recipe.meal_type,
+        recommendation_group: recipe.recommendation_group,
+        nutrition_per_serving: nutritionData,
+        scale_factor: Math.round(scaleFactor * 100) / 100,
+        scaled_calories: targetCalories,
+        original_calories: baseCalories,
+        macro_similarity_score: finalScore,
+      })
+    }
+
+    // Sort recipes by:
+    // 1) Ramadan recommendation (if fasting mode)
+    // 2) Macro similarity score
+    // 3) Scale factor closest to 1.0
+    scaledRecipes.sort((a, b) => {
+      if (isFastingMode) {
+        const aRamadan = a.recommendation_group?.includes('ramadan') ? 1 : 0
+        const bRamadan = b.recommendation_group?.includes('ramadan') ? 1 : 0
+        if (bRamadan !== aRamadan) return bRamadan - aRamadan
+      }
+
+      const macroScoreDiff = b.macro_similarity_score - a.macro_similarity_score
+      if (Math.abs(macroScoreDiff) > 5) return macroScoreDiff
+
+      const aDistFromOne = Math.abs(a.scale_factor - 1)
+      const bDistFromOne = Math.abs(b.scale_factor - 1)
+      return aDistFromOne - bDistFromOne
+    })
+
+    return { success: true, data: scaledRecipes }
+  } catch (error) {
+    console.error('Error in getScaledRecipesForMeal:', error)
+    return { success: false, error: 'Failed to fetch scaled recipes' }
   }
 }

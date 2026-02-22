@@ -130,12 +130,14 @@ function MealCard({
   servings,
   onEdit,
   isLoading,
+  targetCalories, // NEW: Pass target calories for display
 }: {
   mealType: string;
   recipe: AdminRecipeInfo | null;
   servings: number;
   onEdit?: () => void;
   isLoading?: boolean;
+  targetCalories?: number; // NEW: Optional target calories
 }) {
   const mealEmoji: Record<string, string> = {
     breakfast: "🌅",
@@ -215,7 +217,10 @@ function MealCard({
             <p className="font-medium text-sm truncate">{recipe.name}</p>
             <p className="text-xs text-muted-foreground">
               {servings} serving{servings !== 1 ? "s" : ""} •{" "}
-              {recipe.nutrition_per_serving?.calories || 0} kcal
+              {/* Display targetCalories if provided (scaled to user's daily target), otherwise fallback to base × servings */}
+              {targetCalories
+                ? `${Math.round(targetCalories)} kcal`
+                : `${Math.round((recipe.nutrition_per_serving?.calories || 0) * servings)} kcal`}
             </p>
           </div>
           <Button
@@ -243,6 +248,8 @@ function DayPlanView({
   loadingMealKey,
   isFastingMode,
   fastingSelectedMeals,
+  dailyCalories,
+  targets,
 }: {
   date: Date;
   plan: AdminUserPlan | null;
@@ -252,6 +259,8 @@ function DayPlanView({
   loadingMealKey?: string | null;
   isFastingMode?: boolean;
   fastingSelectedMeals?: string[];
+  dailyCalories?: number;
+  targets?: any;
 }) {
   const dateStr = getLocalDateString(date);
   const isToday = dateStr === getLocalDateString(new Date());
@@ -297,11 +306,78 @@ function DayPlanView({
     );
   }
 
+  // Helper: Calculate meal target calories (matches backend distribution logic)
+  const getMealTargetCalories = (mealType: string): number => {
+    if (isFastingMode) {
+      // Fasting distribution (matches admin-plans.ts)
+      const fastingDistribution: Record<string, number> = {
+        "pre-iftar": 0.1,
+        iftar: 0.4,
+        "full-meal-taraweeh": 0.3,
+        "snack-taraweeh": 0.1,
+        suhoor: 0.25,
+      };
+
+      const safeFasting = fastingSelectedMeals || [];
+      const mealsToUse =
+        safeFasting.length > 0 ? safeFasting : Object.keys(fastingDistribution);
+
+      // Calculate total percentage and normalize
+      const totalPercentage = mealsToUse.reduce(
+        (sum: number, meal: string) => sum + (fastingDistribution[meal] || 0),
+        0,
+      );
+
+      const normalizedPercentage =
+        (fastingDistribution[mealType] || 0.2) / totalPercentage;
+      return Math.round((dailyCalories || 0) * normalizedPercentage);
+    } else {
+      // Regular mode - use meal structure from targets or defaults
+      const mealStructure = targets?.meal_structure || [
+        { name: "breakfast", percentage: 25 },
+        { name: "lunch", percentage: 35 },
+        { name: "dinner", percentage: 30 },
+        { name: "snacks", percentage: 10 },
+      ];
+      const mealSlot = mealStructure.find((m: any) => m.name === mealType);
+      if (mealSlot) {
+        return Math.round((dailyCalories || 0) * (mealSlot.percentage / 100));
+      }
+      return Math.round((dailyCalories || 0) * 0.2); // Default fallback
+    }
+  };
+
   const getMealRecipe = (
     mealType: string,
   ): { recipe: AdminRecipeInfo | null; servings: number } => {
     // Choose plan based on fasting mode
     const activePlan = isFastingMode ? plan?.fasting_plan : plan?.plan;
+
+    // Handle array-based meal types (snacks in regular mode, snack-taraweeh in fasting mode)
+    if (mealType === "snacks" || mealType === "snack-taraweeh") {
+      const mealData = (activePlan as any)?.[mealType];
+
+      // Handle both array format (correct) and object format (legacy bug)
+      if (Array.isArray(mealData) && mealData.length > 0) {
+        // Correct format: array
+        const firstSnack = mealData[0];
+        if (!firstSnack?.recipe_id) return { recipe: null, servings: 0 };
+        return {
+          recipe: recipes[firstSnack.recipe_id] || null,
+          servings: firstSnack.servings || 1,
+        };
+      } else if (mealData && !Array.isArray(mealData) && mealData.recipe_id) {
+        // Legacy format: single object (backwards compatibility)
+        return {
+          recipe: recipes[mealData.recipe_id] || null,
+          servings: mealData.servings || 1,
+        };
+      }
+
+      return { recipe: null, servings: 0 };
+    }
+
+    // Handle single-slot meal types (all other meals)
     const meal = (activePlan as any)?.[mealType];
     if (!meal?.recipe_id) return { recipe: null, servings: 0 };
     return {
@@ -331,10 +407,12 @@ function DayPlanView({
   ];
 
   const mealSlots = isFastingMode
-    ? (fastingSelectedMeals || []).sort(
-        (a, b) =>
-          FASTING_MEAL_ORDER.indexOf(a) - FASTING_MEAL_ORDER.indexOf(b),
-      )
+    ? fastingSelectedMeals && fastingSelectedMeals.length > 0
+      ? fastingSelectedMeals.sort(
+          (a, b) =>
+            FASTING_MEAL_ORDER.indexOf(a) - FASTING_MEAL_ORDER.indexOf(b),
+        )
+      : FASTING_MEAL_ORDER // Show all fasting meals if none selected
     : ["breakfast", "lunch", "dinner", "snacks"];
 
   // Fasting meal emoji mapping
@@ -355,6 +433,30 @@ function DayPlanView({
     suhoor: "السحور",
   };
 
+  // Calculate CORRECT daily totals using USER'S TARGET MACROS from database
+  // NOT scaled recipe macros - those can vary based on recipe choices
+  const calculateDailyTotals = (): {
+    calories: number;
+    protein_g: number;
+    carbs_g: number;
+    fat_g: number;
+  } => {
+    // Use user's actual macro targets from database
+    const targetProtein = targets?.protein_g || 0;
+    const targetCarbs = targets?.carbs_g || 0;
+    const targetFat = targets?.fat_g || 0;
+    const targetCalories = dailyCalories || 0;
+
+    return {
+      calories: Math.round(targetCalories),
+      protein_g: Math.round(targetProtein),
+      carbs_g: Math.round(targetCarbs),
+      fat_g: Math.round(targetFat),
+    };
+  };
+
+  const dailyTotals = calculateDailyTotals();
+
   return (
     <div className="space-y-3">
       <div className="flex items-center justify-between">
@@ -368,12 +470,10 @@ function DayPlanView({
               </Badge>
             )}
           </p>
-          {plan?.daily_totals && (
+          {dailyTotals.calories > 0 && (
             <p className="text-xs text-muted-foreground">
-              {plan.daily_totals.calories || 0} kcal • P:{" "}
-              {plan.daily_totals.protein_g || 0}g • C:{" "}
-              {plan.daily_totals.carbs_g || 0}g • F:{" "}
-              {plan.daily_totals.fat_g || 0}g
+              {dailyTotals.calories} kcal • P: {dailyTotals.protein_g}g • C:{" "}
+              {dailyTotals.carbs_g}g • F: {dailyTotals.fat_g}g
             </p>
           )}
         </div>
@@ -395,6 +495,7 @@ function DayPlanView({
                   mealType={mealSlot}
                   recipe={meal.recipe}
                   servings={meal.servings}
+                  targetCalories={getMealTargetCalories(mealSlot)}
                   onEdit={() => onEditMeal?.(mealSlot)}
                   isLoading={loadingMealKey === mealSlot}
                 />
@@ -413,6 +514,7 @@ function DayPlanView({
               mealType="breakfast"
               recipe={getMealRecipe("breakfast").recipe}
               servings={getMealRecipe("breakfast").servings}
+              targetCalories={getMealTargetCalories("breakfast")}
               onEdit={() => onEditMeal?.("breakfast")}
               isLoading={loadingMealKey === "breakfast"}
             />
@@ -420,6 +522,7 @@ function DayPlanView({
               mealType="lunch"
               recipe={getMealRecipe("lunch").recipe}
               servings={getMealRecipe("lunch").servings}
+              targetCalories={getMealTargetCalories("lunch")}
               onEdit={() => onEditMeal?.("lunch")}
               isLoading={loadingMealKey === "lunch"}
             />
@@ -427,6 +530,7 @@ function DayPlanView({
               mealType="dinner"
               recipe={getMealRecipe("dinner").recipe}
               servings={getMealRecipe("dinner").servings}
+              targetCalories={getMealTargetCalories("dinner")}
               onEdit={() => onEditMeal?.("dinner")}
               isLoading={loadingMealKey === "dinner"}
             />
@@ -440,6 +544,7 @@ function DayPlanView({
                     mealType="snacks"
                     recipe={null}
                     servings={1}
+                    targetCalories={getMealTargetCalories("snacks")}
                     onEdit={() => onEditMeal?.("snacks", 0)}
                     isLoading={loadingMealKey === `snacks-0`}
                   />
@@ -450,6 +555,7 @@ function DayPlanView({
                       mealType="snacks"
                       recipe={snack.recipe}
                       servings={snack.servings}
+                      targetCalories={getMealTargetCalories("snacks")}
                       onEdit={() => onEditMeal?.("snacks", index)}
                       isLoading={loadingMealKey === `snacks-${index}`}
                     />
@@ -484,10 +590,14 @@ export function PlansContent({ initialUsers }: PlansContentProps) {
   const [fastingSelectedMeals, setFastingSelectedMeals] = useState<string[]>(
     [],
   );
+  const [dailyCalories, setDailyCalories] = useState(2000);
+  const [targets, setTargets] = useState<any>({});
 
   // Recipe picker state
   const [pickerOpen, setPickerOpen] = useState(false);
   const [allRecipes, setAllRecipes] = useState<any[]>([]);
+  const [scaledRecipes, setScaledRecipes] = useState<any[]>([]); // Scaled recipes for current meal
+  const [isLoadingRecipes, setIsLoadingRecipes] = useState(false);
   const [activeMealType, setActiveMealType] = useState<string | null>(null);
   const [activeMealTypeForPicker, setActiveMealTypeForPicker] = useState<
     string | null
@@ -496,6 +606,7 @@ export function PlansContent({ initialUsers }: PlansContentProps) {
   const [loadingMealKey, setLoadingMealKey] = useState<string | null>(null);
 
   // Helper: Save session state to localStorage
+  // Only save user_id and is_fasting - fetch fresh data from DB on restore
   const saveSessionState = useCallback(
     (user: AdminUserProfile | null, week: Date, date: Date) => {
       try {
@@ -505,58 +616,72 @@ export function PlansContent({ initialUsers }: PlansContentProps) {
             userId: user?.user_id || null,
             currentWeek: week.toISOString(),
             selectedDate: date.toISOString(),
-            userPlans,
-            recipes,
             isFastingMode,
-            fastingSelectedMeals,
+            // Don't cache plans/recipes - always fetch fresh from DB
           }),
         );
       } catch (error) {
         console.error("Error saving session state:", error);
       }
     },
-    [userPlans, recipes, isFastingMode, fastingSelectedMeals],
+    [isFastingMode],
   );
 
   // Load last opened session from localStorage on mount
   useEffect(() => {
-    try {
-      const savedSession = localStorage.getItem("admin_plans_session");
-      if (savedSession) {
-        const session = JSON.parse(savedSession);
-        if (session.userId) {
-          // Find the user in initialUsers
-          const user = initialUsers.find((u) => u.user_id === session.userId);
-          if (user) {
-            // Restore UI state immediately
-            setSelectedUser(user);
-            setCurrentWeek(new Date(session.currentWeek));
-            setSelectedDate(new Date(session.selectedDate));
-            setUserPlans(session.userPlans || []);
-            setRecipes(session.recipes || {});
-            setIsFastingMode(session.isFastingMode || false);
-            setFastingSelectedMeals(session.fastingSelectedMeals || []);
+    const restoreSession = async () => {
+      try {
+        const savedSession = localStorage.getItem("admin_plans_session");
+        if (savedSession) {
+          const session = JSON.parse(savedSession);
+          if (session.userId) {
+            // Find the user in initialUsers
+            const user = initialUsers.find((u) => u.user_id === session.userId);
+            if (user) {
+              // Set UI state
+              setSelectedUser(user);
+              setCurrentWeek(new Date(session.currentWeek));
+              setSelectedDate(new Date(session.selectedDate));
+              setIsFastingMode(session.isFastingMode || false);
+
+              // Fetch FRESH data from database
+              setIsLoadingPlans(true);
+              const result = await getUserPlans(user.user_id);
+              if (result.success && result.data) {
+                setUserPlans(result.data.plans);
+                setRecipes(result.data.recipes);
+                // Update isFastingMode from DB (source of truth)
+                setIsFastingMode(result.data.isFastingMode);
+                setFastingSelectedMeals(result.data.fastingSelectedMeals);
+                setDailyCalories(result.data.dailyCalories);
+                setTargets(result.data.targets);
+              } else {
+                setUserPlans([]);
+                setRecipes({});
+                setFastingSelectedMeals([]);
+                setDailyCalories(2000);
+                setTargets({});
+              }
+              setIsLoadingPlans(false);
+            }
           }
         }
+      } catch (error) {
+        console.error("Error loading session from localStorage:", error);
+        setIsLoadingPlans(false);
       }
-    } catch (error) {
-      console.error("Error loading session from localStorage:", error);
-    }
+    };
+
+    restoreSession();
   }, [initialUsers]);
 
   // Save session whenever key state changes
+  // Only save UI state - data always fetched fresh from DB
   useEffect(() => {
     if (selectedUser) {
       saveSessionState(selectedUser, currentWeek, selectedDate);
     }
-  }, [
-    selectedUser,
-    currentWeek,
-    selectedDate,
-    userPlans,
-    recipes,
-    saveSessionState,
-  ]);
+  }, [selectedUser, currentWeek, selectedDate, saveSessionState]);
 
   // Fetch all recipes for the picker
   useEffect(() => {
@@ -590,8 +715,6 @@ export function PlansContent({ initialUsers }: PlansContentProps) {
   // Handle user selection
   const handleSelectUser = useCallback(async (user: AdminUserProfile) => {
     setSelectedUser(user);
-    // Save to localStorage for session persistence
-    localStorage.setItem("admin_plans_last_user_id", user.user_id);
     setIsLoadingPlans(true);
 
     // Set date to today when user is selected
@@ -605,11 +728,15 @@ export function PlansContent({ initialUsers }: PlansContentProps) {
       setRecipes(result.data.recipes);
       setIsFastingMode(result.data.isFastingMode);
       setFastingSelectedMeals(result.data.fastingSelectedMeals);
+      setDailyCalories(result.data.dailyCalories);
+      setTargets(result.data.targets);
     } else {
       setUserPlans([]);
       setRecipes({});
       setIsFastingMode(false);
       setFastingSelectedMeals([]);
+      setDailyCalories(2000);
+      setTargets({});
     }
     setIsLoadingPlans(false);
   }, []);
@@ -627,25 +754,38 @@ export function PlansContent({ initialUsers }: PlansContentProps) {
     return userPlans.find((p) => p.plan_date === dateStr) || null;
   };
 
-  // Handle edit meal - opens recipe picker
-  const handleEditMeal = (mealType: string, snackIndex?: number) => {
-    // Map fasting meal slots to recipe meal_type for filtering
-    let recipeMealType = mealType;
-    if (isFastingMode) {
-      const fastingMealTypeMap: Record<string, string> = {
-        "pre-iftar": "pre-iftar",
-        iftar: "lunch",
-        "full-meal-taraweeh": "dinner",
-        "snack-taraweeh": "snack",
-        suhoor: "breakfast",
-      };
-      recipeMealType = fastingMealTypeMap[mealType] || mealType;
-    }
+  // Handle edit meal - opens recipe picker with scaled recipes
+  const handleEditMeal = async (mealType: string, snackIndex?: number) => {
+    if (!selectedUser) return;
 
-    setActiveMealType(mealType); // Store original meal slot name for saving
-    setActiveMealTypeForPicker(recipeMealType); // Mapped type for recipe filtering
+    setActiveMealType(mealType);
     setActiveSnackIndex(snackIndex ?? null);
+    setIsLoadingRecipes(true);
     setPickerOpen(true);
+
+    try {
+      // Fetch scaled recipes for this meal type
+      const { getScaledRecipesForMeal } =
+        await import("@/lib/actions/admin-plans");
+      const result = await getScaledRecipesForMeal({
+        userId: selectedUser.user_id,
+        mealType,
+        isFastingMode,
+      });
+
+      if (result.success && result.data) {
+        setScaledRecipes(result.data);
+      } else {
+        console.error("Failed to load scaled recipes:", result.error);
+        // Fallback to unscaled recipes
+        setScaledRecipes(allRecipes);
+      }
+    } catch (error) {
+      console.error("Error loading scaled recipes:", error);
+      setScaledRecipes(allRecipes);
+    } finally {
+      setIsLoadingRecipes(false);
+    }
   };
 
   // Handle recipe selected from picker
@@ -976,6 +1116,8 @@ export function PlansContent({ initialUsers }: PlansContentProps) {
                   loadingMealKey={loadingMealKey}
                   isFastingMode={isFastingMode}
                   fastingSelectedMeals={fastingSelectedMeals}
+                  dailyCalories={dailyCalories}
+                  targets={targets}
                 />
               </CardContent>
             </Card>
@@ -987,9 +1129,8 @@ export function PlansContent({ initialUsers }: PlansContentProps) {
       <RecipePickerSheet
         open={pickerOpen}
         onOpenChange={setPickerOpen}
-        recipes={allRecipes}
         onRecipeSelected={handleRecipeSelected}
-        mealType={activeMealTypeForPicker as any}
+        mealType={activeMealType as any}
       />
     </div>
   );
