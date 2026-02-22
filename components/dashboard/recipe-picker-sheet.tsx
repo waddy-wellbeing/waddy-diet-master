@@ -7,7 +7,7 @@
 
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Search, ChevronLeft, Clock, Flame } from "lucide-react";
 import { searchRecipes } from "@/lib/actions/recipe-search";
 import { cn } from "@/lib/utils";
@@ -62,8 +62,9 @@ export function RecipePickerSheet({
   const [searchQuery, setSearchQuery] = useState("");
   const [searchResults, setSearchResults] = useState<RecipeRecord[]>([]);
   const [isSearching, setIsSearching] = useState(false);
+  const requestIdRef = useRef(0);
 
-  // Database-driven search with debouncing
+  // Database-driven search with debouncing and race condition protection
   useEffect(() => {
     if (!mealType) {
       setSearchResults([]);
@@ -71,6 +72,7 @@ export function RecipePickerSheet({
     }
 
     const timer = setTimeout(async () => {
+      const requestId = ++requestIdRef.current;
       setIsSearching(true);
       try {
         const results = await searchRecipes({
@@ -78,12 +80,19 @@ export function RecipePickerSheet({
           mealType,
           limit: 100,
         });
-        setSearchResults(results);
+        // Only update if this is still the latest request
+        if (requestId === requestIdRef.current) {
+          setSearchResults(results);
+        }
       } catch (error) {
         console.error("Error searching recipes:", error);
-        setSearchResults([]);
+        if (requestId === requestIdRef.current) {
+          setSearchResults([]);
+        }
       } finally {
-        setIsSearching(false);
+        if (requestId === requestIdRef.current) {
+          setIsSearching(false);
+        }
       }
     }, 300); // 300ms debounce
 
