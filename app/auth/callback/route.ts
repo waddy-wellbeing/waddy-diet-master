@@ -36,18 +36,22 @@ export async function GET(request: NextRequest) {
 
   // --- OTP / token_hash flow (used by some Supabase configs & older email templates) ---
   if (tokenHash && type) {
-    const { error } = await supabase.auth.verifyOtp({
-      token_hash: tokenHash,
-      type: type as Parameters<typeof supabase.auth.verifyOtp>[0]['type'],
-    })
+    // Validate that type is a supported email OTP type (exclude SMS/mobile types)
+    const emailOtpTypes = ['signup', 'recovery', 'magiclink', 'invite', 'email_change', 'email']
+    if (emailOtpTypes.includes(type)) {
+      const { error } = await supabase.auth.verifyOtp({
+        token_hash: tokenHash,
+        type: type as 'signup' | 'recovery' | 'magiclink' | 'invite' | 'email_change' | 'email',
+      })
 
-    if (!error) {
-      const redirectUrl = request.nextUrl.clone()
-      redirectUrl.pathname = next
-      redirectUrl.searchParams.delete('token_hash')
-      redirectUrl.searchParams.delete('type')
-      redirectUrl.searchParams.delete('next')
-      return NextResponse.redirect(redirectUrl)
+      if (!error) {
+        const redirectUrl = request.nextUrl.clone()
+        redirectUrl.pathname = next
+        redirectUrl.searchParams.delete('token_hash')
+        redirectUrl.searchParams.delete('type')
+        redirectUrl.searchParams.delete('next')
+        return NextResponse.redirect(redirectUrl)
+      }
     }
   }
 
