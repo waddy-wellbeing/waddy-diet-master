@@ -2,7 +2,7 @@ import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import { BottomNav } from '@/components/app/navigation/bottom-nav'
 import { RouteTrackerComponent } from '@/components/analytics/route-tracker'
-// import { PushNotificationPrompt } from '@/components/push-notification-prompt'
+import { PushNotificationPrompt } from '@/components/push-notification-prompt'
 
 export default async function AppLayout({
   children,
@@ -35,9 +35,8 @@ export default async function AppLayout({
       </main>
       {/* Only show bottom nav if onboarding is complete */}
       {profile?.onboarding_completed && <BottomNav />}
-      {/* Push notification prompt - temporarily disabled
+      {/* Push notification prompt – shown once per session for users who haven't subscribed yet */}
       {profile?.onboarding_completed && <PushNotificationPrompt />}
-      */}
     </div>
   )
 }

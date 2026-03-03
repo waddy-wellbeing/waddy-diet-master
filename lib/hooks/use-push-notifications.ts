@@ -1,9 +1,31 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { saveSubscription, removeSubscription } from '@/lib/actions/notifications'
 
-const VAPID_PUBLIC_KEY = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY || ''
+// Build-time baked value (may be empty if not set when Next.js compiled the bundle)
+const BUILD_TIME_VAPID_KEY = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY || ''
+
+/**
+ * Fetch the VAPID public key. Uses the build-time env var first (zero latency),
+ * then falls back to the runtime API endpoint so the key is always available
+ * regardless of when the bundle was compiled.
+ */
+async function getVapidPublicKey(): Promise<string> {
+  if (BUILD_TIME_VAPID_KEY) return BUILD_TIME_VAPID_KEY
+  try {
+    const res = await fetch('/api/config/vapid')
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}))
+      throw new Error(body.error || 'Failed to fetch VAPID public key')
+    }
+    const { publicKey } = await res.json()
+    if (!publicKey) throw new Error('VAPID public key not configured')
+    return publicKey
+  } catch (err) {
+    throw err instanceof Error ? err : new Error('Failed to load VAPID public key')
+  }
+}
 
 function urlBase64ToUint8Array(base64String: string): Uint8Array<ArrayBuffer> {
   const padding = '='.repeat((4 - (base64String.length % 4)) % 4)
@@ -48,6 +70,8 @@ export function usePushNotifications() {
   const [permission, setPermission] = useState<NotificationPermission>('default')
   const [error, setError] = useState<string | null>(null)
   const [subscription, setSubscription] = useState<PushSubscription | null>(null)
+  // Cache the fetched key so we don't hit the API more than once per session
+  const vapidKeyRef = useRef<string | null>(BUILD_TIME_VAPID_KEY || null)
 
   // Check if push notifications are supported
   useEffect(() => {
@@ -117,13 +141,14 @@ export function usePushNotifications() {
     setError(null)
 
     try {
-      // Check if VAPID key exists
-      if (!VAPID_PUBLIC_KEY) {
-        throw new Error('VAPID public key not configured')
+      // Resolve the VAPID public key (build-time var or runtime API fallback)
+      if (!vapidKeyRef.current) {
+        vapidKeyRef.current = await getVapidPublicKey()
       }
-      
-      console.log('[Push] VAPID key length:', VAPID_PUBLIC_KEY.length)
-      console.log('[Push] VAPID key:', VAPID_PUBLIC_KEY.substring(0, 20) + '...')
+      const vapidKey = vapidKeyRef.current
+
+      console.log('[Push] VAPID key length:', vapidKey.length)
+      console.log('[Push] VAPID key:', vapidKey.substring(0, 20) + '...')
 
       // Request permission
       const permission = await Notification.requestPermission()
@@ -163,7 +188,7 @@ export function usePushNotifications() {
       console.log('[Push] Creating new subscription with VAPID key...')
       const sub = await registration.pushManager.subscribe({
         userVisibleOnly: true,
-        applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY),
+        applicationServerKey: urlBase64ToUint8Array(vapidKey),
       })
       console.log('[Push] Subscription created:', sub.endpoint.substring(0, 50) + '...')
 
