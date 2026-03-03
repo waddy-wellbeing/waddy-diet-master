@@ -52,6 +52,8 @@ export interface UserWithProfile {
       cuisine_preferences?: string[]
       cooking_skill?: string
       max_prep_time_minutes?: number
+      is_fasting?: boolean
+      fasting_selected_meals?: string[]
     }
     goals: {
       goal_type?: string
@@ -385,6 +387,44 @@ export async function togglePlanMode(
   revalidatePath('/dashboard')
   revalidatePath('/profile')
   revalidatePath(`/dashboard/${planDate}`)
+  return { success: true, error: null }
+}
+
+/**
+ * Admin: directly set or unset fasting mode for a user.
+ * Unlike togglePlanMode (which is user-facing and date-scoped),
+ * this persists the flag in profile preferences so the admin can
+ * flip it at any time from the users panel.
+ */
+export async function adminToggleFastingMode(
+  userId: string,
+  isFasting: boolean
+): Promise<{ success: boolean; error: string | null }> {
+  const supabase = await createClient()
+
+  const { data: profile, error: fetchError } = await supabase
+    .from('profiles')
+    .select('preferences')
+    .eq('user_id', userId)
+    .single()
+
+  if (fetchError) {
+    return { success: false, error: fetchError.message }
+  }
+
+  const { error: updateError } = await supabase
+    .from('profiles')
+    .update({
+      preferences: { ...profile.preferences, is_fasting: isFasting },
+    })
+    .eq('user_id', userId)
+
+  if (updateError) {
+    return { success: false, error: updateError.message }
+  }
+
+  revalidatePath('/admin/users')
+  revalidatePath(`/admin/users/${userId}`)
   return { success: true, error: null }
 }
 

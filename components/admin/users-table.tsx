@@ -42,8 +42,10 @@ import {
   Eye,
   ArrowRight,
   Loader2,
+  Moon,
+  Sun,
 } from 'lucide-react'
-import { UserWithProfile, updatePlanStatus, getUsers } from '@/lib/actions/users'
+import { UserWithProfile, updatePlanStatus, getUsers, adminToggleFastingMode } from '@/lib/actions/users'
 import { PlanAssignmentDialog } from './plan-assignment-dialog'
 import type { PlanStatus } from '@/lib/types/nutri'
 import { cn } from '@/lib/utils'
@@ -133,6 +135,18 @@ export function UsersTable({ initialUsers, initialCount }: UsersTableProps) {
       setUsers(prev => prev.map(u => 
         u.id === userId 
           ? { ...u, profile: u.profile ? { ...u.profile, plan_status: newStatus } : null }
+          : u
+      ))
+    }
+  }
+
+  async function handleFastingToggle(userId: string, currentFasting: boolean) {
+    const newFasting = !currentFasting
+    const result = await adminToggleFastingMode(userId, newFasting)
+    if (result.success) {
+      setUsers(prev => prev.map(u =>
+        u.id === userId
+          ? { ...u, profile: u.profile ? { ...u.profile, preferences: { ...u.profile.preferences, is_fasting: newFasting } } : null }
           : u
       ))
     }
@@ -358,6 +372,22 @@ export function UsersTable({ initialUsers, initialCount }: UsersTableProps) {
                               Pause Plan
                             </DropdownMenuItem>
                           )}
+                          <DropdownMenuSeparator />
+                          <DropdownMenuItem
+                            onClick={() => handleFastingToggle(user.id, user.profile?.preferences?.is_fasting ?? false)}
+                          >
+                            {user.profile?.preferences?.is_fasting ? (
+                              <>
+                                <Sun className="h-4 w-4 mr-2 text-amber-500" />
+                                Disable Fasting Mode
+                              </>
+                            ) : (
+                              <>
+                                <Moon className="h-4 w-4 mr-2 text-indigo-500" />
+                                Enable Fasting Mode
+                              </>
+                            )}
+                          </DropdownMenuItem>
                         </DropdownMenuContent>
                       </DropdownMenu>
                     </TableCell>

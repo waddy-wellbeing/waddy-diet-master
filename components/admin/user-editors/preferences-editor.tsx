@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { Save, Loader2, Plus, X } from 'lucide-react'
+import { Save, Loader2, Plus, X, Moon, Sun } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
@@ -14,7 +14,9 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import { updateUserPreferences, type UserWithProfile } from '@/lib/actions/users'
+import { Switch } from '@/components/ui/switch'
+import { Separator } from '@/components/ui/separator'
+import { updateUserPreferences, adminToggleFastingMode, type UserWithProfile } from '@/lib/actions/users'
 
 interface PreferencesEditorProps {
   user: UserWithProfile
@@ -46,6 +48,8 @@ const COMMON_CUISINES = [
 
 export function PreferencesEditor({ user, onUpdate }: PreferencesEditorProps) {
   const [saving, setSaving] = useState(false)
+  const [isFasting, setIsFasting] = useState<boolean>(user.profile?.preferences?.is_fasting ?? false)
+  const [togglingFasting, setTogglingFasting] = useState(false)
   const [dietType, setDietType] = useState(user.profile?.preferences?.diet_type || '')
   const [cookingSkill, setCookingSkill] = useState(user.profile?.preferences?.cooking_skill || '')
   const [maxPrepTime, setMaxPrepTime] = useState(user.profile?.preferences?.max_prep_time_minutes?.toString() || '')
@@ -89,6 +93,22 @@ export function PreferencesEditor({ user, onUpdate }: PreferencesEditorProps) {
     }
   }
 
+  const handleFastingToggle = async (checked: boolean) => {
+    setTogglingFasting(true)
+    const result = await adminToggleFastingMode(user.id, checked)
+    if (result.success) {
+      setIsFasting(checked)
+      onUpdate({
+        ...user,
+        profile: user.profile ? {
+          ...user.profile,
+          preferences: { ...user.profile.preferences, is_fasting: checked },
+        } : null,
+      })
+    }
+    setTogglingFasting(false)
+  }
+
   const handleSave = async () => {
     setSaving(true)
     
@@ -125,7 +145,36 @@ export function PreferencesEditor({ user, onUpdate }: PreferencesEditorProps) {
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-6">
-        {/* Diet Type and Cooking Skill */}
+        {/* Fasting Mode Toggle */}
+        <div className="flex items-center justify-between rounded-lg border p-4 bg-muted/30">
+          <div className="flex items-center gap-3">
+            {isFasting ? (
+              <Moon className="h-5 w-5 text-indigo-500" />
+            ) : (
+              <Sun className="h-5 w-5 text-amber-500" />
+            )}
+            <div>
+              <p className="font-medium text-sm">Fasting Mode</p>
+              <p className="text-xs text-muted-foreground">
+                {isFasting
+                  ? 'Active — meal recommendations use fasting-friendly menus'
+                  : 'Inactive — user sees regular meal plans'}
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            {togglingFasting && <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />}
+            <Switch
+              checked={isFasting}
+              onCheckedChange={handleFastingToggle}
+              disabled={togglingFasting}
+              aria-label="Toggle fasting mode"
+            />
+          </div>
+        </div>
+
+        <Separator />
+
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <div className="space-y-2">
             <Label htmlFor="dietType">Diet Type</Label>

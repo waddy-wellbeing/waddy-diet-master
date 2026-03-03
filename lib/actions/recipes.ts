@@ -47,7 +47,6 @@ export interface RecipeListItem {
   is_dairy_free: boolean
   is_public: boolean
   admin_notes: string | null
-  recommendation_group: string[] | null
   ingredient_count: number
   unmatched_count: number
   created_at: string
@@ -126,7 +125,6 @@ export async function getRecipes({
       is_dairy_free,
       is_public,
       admin_notes,
-      recommendation_group,
       created_at,
       recipe_ingredients(id, is_matched)
     `, { count: 'exact' })
@@ -170,7 +168,6 @@ export async function getRecipes({
     
     return {
       ...recipeData,
-      recommendation_group: recipe.recommendation_group || null,
       ingredient_count: ingredientCount,
       unmatched_count: unmatchedCount,
     }
@@ -757,7 +754,7 @@ export async function getUserIngredientSwaps(options: {
     .select('id, name, name_ar, food_group, subgroup, serving_size, serving_unit, macros')
     .eq('food_group', original.food_group)
     .neq('id', ingredientId)
-    .limit(20)
+    .limit(100)
 
   if (error) {
     return { data: null, error: error.message }
@@ -801,114 +798,4 @@ export async function getUserIngredientSwaps(options: {
   })
 
   return { data: swapOptions, error: null }
-}
-
-// =============================================================================
-// Bulk Update Recommendation Group
-// =============================================================================
-
-/**
- * Add a recommendation group to multiple recipes at once.
- * E.g., mark selected recipes as 'ramadan' recommendations.
- */
-export async function addRecommendationGroup(
-  recipeIds: string[],
-  group: string
-): Promise<ActionResult<{ updated: number }>> {
-  try {
-    await requireAdmin()
-    const supabase = await createClient()
-
-    if (!recipeIds.length) {
-      return { success: false, error: 'No recipes selected' }
-    }
-
-    // Fetch current recommendation_group for each recipe
-    const { data: recipes, error: fetchError } = await supabase
-      .from('recipes')
-      .select('id, recommendation_group')
-      .in('id', recipeIds)
-
-    if (fetchError) {
-      return { success: false, error: fetchError.message }
-    }
-
-    // Update each recipe, merging the new group into existing groups
-    let updated = 0
-    for (const recipe of (recipes || [])) {
-      const existingGroups: string[] = recipe.recommendation_group || []
-      if (existingGroups.includes(group)) continue // Already has this group
-
-      const newGroups = [...existingGroups, group]
-      const { error: updateError } = await supabase
-        .from('recipes')
-        .update({ recommendation_group: newGroups })
-        .eq('id', recipe.id)
-
-      if (!updateError) updated++
-    }
-
-    revalidatePath('/admin/recipes')
-    revalidatePath('/admin')
-    revalidatePath('/dashboard')
-    
-    return { success: true, data: { updated } }
-  } catch (error) {
-    if (error instanceof Error) {
-      return { success: false, error: error.message }
-    }
-    return { success: false, error: 'Failed to update recommendation group' }
-  }
-}
-
-/**
- * Remove a recommendation group from multiple recipes at once.
- */
-export async function removeRecommendationGroup(
-  recipeIds: string[],
-  group: string
-): Promise<ActionResult<{ updated: number }>> {
-  try {
-    await requireAdmin()
-    const supabase = await createClient()
-
-    if (!recipeIds.length) {
-      return { success: false, error: 'No recipes selected' }
-    }
-
-    // Fetch current recommendation_group for each recipe
-    const { data: recipes, error: fetchError } = await supabase
-      .from('recipes')
-      .select('id, recommendation_group')
-      .in('id', recipeIds)
-
-    if (fetchError) {
-      return { success: false, error: fetchError.message }
-    }
-
-    let updated = 0
-    for (const recipe of (recipes || [])) {
-      const existingGroups: string[] = recipe.recommendation_group || []
-      if (!existingGroups.includes(group)) continue // Doesn't have this group
-
-      const newGroups = existingGroups.filter(g => g !== group)
-      const { error: updateError } = await supabase
-        .from('recipes')
-        .update({ recommendation_group: newGroups.length > 0 ? newGroups : null })
-        .eq('id', recipe.id)
-
-      if (!updateError) updated++
-    }
-
-    revalidatePath('/admin/recipes')
-    revalidatePath('/admin')
-    revalidatePath('/dashboard')
-    
-    return { success: true, data: { updated } }
-  } catch (error) {
-    if (error instanceof Error) {
-      return { success: false, error: error.message }
-    }
-    return { success: false, error: 'Failed to remove recommendation group' }
-  }
 }
