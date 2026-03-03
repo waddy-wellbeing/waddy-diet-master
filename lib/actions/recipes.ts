@@ -47,6 +47,7 @@ export interface RecipeListItem {
   is_dairy_free: boolean
   is_public: boolean
   admin_notes: string | null
+  recommendation_group: string[] | null
   ingredient_count: number
   unmatched_count: number
   created_at: string
@@ -125,6 +126,7 @@ export async function getRecipes({
       is_dairy_free,
       is_public,
       admin_notes,
+      recommendation_group,
       created_at,
       recipe_ingredients(id, is_matched)
     `, { count: 'exact' })
@@ -798,4 +800,95 @@ export async function getUserIngredientSwaps(options: {
   })
 
   return { data: swapOptions, error: null }
+}
+
+// =============================================================================
+// Bulk Update Recommendation Group
+// =============================================================================
+
+/**
+ * Add a recommendation group tag to multiple recipes.
+ * E.g., mark selected recipes as 'ramadan' recommendations.
+ */
+export async function addRecommendationGroup(
+  recipeIds: string[],
+  group: string
+): Promise<ActionResult<{ updated: number }>> {
+  try {
+    await requireAdmin()
+    const supabase = await createClient()
+
+    if (!recipeIds.length) {
+      return { success: false, error: 'No recipes selected' }
+    }
+
+    // Fetch current recommendation_group for each recipe
+    const { data: recipes, error: fetchError } = await supabase
+      .from('recipes')
+      .select('id, recommendation_group')
+      .in('id', recipeIds)
+
+    if (fetchError) {
+      return { success: false, error: fetchError.message }
+    }
+
+    let updated = 0
+    for (const recipe of recipes ?? []) {
+      const current: string[] = recipe.recommendation_group ?? []
+      if (current.includes(group)) continue // already tagged
+      const { error: updateError } = await supabase
+        .from('recipes')
+        .update({ recommendation_group: [...current, group] })
+        .eq('id', recipe.id)
+      if (!updateError) updated++
+    }
+
+    revalidatePath('/admin/recipes')
+    return { success: true, data: { updated } }
+  } catch (err) {
+    return { success: false, error: err instanceof Error ? err.message : 'An error occurred' }
+  }
+}
+
+/**
+ * Remove a recommendation group tag from multiple recipes.
+ */
+export async function removeRecommendationGroup(
+  recipeIds: string[],
+  group: string
+): Promise<ActionResult<{ updated: number }>> {
+  try {
+    await requireAdmin()
+    const supabase = await createClient()
+
+    if (!recipeIds.length) {
+      return { success: false, error: 'No recipes selected' }
+    }
+
+    // Fetch current recommendation_group for each recipe
+    const { data: recipes, error: fetchError } = await supabase
+      .from('recipes')
+      .select('id, recommendation_group')
+      .in('id', recipeIds)
+
+    if (fetchError) {
+      return { success: false, error: fetchError.message }
+    }
+
+    let updated = 0
+    for (const recipe of recipes ?? []) {
+      const current: string[] = recipe.recommendation_group ?? []
+      if (!current.includes(group)) continue // not tagged, nothing to remove
+      const { error: updateError } = await supabase
+        .from('recipes')
+        .update({ recommendation_group: current.filter(g => g !== group) })
+        .eq('id', recipe.id)
+      if (!updateError) updated++
+    }
+
+    revalidatePath('/admin/recipes')
+    return { success: true, data: { updated } }
+  } catch (err) {
+    return { success: false, error: err instanceof Error ? err.message : 'An error occurred' }
+  }
 }

@@ -122,6 +122,7 @@ CREATE TABLE recipes (
   is_gluten_free BOOLEAN DEFAULT FALSE,
   is_dairy_free BOOLEAN DEFAULT FALSE,
   admin_notes TEXT,
+  recommendation_group TEXT[] NOT NULL DEFAULT '{}',
   created_by UUID REFERENCES auth.users(id) ON DELETE SET NULL,
   is_public BOOLEAN NOT NULL DEFAULT FALSE,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
@@ -131,6 +132,7 @@ CREATE TABLE recipes (
 
 CREATE INDEX recipes_meal_type_idx ON recipes USING GIN(meal_type);
 CREATE INDEX recipes_tags_idx ON recipes USING GIN(tags);
+CREATE INDEX recipes_recommendation_group_idx ON recipes USING GIN(recommendation_group);
 CREATE INDEX recipes_created_by_idx ON recipes(created_by);
 CREATE INDEX recipes_cuisine_idx ON recipes(cuisine);
 
