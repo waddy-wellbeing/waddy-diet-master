@@ -750,24 +750,25 @@ export async function getUserIngredientSwaps(options: {
     return { data: [], error: null }
   }
 
-  // Get alternatives in same food group
+  // Fetch all non-self ingredients – we sort them into tiers client-side so no DB limit needed
   const { data: alternatives, error } = await supabase
     .from('ingredients')
     .select('id, name, name_ar, food_group, subgroup, serving_size, serving_unit, macros')
-    .eq('food_group', original.food_group)
     .neq('id', ingredientId)
-    .limit(100)
 
   if (error) {
     return { data: null, error: error.message }
   }
 
-  // Calculate calorie equivalence
+  // Calculate calorie and protein equivalence for the original at the requested amount
   const originalCaloriesPerUnit = (original.macros?.calories || 0) / original.serving_size
+  const originalProteinPerUnit  = (original.macros?.protein_g || 0) / original.serving_size
   const targetCalories = originalCaloriesPerUnit * targetAmount
+  const targetProtein  = originalProteinPerUnit  * targetAmount
 
   const swapOptions: IngredientSwapOption[] = (alternatives || []).map(alt => {
     const altCaloriesPerUnit = (alt.macros?.calories || 0) / alt.serving_size
+    const altProteinPerUnit  = (alt.macros?.protein_g || 0) / alt.serving_size
     
     let suggested_amount = 0
     let calorie_diff_percent = 0
@@ -777,6 +778,9 @@ export async function getUserIngredientSwaps(options: {
       const suggestedCalories = suggested_amount * altCaloriesPerUnit
       calorie_diff_percent = Math.round(((suggestedCalories - targetCalories) / targetCalories) * 100)
     }
+
+    // Protein at the suggested equivalent amount
+    const swapProtein = altProteinPerUnit * suggested_amount
 
     return {
       id: alt.id,
@@ -789,15 +793,46 @@ export async function getUserIngredientSwaps(options: {
       macros: alt.macros || {},
       suggested_amount,
       calorie_diff_percent,
-    }
+      // Internal: used for sorting only (not exposed in UI)
+      _proteinDiff: targetProtein > 0 ? Math.abs(swapProtein - targetProtein) / targetProtein : 1,
+    } as IngredientSwapOption & { _proteinDiff: number }
   })
 
-  // Sort by same subgroup first, then by name
+  // Sort priority:
+  //   1 – Most protein-similar to the original (smallest relative protein diff)
+  //   2 – Within same protein tier, same food_group + same subgroup first
+  //   3 – Then same food_group only
+  //   4 – Then everything else
+  //   5 – Alphabetical as tiebreaker
+  //
+  // "Protein similar" = within 15% of the original's protein content at equivalent amount.
+  const PROTEIN_SIMILAR_THRESHOLD = 0.15
   swapOptions.sort((a, b) => {
-    if (a.subgroup === original.subgroup && b.subgroup !== original.subgroup) return -1
-    if (b.subgroup === original.subgroup && a.subgroup !== original.subgroup) return 1
+    const _a = a as IngredientSwapOption & { _proteinDiff: number }
+    const _b = b as IngredientSwapOption & { _proteinDiff: number }
+
+    const aProteinSimilar = _a._proteinDiff <= PROTEIN_SIMILAR_THRESHOLD ? 0 : 1
+    const bProteinSimilar = _b._proteinDiff <= PROTEIN_SIMILAR_THRESHOLD ? 0 : 1
+    if (aProteinSimilar !== bProteinSimilar) return aProteinSimilar - bProteinSimilar
+
+    const tierA =
+      a.food_group === original.food_group && a.subgroup === original.subgroup ? 0
+      : a.food_group === original.food_group ? 1
+      : 2
+    const tierB =
+      b.food_group === original.food_group && b.subgroup === original.subgroup ? 0
+      : b.food_group === original.food_group ? 1
+      : 2
+    if (tierA !== tierB) return tierA - tierB
+
+    // Within same protein+tier bucket: closest protein match first
+    if (_a._proteinDiff !== _b._proteinDiff) return _a._proteinDiff - _b._proteinDiff
+
     return a.name.localeCompare(b.name)
   })
+
+  // Strip the internal sorting field before returning
+  swapOptions.forEach(s => { delete (s as Record<string, unknown>)._proteinDiff })
 
   return { data: swapOptions, error: null }
 }

@@ -1472,6 +1472,15 @@ export function MealBuilderContent({
                                 (optional)
                               </span>
                             )}
+                            {showDebugInfo && (
+                              <div className="text-[10px] font-mono text-orange-500 mt-0.5">
+                                🔬{" "}
+                                {ingredient.ingredient?.food_group || "no group"}
+                                {ingredient.ingredient?.subgroup
+                                  ? ` › ${ingredient.ingredient.subgroup}`
+                                  : ""}
+                              </div>
+                            )}
                           </span>
                         )}
                       </div>
@@ -1649,6 +1658,28 @@ export function MealBuilderContent({
                                                   </>
                                                 )}
                                               </div>
+                                              {showDebugInfo && (() => {
+                                                const origGroup = ingredient.ingredient?.food_group
+                                                const origSub   = ingredient.ingredient?.subgroup
+                                                const tier =
+                                                  s.food_group === origGroup && s.subgroup === origSub ? 1
+                                                  : s.food_group === origGroup ? 2
+                                                  : 3
+                                                const tierColor =
+                                                  tier === 1 ? "bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300"
+                                                  : tier === 2 ? "bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300"
+                                                  : "bg-red-100 text-red-600 dark:bg-red-900/40 dark:text-red-300"
+                                                return (
+                                                  <div className="mt-1 flex items-center gap-1.5 flex-wrap">
+                                                    <span className="text-[10px] font-mono text-orange-500">
+                                                      🔬 {s.food_group || "no group"}{s.subgroup ? ` › ${s.subgroup}` : ""}
+                                                    </span>
+                                                    <span className={cn("text-[10px] font-bold px-1.5 py-0.5 rounded", tierColor)}>
+                                                      T{tier}{tier === 1 ? " ✓ same group+sub" : tier === 2 ? " same group" : " diff group"}
+                                                    </span>
+                                                  </div>
+                                                )
+                                              })()}
                                             </div>
                                             <div className="flex-shrink-0 text-muted-foreground/40">
                                               <ChevronRight className="w-4 h-4" />
