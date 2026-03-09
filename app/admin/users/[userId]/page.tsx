@@ -15,6 +15,7 @@ import {
   Activity,
   Scale,
   Utensils,
+  BookOpen,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -32,7 +33,8 @@ import {
   PreferencesEditor,
   GoalsEditor,
   PlanStatusEditor,
-  MealStructureEditor 
+  MealStructureEditor,
+  UserMealPlansEditor 
 } from '@/components/admin/user-editors'
 import type { PlanStatus } from '@/lib/types/nutri'
 
@@ -154,7 +156,7 @@ export default function UserDetailPage() {
 
       {/* Tabs for different sections */}
       <Tabs defaultValue="basic" className="space-y-4">
-        <TabsList className="grid grid-cols-3 md:grid-cols-6 w-full">
+        <TabsList className="grid grid-cols-4 md:grid-cols-7 w-full">
           <TabsTrigger value="basic" className="gap-1">
             <User className="h-4 w-4 hidden sm:inline" />
             Basic
@@ -174,6 +176,10 @@ export default function UserDetailPage() {
           <TabsTrigger value="meals" className="gap-1">
             <Utensils className="h-4 w-4 hidden sm:inline" />
             Meals
+          </TabsTrigger>
+          <TabsTrigger value="plans" className="gap-1">
+            <BookOpen className="h-4 w-4 hidden sm:inline" />
+            Plans
           </TabsTrigger>
           <TabsTrigger value="status" className="gap-1">
             <Calendar className="h-4 w-4 hidden sm:inline" />
@@ -199,6 +205,10 @@ export default function UserDetailPage() {
 
         <TabsContent value="meals">
           <MealStructureEditor user={user} onUpdate={handleUserUpdate} />
+        </TabsContent>
+
+        <TabsContent value="plans">
+          <UserMealPlansEditor user={user} onUpdate={handleUserUpdate} />
         </TabsContent>
 
         <TabsContent value="status">

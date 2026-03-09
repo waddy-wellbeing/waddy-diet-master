@@ -1,6 +1,7 @@
 'use server'
 
 import { createAdminClient } from '@/lib/supabase/admin'
+import { getSuggestedRecipeIndex } from '@/lib/utils/meal-suggestions'
 
 export interface AdminUserProfile {
   user_id: string
@@ -617,6 +618,376 @@ export async function createDayPlan({
   } catch (error) {
     console.error('Error in createDayPlan:', error)
     return { success: false, error: 'Failed to create day plan' }
+  }
+}
+
+/**
+ * Assign suggested meals for a user for upcoming days.
+ * Uses the same deterministic suggestion index logic as dashboard unplanned suggestions,
+ * then persists them as daily plans so admin and user see aligned plans.
+ */
+export async function assignSuggestedPlansForUser({
+  userId,
+  days = 7,
+  overwriteExisting = false,
+}: {
+  userId: string
+  days?: number
+  overwriteExisting?: boolean
+}): Promise<{
+  success: boolean
+  data?: {
+    requestedDays: number
+    assignedDays: number
+    skippedDays: number
+    isFastingMode: boolean
+  }
+  error?: string
+}> {
+  try {
+    const supabase = createAdminClient()
+    const requestedDays = Math.min(Math.max(days, 3), 14)
+
+    const today = new Date()
+    const endDate = new Date(today)
+    endDate.setDate(endDate.getDate() + requestedDays - 1)
+
+    const toLocalDateString = (date: Date): string => {
+      const year = date.getFullYear()
+      const month = String(date.getMonth() + 1).padStart(2, '0')
+      const day = String(date.getDate()).padStart(2, '0')
+      return `${year}-${month}-${day}`
+    }
+
+    const startDateStr = toLocalDateString(today)
+    const endDateStr = toLocalDateString(endDate)
+
+    const { data: profile, error: profileError } = await supabase
+      .from('profiles')
+      .select('preferences, targets')
+      .eq('user_id', userId)
+      .single()
+
+    if (profileError || !profile) {
+      return { success: false, error: profileError?.message || 'User profile not found' }
+    }
+
+    const preferences = (profile as any).preferences || {}
+    const targets = (profile as any).targets || {}
+
+    const isFastingMode = !!preferences.is_fasting
+    const dailyCalories = targets.daily_calories || 2000
+    const dailyProtein = targets.protein_g || 150
+    const dailyCarbs = targets.carbs_g || 250
+    const dailyFat = targets.fat_g || 65
+
+    const userMealStructure = preferences.meal_structure || []
+    const fastingSelectedMeals: string[] = preferences.fasting_selected_meals || []
+
+    const mealTargets: Record<string, number> = {}
+
+    if (isFastingMode) {
+      const fastingDistribution: Record<string, number> = {
+        'pre-iftar': 0.1,
+        iftar: 0.4,
+        'full-meal-taraweeh': 0.3,
+        'snack-taraweeh': 0.1,
+        suhoor: 0.25,
+      }
+
+      const mealsToUse = fastingSelectedMeals.length > 0
+        ? fastingSelectedMeals
+        : Object.keys(fastingDistribution)
+
+      const totalPercentage = mealsToUse.reduce(
+        (sum: number, meal: string) => sum + (fastingDistribution[meal] || 0),
+        0,
+      )
+
+      for (const meal of mealsToUse) {
+        const normalizedPercentage =
+          (fastingDistribution[meal] || 0.2) / (totalPercentage || 1)
+        mealTargets[meal] = Math.round(dailyCalories * normalizedPercentage)
+      }
+    } else if (Array.isArray(userMealStructure) && userMealStructure.length > 0) {
+      for (const slot of userMealStructure) {
+        if (!slot?.name) continue
+        mealTargets[slot.name] = Math.round(dailyCalories * ((slot.percentage || 0) / 100))
+      }
+    } else {
+      mealTargets.breakfast = Math.round(dailyCalories * 0.25)
+      mealTargets.lunch = Math.round(dailyCalories * 0.35)
+      mealTargets.dinner = Math.round(dailyCalories * 0.3)
+      mealTargets.snacks = Math.round(dailyCalories * 0.1)
+    }
+
+    const targetMacroPercentages = {
+      protein_pct: Math.round(((dailyProtein * 4) / dailyCalories) * 100),
+      carbs_pct: Math.round(((dailyCarbs * 4) / dailyCalories) * 100),
+      fat_pct: Math.round(((dailyFat * 9) / dailyCalories) * 100),
+    }
+
+    const mealTypeMapping: Record<string, string[]> = {
+      breakfast: ['breakfast', 'smoothies'],
+      mid_morning: ['snack', 'snacks & sweetes', 'smoothies'],
+      lunch: ['lunch', 'one pot', 'dinner', 'side dishes'],
+      afternoon: ['snack', 'snacks & sweetes', 'smoothies'],
+      dinner: ['dinner', 'lunch', 'one pot', 'side dishes', 'breakfast'],
+      snack: ['snack', 'snacks & sweetes', 'smoothies'],
+      snacks: ['snack', 'snacks & sweetes', 'smoothies'],
+      snack_1: ['snack', 'snacks & sweetes', 'smoothies'],
+      snack_2: ['snack', 'snacks & sweetes', 'smoothies'],
+      snack_3: ['snack', 'snacks & sweetes', 'smoothies'],
+      evening: ['snack', 'snacks & sweetes', 'smoothies'],
+      'pre-iftar': ['pre-iftar', 'smoothies'],
+      iftar: ['lunch'],
+      'full-meal-taraweeh': ['lunch', 'dinner'],
+      'snack-taraweeh': ['snack'],
+      suhoor: ['breakfast', 'dinner'],
+    }
+
+    const FASTING_MEAL_ORDER = [
+      'pre-iftar',
+      'iftar',
+      'full-meal-taraweeh',
+      'snack-taraweeh',
+      'suhoor',
+    ]
+
+    const mealSlots = (() => {
+      if (isFastingMode) {
+        if (fastingSelectedMeals.length > 0) {
+          return FASTING_MEAL_ORDER.filter((meal) => fastingSelectedMeals.includes(meal))
+        }
+        return FASTING_MEAL_ORDER
+      }
+
+      if (Array.isArray(userMealStructure) && userMealStructure.length > 0) {
+        return userMealStructure.map((slot: any) => slot.name).filter(Boolean)
+      }
+
+      return ['breakfast', 'lunch', 'dinner', 'snacks']
+    })()
+
+    const { data: allRecipes, error: recipesError } = await supabase
+      .from('recipes')
+      .select('id, meal_type, recommendation_group, nutrition_per_serving')
+      .eq('is_public', true)
+      .not('nutrition_per_serving', 'is', null)
+
+    if (recipesError) {
+      return { success: false, error: recipesError.message }
+    }
+
+    if (!allRecipes || allRecipes.length === 0) {
+      return { success: false, error: 'No public recipes available for suggestions' }
+    }
+
+    const minScale = 0.5
+    const maxScale = 2.0
+    const recipesByMealType: Record<string, Array<{ id: string; scale_factor: number; score: number; meal_type?: string[]; recommendation_group?: string[] }>> = {}
+
+    for (const mealSlot of mealSlots) {
+      const targetCalories = mealTargets[mealSlot]
+      const acceptedMealTypes = mealTypeMapping[mealSlot] || []
+      const primaryMealType = acceptedMealTypes[0]
+
+      if (!targetCalories || acceptedMealTypes.length === 0) {
+        recipesByMealType[mealSlot] = []
+        continue
+      }
+
+      const suitableRecipes: Array<{
+        id: string
+        scale_factor: number
+        score: number
+        meal_type?: string[]
+        recommendation_group?: string[]
+      }> = []
+
+      for (const recipe of allRecipes as any[]) {
+        const recipeMealTypes = recipe.meal_type || []
+        const matchesMealType = acceptedMealTypes.some((t) =>
+          recipeMealTypes.some((rmt: string) => (rmt || '').toLowerCase() === t.toLowerCase()),
+        )
+        if (!matchesMealType) continue
+
+        const nutritionData = typeof recipe.nutrition_per_serving === 'string'
+          ? JSON.parse(recipe.nutrition_per_serving)
+          : recipe.nutrition_per_serving
+
+        const baseCalories = nutritionData?.calories
+        if (!baseCalories || baseCalories <= 0) continue
+
+        const scaleFactor = targetCalories / baseCalories
+        const isWithinCalorieRange = scaleFactor >= minScale && scaleFactor <= maxScale
+
+        const recipeProtein = nutritionData?.protein_g || 0
+        const recipeCarbs = nutritionData?.carbs_g || 0
+        const recipeFat = nutritionData?.fat_g || 0
+        const recipeMacroPercentages = {
+          protein_pct: Math.round(((recipeProtein * 4) / baseCalories) * 100),
+          carbs_pct: Math.round(((recipeCarbs * 4) / baseCalories) * 100),
+          fat_pct: Math.round(((recipeFat * 9) / baseCalories) * 100),
+        }
+
+        const proteinDiff = Math.abs(targetMacroPercentages.protein_pct - recipeMacroPercentages.protein_pct)
+        const carbsDiff = Math.abs(targetMacroPercentages.carbs_pct - recipeMacroPercentages.carbs_pct)
+        const fatDiff = Math.abs(targetMacroPercentages.fat_pct - recipeMacroPercentages.fat_pct)
+
+        const proteinScore = Math.max(0, 100 - proteinDiff * 1.5)
+        const carbsScore = Math.max(0, 100 - carbsDiff * 1.5)
+        const fatScore = Math.max(0, 100 - fatDiff * 1.5)
+
+        const macroSimilarityScore = Math.round(
+          proteinScore * 0.5 + carbsScore * 0.3 + fatScore * 0.2,
+        )
+
+        suitableRecipes.push({
+          id: recipe.id,
+          scale_factor: Math.round(scaleFactor * 100) / 100,
+          score: isWithinCalorieRange ? macroSimilarityScore : -1,
+          meal_type: recipeMealTypes,
+          recommendation_group: recipe.recommendation_group || [],
+        })
+      }
+
+      suitableRecipes.sort((a, b) => {
+        if (isFastingMode) {
+          const aRamadan = (a.recommendation_group || []).includes('ramadan') ? 1 : 0
+          const bRamadan = (b.recommendation_group || []).includes('ramadan') ? 1 : 0
+          if (bRamadan !== aRamadan) return bRamadan - aRamadan
+        }
+
+        const macroScoreDiff = b.score - a.score
+        if (Math.abs(macroScoreDiff) > 5) return macroScoreDiff
+
+        const aPrimary = (a.meal_type || []).some((t) => (t || '').toLowerCase() === primaryMealType)
+          ? 1
+          : 0
+        const bPrimary = (b.meal_type || []).some((t) => (t || '').toLowerCase() === primaryMealType)
+          ? 1
+          : 0
+        if (bPrimary !== aPrimary) return bPrimary - aPrimary
+
+        const aDistFromOne = Math.abs(a.scale_factor - 1)
+        const bDistFromOne = Math.abs(b.scale_factor - 1)
+        return aDistFromOne - bDistFromOne
+      })
+
+      recipesByMealType[mealSlot] = suitableRecipes
+    }
+
+    const { data: existingPlans, error: existingPlansError } = await supabase
+      .from('daily_plans')
+      .select('plan_date, plan, fasting_plan')
+      .eq('user_id', userId)
+      .gte('plan_date', startDateStr)
+      .lte('plan_date', endDateStr)
+
+    if (existingPlansError) {
+      return { success: false, error: existingPlansError.message }
+    }
+
+    const existingByDate = new Map<string, { plan: any; fasting_plan: any }>()
+    for (const planRow of existingPlans || []) {
+      existingByDate.set(planRow.plan_date, {
+        plan: (planRow as any).plan || {},
+        fasting_plan: (planRow as any).fasting_plan || {},
+      })
+    }
+
+    const rowsToUpsert: any[] = []
+    let skippedDays = 0
+
+    for (let offset = 0; offset < requestedDays; offset++) {
+      const date = new Date(today)
+      date.setDate(today.getDate() + offset)
+      const dateStr = toLocalDateString(date)
+
+      const existing = existingByDate.get(dateStr)
+      const hasExistingInCurrentMode = isFastingMode
+        ? !!existing?.fasting_plan && Object.keys(existing.fasting_plan || {}).length > 0
+        : !!existing?.plan && Object.keys(existing.plan || {}).length > 0
+
+      if (!overwriteExisting && hasExistingInCurrentMode) {
+        skippedDays++
+        continue
+      }
+
+      const upsertRow: any = {
+        user_id: userId,
+        plan_date: dateStr,
+        updated_at: new Date().toISOString(),
+      }
+
+      if (isFastingMode) {
+        const fastingPlan: Record<string, any> = {}
+
+        for (const mealSlot of mealSlots) {
+          const suggestions = recipesByMealType[mealSlot] || []
+          if (suggestions.length === 0) continue
+          const idx = getSuggestedRecipeIndex(dateStr, mealSlot, suggestions.length)
+          const selectedRecipe = suggestions[idx] || suggestions[0]
+          if (!selectedRecipe) continue
+
+          if (mealSlot === 'snack-taraweeh') {
+            fastingPlan[mealSlot] = [{ recipe_id: selectedRecipe.id, servings: selectedRecipe.scale_factor }]
+          } else {
+            fastingPlan[mealSlot] = { recipe_id: selectedRecipe.id, servings: selectedRecipe.scale_factor }
+          }
+        }
+
+        upsertRow.fasting_plan = fastingPlan
+        upsertRow.plan = existing?.plan || {}
+      } else {
+        const regularPlan: Record<string, any> = {}
+
+        for (const mealSlot of mealSlots) {
+          const suggestions = recipesByMealType[mealSlot] || []
+          if (suggestions.length === 0) continue
+          const idx = getSuggestedRecipeIndex(dateStr, mealSlot, suggestions.length)
+          const selectedRecipe = suggestions[idx] || suggestions[0]
+          if (!selectedRecipe) continue
+
+          if (mealSlot === 'snacks' || mealSlot.includes('snack')) {
+            regularPlan[mealSlot] = [{ recipe_id: selectedRecipe.id, servings: selectedRecipe.scale_factor }]
+          } else {
+            regularPlan[mealSlot] = { recipe_id: selectedRecipe.id, servings: selectedRecipe.scale_factor }
+          }
+        }
+
+        upsertRow.plan = regularPlan
+        if (existing?.fasting_plan && Object.keys(existing.fasting_plan).length > 0) {
+          upsertRow.fasting_plan = existing.fasting_plan
+        }
+      }
+
+      rowsToUpsert.push(upsertRow)
+    }
+
+    if (rowsToUpsert.length > 0) {
+      const { error: upsertError } = await supabase
+        .from('daily_plans')
+        .upsert(rowsToUpsert, { onConflict: 'user_id,plan_date' })
+
+      if (upsertError) {
+        return { success: false, error: upsertError.message }
+      }
+    }
+
+    return {
+      success: true,
+      data: {
+        requestedDays,
+        assignedDays: rowsToUpsert.length,
+        skippedDays,
+        isFastingMode,
+      },
+    }
+  } catch (error) {
+    console.error('Error in assignSuggestedPlansForUser:', error)
+    return { success: false, error: 'Failed to assign suggested plans' }
   }
 }
 
