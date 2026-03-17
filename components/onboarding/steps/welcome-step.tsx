@@ -117,11 +117,7 @@ export function WelcomeStep({ onContinue }: WelcomeStepProps) {
               className="w-full"
               asChild
             >
-              <Link 
-                href="/login"
-                prefetch={false}
-                scroll={true}
-              >
+              <Link href="/login">
                 <LogIn className="mr-2 h-4 w-4" />
                 Sign in to existing account
               </Link>

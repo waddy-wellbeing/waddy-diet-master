@@ -122,11 +122,7 @@ export function GetStartedContent() {
               size="lg"
               className="w-full h-12"
             >
-              <Link 
-                href="/login"
-                prefetch={false}
-                scroll={true}
-              >
+              <Link href="/login">
                 <LogIn className="mr-2 h-4 w-4" />
                 Sign In to Existing Account
               </Link>
