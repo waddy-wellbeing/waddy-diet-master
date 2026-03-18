@@ -29,6 +29,7 @@ export interface ScaledRecipeWithIngredients extends RecipeRecord {
       name: string;
       name_ar: string | null;
       food_group: string | null;
+      subgroup: string | null;
     } | null;
   }[];
   parsed_instructions: { step: number; instruction: string }[];
@@ -71,7 +72,7 @@ export default async function MealBuilderPage({ searchParams }: PageProps) {
         recipe_ingredients (
           id, ingredient_id, raw_name, quantity, unit, is_spice, is_optional,
           ingredient:ingredients!recipe_ingredients_ingredient_id_fkey (
-            id, name, name_ar, food_group
+            id, name, name_ar, food_group, subgroup
           )
         )
       `,
@@ -95,7 +96,7 @@ export default async function MealBuilderPage({ searchParams }: PageProps) {
             recipe_ingredients (
               id, ingredient_id, raw_name, quantity, unit, is_spice, is_optional,
               ingredient:ingredients!recipe_ingredients_ingredient_id_fkey (
-                id, name, name_ar, food_group
+                id, name, name_ar, food_group, subgroup
               )
             )
           `,
