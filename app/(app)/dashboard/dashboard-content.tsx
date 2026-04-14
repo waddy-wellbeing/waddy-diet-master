@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
@@ -97,6 +97,7 @@ export function DashboardContent({
   const [loadingMeal, setLoadingMeal] = useState<string | null>(null); // Track which meal is being logged
   const [showDebug, setShowDebug] = useState(false);
   const [loadingDayData, setLoadingDayData] = useState(false); // Track day data loading
+  const latestDayDataRequestRef = useRef(0);
 
   // Meal planning sheet state
   const [planSheetOpen, setPlanSheetOpen] = useState(false);
@@ -137,6 +138,116 @@ export function DashboardContent({
     return initial;
   });
 
+  const getPlanSlot = useCallback(
+    (mealType: MealName, planOverride?: DailyPlan | undefined) => {
+      const currentPlan =
+        planOverride ?? ((dailyPlan?.plan as DailyPlan | undefined) || undefined);
+
+      if (!currentPlan) {
+        return undefined;
+      }
+
+      switch (mealType) {
+        case "breakfast":
+          return currentPlan.breakfast;
+        case "lunch":
+          return currentPlan.lunch;
+        case "dinner":
+          return currentPlan.dinner;
+        case "snacks":
+          return currentPlan.snacks?.[0];
+        default:
+          return undefined;
+      }
+    },
+    [dailyPlan],
+  );
+
+  const getCurrentRecipeIndex = useCallback(
+    (mealType: MealName, planOverride?: DailyPlan | undefined): number => {
+      const recipes = recipesByMealType[mealType] || [];
+      if (recipes.length === 0) return 0;
+
+      const planSlot = getPlanSlot(mealType, planOverride);
+      const plannedRecipeId = planSlot?.recipe_id;
+
+      if (plannedRecipeId) {
+        const plannedIndex = recipes.findIndex((recipe) => recipe.id === plannedRecipeId);
+        if (plannedIndex >= 0) {
+          return plannedIndex;
+        }
+      }
+
+      const localIndex = selectedIndices[mealType];
+      if (
+        typeof localIndex === "number" &&
+        localIndex >= 0 &&
+        localIndex < recipes.length
+      ) {
+        return localIndex;
+      }
+
+      const dateStr = format(selectedDate, "yyyy-MM-dd");
+      return getSuggestedRecipeIndex(dateStr, mealType, recipes.length);
+    },
+    [getPlanSlot, recipesByMealType, selectedDate, selectedIndices],
+  );
+
+  const applyRecipeToRegularPlan = useCallback(
+    (mealType: MealName, recipe: ScaledRecipe) => {
+      setDailyPlan((prev) => {
+        const currentPlan =
+          ((prev?.plan as DailyPlan | undefined) || {}) as DailyPlan;
+        const nextPlan: DailyPlan = { ...currentPlan };
+
+        if (mealType === "snacks") {
+          nextPlan.snacks = [
+            {
+              recipe_id: recipe.id,
+              servings: recipe.scale_factor || 1,
+            },
+          ];
+        } else {
+          switch (mealType) {
+            case "breakfast":
+              nextPlan.breakfast = {
+                recipe_id: recipe.id,
+                servings: recipe.scale_factor || 1,
+              };
+              break;
+            case "lunch":
+              nextPlan.lunch = {
+                recipe_id: recipe.id,
+                servings: recipe.scale_factor || 1,
+              };
+              break;
+            case "dinner":
+              nextPlan.dinner = {
+                recipe_id: recipe.id,
+                servings: recipe.scale_factor || 1,
+              };
+              break;
+            default:
+              break;
+          }
+        }
+
+        if (!prev) {
+          return {
+            plan: nextPlan,
+            daily_totals: {} as DailyTotals,
+          };
+        }
+
+        return {
+          ...prev,
+          plan: nextPlan,
+        };
+      });
+    },
+    [],
+  );
+
   // Sync state when initial props change (e.g., after router.refresh())
   useEffect(() => {
     setDailyPlan(initialDailyPlan);
@@ -157,6 +268,7 @@ export function DashboardContent({
   // Fetch data when selected date changes
   const fetchDayData = useCallback(
     async (date: Date) => {
+      const requestId = ++latestDayDataRequestRef.current;
       setLoadingDayData(true);
       try {
         const supabase = createClient();
@@ -178,6 +290,10 @@ export function DashboardContent({
           .eq("plan_date", dateStr)
           .maybeSingle();
 
+        if (requestId !== latestDayDataRequestRef.current) {
+          return;
+        }
+
         // Set to null if no data (important for unplanned days)
         setDailyLog(logData || null);
         setDailyPlan(planData || null);
@@ -192,7 +308,9 @@ export function DashboardContent({
       } catch (error) {
         console.error("Error fetching day data:", error);
       } finally {
-        setLoadingDayData(false);
+        if (requestId === latestDayDataRequestRef.current) {
+          setLoadingDayData(false);
+        }
       }
     },
     [profile.user_id],
@@ -226,9 +344,6 @@ export function DashboardContent({
 
   // Fetch data whenever selected date changes (including today)
   useEffect(() => {
-    const dateStr = format(selectedDate, "yyyy-MM-dd");
-    const todayStr = format(new Date(), "yyyy-MM-dd");
-
     // Always fetch data when switching dates to ensure fresh plan/log data
     // This fixes the issue where switching from planned to unplanned days doesn't update
     fetchDayData(selectedDate);
@@ -285,15 +400,14 @@ export function DashboardContent({
     const recipes = recipesByMealType[mealType] || [];
     if (recipes.length === 0) return null;
 
+    const currentRecipeIndex = getCurrentRecipeIndex(mealType);
+
     // Get the current plan (regular mode only)
     const currentPlan = dailyPlan?.plan as DailyPlan | undefined;
 
     // ===== PLANNED DAY: Return recipe from database plan =====
     if (currentPlan) {
-      const planSlot =
-        mealType === "snacks"
-          ? currentPlan.snacks?.[0]
-          : (currentPlan as any)?.[mealType];
+      const planSlot = getPlanSlot(mealType, currentPlan);
       const recipeId = planSlot?.recipe_id;
 
       if (recipeId) {
@@ -314,14 +428,7 @@ export function DashboardContent({
     }
 
     // ===== UNPLANNED DAY: Return shuffled suggestion based on date =====
-    const dateStr = format(selectedDate, "yyyy-MM-dd");
-    const suggestedIndex = getSuggestedRecipeIndex(
-      dateStr,
-      mealType,
-      recipes.length,
-    );
-
-    return recipes[suggestedIndex] || recipes[0] || null;
+    return recipes[currentRecipeIndex] || recipes[0] || null;
   };
 
   // Get recipe count for each meal type
@@ -418,7 +525,7 @@ export function DashboardContent({
     loggedRecipeName: getLoggedRecipeName(log?.[slot.name as keyof DailyLog]),
     recipe: getCurrentRecipe(slot.name as MealName),
     recipeCount: getRecipeCount(slot.name as MealName),
-    currentIndex: selectedIndices[slot.name] || 0,
+    currentIndex: getCurrentRecipeIndex(slot.name as MealName),
     planSlot: (plan as any)?.[slot.name],
   }));
 
@@ -691,7 +798,7 @@ export function DashboardContent({
     // Set loading state immediately
     setLoadingMeal(mealType);
 
-    const currentIdx = selectedIndices[mealType];
+    const currentIdx = getCurrentRecipeIndex(mealType);
     let newIdx: number;
 
     if (direction === "right") {
@@ -705,6 +812,11 @@ export function DashboardContent({
     // Get old and new recipes for comparison
     const oldRecipe = recipes[currentIdx];
     const newRecipe = recipes[newIdx];
+
+    if (!newRecipe) {
+      setLoadingMeal(null);
+      return;
+    }
 
     // Show macro comparison toast
     if (oldRecipe && newRecipe) {
@@ -759,6 +871,7 @@ export function DashboardContent({
       ...prev,
       [mealType]: newIdx,
     }));
+    applyRecipeToRegularPlan(mealType, newRecipe);
 
     // Save to daily plan if viewing today or any date with an existing plan
     const todayDateStr = format(new Date(), "yyyy-MM-dd");
@@ -766,47 +879,54 @@ export function DashboardContent({
 
     if (todayDateStr === selectedDateStr || dailyPlan) {
       // Get the new recipe and save it to plan
-      const newRecipe = recipes[newIdx];
-      if (newRecipe) {
-        try {
-          const { saveMealToPlan } = await import("@/lib/actions/daily-plans");
-          await saveMealToPlan({
-            date: selectedDateStr,
-            mealType,
-            recipeId: newRecipe.id,
-            servings: newRecipe.scale_factor || 1,
-          });
-          // Refresh data to show the updated plan immediately
-          await fetchDayData(selectedDate);
-          await fetchWeekData(selectedDate);
+      try {
+        const { saveMealToPlan } = await import("@/lib/actions/daily-plans");
+        const result = await saveMealToPlan({
+          date: selectedDateStr,
+          mealType,
+          recipeId: newRecipe.id,
+          servings: newRecipe.scale_factor || 1,
+        });
 
-          // Track recipe swap event
-          trackEvent(
-            buildButtonClickEvent(
-              "meal_builder",
-              "swap_recipe",
-              getCurrentPagePath(),
-              {
-                meal_type: mealType,
-                recipe_id: newRecipe.id,
-                recipe_name: newRecipe.name,
-                direction,
-                calories:
-                  newRecipe.scaled_calories || newRecipe.original_calories,
-              },
-            ),
-          );
-        } catch (error) {
-          captureError(
-            buildMealLogError(
-              mealType,
-              error instanceof Error ? error.message : "Unknown error",
-            ),
-          );
-        } finally {
-          setLoadingMeal(null);
+        if (!result.success) {
+          throw new Error(result.error || "Failed to save meal swap");
         }
+
+        // Refresh data to reconcile optimistic state with server state.
+        await fetchDayData(selectedDate);
+        await fetchWeekData(selectedDate);
+
+        // Track recipe swap event
+        trackEvent(
+          buildButtonClickEvent(
+            "meal_builder",
+            "swap_recipe",
+            getCurrentPagePath(),
+            {
+              meal_type: mealType,
+              recipe_id: newRecipe.id,
+              recipe_name: newRecipe.name,
+              direction,
+              calories:
+                newRecipe.scaled_calories || newRecipe.original_calories,
+            },
+          ),
+        );
+      } catch (error) {
+        captureError(
+          buildMealLogError(
+            mealType,
+            error instanceof Error ? error.message : "Unknown error",
+          ),
+        );
+
+        // Re-sync from server if optimistic update failed.
+        await fetchDayData(selectedDate);
+      } finally {
+        setLoadingMeal(null);
       }
+    } else {
+      setLoadingMeal(null);
     }
   };
 
@@ -830,7 +950,7 @@ export function DashboardContent({
         const recipes = recipesByMealType[mealType] || [];
         if (recipes.length === 0) continue;
 
-        const currentIndex = selectedIndices[mealType] || 0;
+        const currentIndex = getCurrentRecipeIndex(mealType);
         // Try the next recipe, or wrap around to start
         const nextIndex = (currentIndex + 1) % recipes.length;
         const nextRecipe = recipes[nextIndex];
@@ -1187,9 +1307,9 @@ export function DashboardContent({
           )}
 
           <div className="space-y-3">
-            {meals.map((meal: any) => (
+            {meals.map((meal: any, index: number) => (
               <MealCard
-                key={meal.name}
+                key={`${meal.name}-${index}`}
                 meal={meal}
                 isToday={isSelectedToday}
                 isLoading={loadingMeal === meal.name}
