@@ -766,7 +766,9 @@ export async function getUserIngredientSwaps(options: {
   const targetCalories = originalCaloriesPerUnit * targetAmount
   const targetProtein  = originalProteinPerUnit  * targetAmount
 
-  const swapOptions: IngredientSwapOption[] = (alternatives || []).map(alt => {
+  type RankedSwapOption = IngredientSwapOption & { _proteinDiff: number }
+
+  const swapOptions: RankedSwapOption[] = (alternatives || []).map(alt => {
     const altCaloriesPerUnit = (alt.macros?.calories || 0) / alt.serving_size
     const altProteinPerUnit  = (alt.macros?.protein_g || 0) / alt.serving_size
     
@@ -795,7 +797,7 @@ export async function getUserIngredientSwaps(options: {
       calorie_diff_percent,
       // Internal: used for sorting only (not exposed in UI)
       _proteinDiff: targetProtein > 0 ? Math.abs(swapProtein - targetProtein) / targetProtein : 1,
-    } as IngredientSwapOption & { _proteinDiff: number }
+    } as RankedSwapOption
   })
 
   // Sort priority:
@@ -808,8 +810,8 @@ export async function getUserIngredientSwaps(options: {
   // "Protein similar" = within 15% of the original's protein content at equivalent amount.
   const PROTEIN_SIMILAR_THRESHOLD = 0.15
   swapOptions.sort((a, b) => {
-    const _a = a as IngredientSwapOption & { _proteinDiff: number }
-    const _b = b as IngredientSwapOption & { _proteinDiff: number }
+    const _a = a
+    const _b = b
 
     const aProteinSimilar = _a._proteinDiff <= PROTEIN_SIMILAR_THRESHOLD ? 0 : 1
     const bProteinSimilar = _b._proteinDiff <= PROTEIN_SIMILAR_THRESHOLD ? 0 : 1
@@ -832,9 +834,9 @@ export async function getUserIngredientSwaps(options: {
   })
 
   // Strip the internal sorting field before returning
-  swapOptions.forEach(s => { delete (s as Record<string, unknown>)._proteinDiff })
+  const cleanSwapOptions: IngredientSwapOption[] = swapOptions.map(({ _proteinDiff, ...option }) => option)
 
-  return { data: swapOptions, error: null }
+  return { data: cleanSwapOptions, error: null }
 }
 
 // =============================================================================
