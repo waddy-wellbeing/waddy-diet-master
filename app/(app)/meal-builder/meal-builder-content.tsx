@@ -36,6 +36,10 @@ import {
 import { ShareRecipeButton } from "@/components/recipes/share-recipe-button";
 import { cn } from "@/lib/utils";
 import {
+  getSnackIndexForSlotName,
+  isCoreRegularMealSlot,
+} from "@/lib/utils/regular-meal-structure";
+import {
   getUserIngredientSwaps,
   type IngredientSwapOption,
 } from "@/lib/actions/recipes";
@@ -76,6 +80,7 @@ export function MealBuilderContent({
   isFastingMode = false,
 }: MealBuilderContentProps) {
   const router = useRouter();
+  const mealSlotOrder = Object.keys(recipesByMealType);
 
   type PlanMealSlotLike = PlanMealSlot & {
     swapped_ingredients?: PlanMealSlot["swapped_ingredients"];
@@ -85,6 +90,16 @@ export function MealBuilderContent({
     meal: MealType,
   ): (PlanMealSlotLike | PlanSnackItem) | null => {
     if (!todaysPlan) return null;
+
+    if (!isFastingMode && !isCoreRegularMealSlot(meal)) {
+      const snackIndex = getSnackIndexForSlotName(
+        meal,
+        mealSlotOrder.map((name) => ({ name, percentage: 0 })),
+      );
+      const snacks = todaysPlan.snacks;
+      if (Array.isArray(snacks) && snackIndex >= 0) return snacks[snackIndex] || null;
+      return null;
+    }
 
     if (meal === "snacks") {
       const snacks = todaysPlan.snacks;
@@ -490,16 +505,26 @@ export function MealBuilderContent({
 
     const result = await saveMealToPlan({
       date: format(new Date(), "yyyy-MM-dd"),
-      mealType: selectedMeal as
-        | "breakfast"
-        | "lunch"
-        | "dinner"
-        | "snacks"
-        | "pre-iftar"
-        | "iftar"
-        | "full-meal-taraweeh"
-        | "snack-taraweeh"
-        | "suhoor",
+      mealType:
+        !isFastingMode && !isCoreRegularMealSlot(selectedMeal)
+          ? "snacks"
+          : (selectedMeal as
+              | "breakfast"
+              | "lunch"
+              | "dinner"
+              | "snacks"
+              | "pre-iftar"
+              | "iftar"
+              | "full-meal-taraweeh"
+              | "snack-taraweeh"
+              | "suhoor"),
+      snackIndex:
+        !isFastingMode && !isCoreRegularMealSlot(selectedMeal)
+          ? getSnackIndexForSlotName(
+              selectedMeal,
+              mealSlotOrder.map((name) => ({ name, percentage: 0 })),
+            )
+          : undefined,
       recipeId: currentRecipe.id,
       servings: currentRecipe.scale_factor,
       swappedIngredients:

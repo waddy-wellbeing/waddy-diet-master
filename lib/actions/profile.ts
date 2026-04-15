@@ -4,6 +4,7 @@ import { revalidatePath } from 'next/cache'
 import { createClient } from '@/lib/supabase/server'
 import { calculateTDEE } from '@/lib/utils/tdee'
 import { detectCountry } from '@/lib/utils/phone'
+import { buildRegularMealStructureFromCount } from '@/lib/utils/regular-meal-structure'
 import type {
   ProfileBasicInfo,
   ProfileGoals,
@@ -105,6 +106,18 @@ export async function updateProfile(data: UpdateProfileData): Promise<UpdateResu
       updates.preferences = {
         ...currentPrefs,
         ...data.preferences,
+      }
+
+      if (data.preferences.meals_per_day) {
+        const calories =
+          updates.targets?.daily_calories ||
+          (currentProfile.targets?.daily_calories as number | undefined) ||
+          2000
+
+        updates.preferences.meal_structure = buildRegularMealStructureFromCount(data.preferences.meals_per_day).map((slot) => ({
+          ...slot,
+          target_calories: Math.round(calories * (slot.percentage / 100)),
+        }))
       }
     }
 

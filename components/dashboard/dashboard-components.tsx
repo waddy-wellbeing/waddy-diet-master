@@ -391,7 +391,7 @@ export function DaySummary({ consumed, target }: DaySummaryProps) {
 
 interface MealCardProps {
   meal: {
-    name: "breakfast" | "lunch" | "dinner" | "snacks";
+    name: string;
     label: string;
     targetCalories: number;
     consumedCalories: number;

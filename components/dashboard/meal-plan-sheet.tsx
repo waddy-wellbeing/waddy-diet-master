@@ -12,6 +12,11 @@ import { format } from "date-fns";
 import { Loader2, Plus, Trash2, X, ArrowLeftRight } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
+import {
+  buildRegularMealStructureFromCount,
+  getSnackIndexForSlotName,
+  isCoreRegularMealSlot,
+} from "@/lib/utils/regular-meal-structure";
 import { Button } from "@/components/ui/button";
 import {
   Sheet,
@@ -42,7 +47,7 @@ interface MealPlanSheetProps {
   recipes: RecipeRecord[];
   onPlanUpdated: () => void;
   isFastingMode?: boolean; // NEW: Indicates if this is for fasting meals
-  selectedMeals?: MealType[]; // NEW: User's selected meals to display
+  selectedMeals?: string[]; // NEW: User's selected meals to display
 }
 
 type MealType =
@@ -87,11 +92,53 @@ export function MealPlanSheet({
   const [activeMealType, setActiveMealType] = useState<MealType | null>(null);
   const [swapMode, setSwapMode] = useState(false);
 
+  const labelMap: Record<string, string> = {
+    breakfast: "Breakfast",
+    lunch: "Lunch",
+    dinner: "Dinner",
+    snacks: "Snacks",
+    mid_morning: "Mid-Morning Snack",
+    afternoon: "Afternoon Snack",
+    evening: "Evening Snack",
+    snack: "Snack",
+    snack_1: "Snack 1",
+    snack_2: "Snack 2",
+    snack_3: "Snack 3",
+  };
+
+  const emojiMap: Record<string, string> = {
+    breakfast: "🍳",
+    lunch: "🍱",
+    dinner: "🍽️",
+    snacks: "🍎",
+    mid_morning: "☕",
+    afternoon: "🍪",
+    evening: "🥜",
+    snack: "🍎",
+    snack_1: "🍎",
+    snack_2: "🍎",
+    snack_3: "🍎",
+  };
+
   // Select meal types based on mode and filter by selected meals
-  const allMealTypes = isFastingMode ? FASTING_MEAL_TYPES : REGULAR_MEAL_TYPES;
-  const mealTypes = selectedMeals
-    ? allMealTypes.filter((meal) => selectedMeals.includes(meal.key))
-    : allMealTypes;
+  const mealTypes = (() => {
+    if (isFastingMode) {
+      return selectedMeals
+        ? FASTING_MEAL_TYPES.filter((meal) => selectedMeals.includes(meal.key))
+        : FASTING_MEAL_TYPES;
+    }
+
+    const regularSlots =
+      selectedMeals && selectedMeals.length > 0
+        ? selectedMeals
+        : buildRegularMealStructureFromCount(3).map((slot) => slot.name);
+
+    return regularSlots.map((slotName) => ({
+      key: slotName as MealType,
+      label: labelMap[slotName] || slotName.replace(/_/g, " "),
+      emoji: emojiMap[slotName] || "🍽️",
+    }));
+  })();
 
   // Fetch plan when date changes
   useEffect(() => {
@@ -140,12 +187,24 @@ export function MealPlanSheet({
       isFastingMode,
     });
 
+    const snackIndex =
+      activeMealType && !isFastingMode && !isCoreRegularMealSlot(activeMealType)
+        ? getSnackIndexForSlotName(activeMealType, mealTypes.map((meal) => ({
+            name: meal.key,
+            percentage: 0,
+          })))
+        : undefined;
+
     setSaving(true);
     const dateStr = format(date, "yyyy-MM-dd");
     const result = await savePlanMeal({
       date: dateStr,
-      mealType: activeMealType,
+      mealType:
+        activeMealType && !isFastingMode && !isCoreRegularMealSlot(activeMealType)
+          ? "snacks"
+          : activeMealType,
       recipeId,
+      snackIndex: typeof snackIndex === "number" && snackIndex >= 0 ? snackIndex : undefined,
       isFastingMode, // Pass mode to save to correct column
     });
 
@@ -177,11 +236,20 @@ export function MealPlanSheet({
   const handleRemoveRecipe = async (mealType: MealType) => {
     if (!date) return;
 
+    const snackIndex =
+      !isFastingMode && !isCoreRegularMealSlot(mealType)
+        ? getSnackIndexForSlotName(mealType, mealTypes.map((meal) => ({
+            name: meal.key,
+            percentage: 0,
+          })))
+        : undefined;
+
     setSaving(true);
     const dateStr = format(date, "yyyy-MM-dd");
     const result = await removePlanMeal({
       date: dateStr,
-      mealType,
+      mealType: !isFastingMode && !isCoreRegularMealSlot(mealType) ? "snacks" : mealType,
+      snackIndex: typeof snackIndex === "number" && snackIndex >= 0 ? snackIndex : undefined,
       isFastingMode, // Pass mode to remove from correct column
     });
 
@@ -234,10 +302,16 @@ export function MealPlanSheet({
 
     let recipeId: string | undefined;
 
-    if (mealType === "snacks" || mealType === "snack-taraweeh") {
-      recipeId = (
-        plan[mealType as keyof DailyPlan] as PlanSnackItem[] | undefined
-      )?.[0]?.recipe_id;
+    if (mealType === "snack-taraweeh") {
+      recipeId = (plan[mealType as keyof DailyPlan] as PlanSnackItem[] | undefined)?.[0]?.recipe_id;
+    } else if (!isFastingMode && !isCoreRegularMealSlot(mealType)) {
+      const snackIndex = getSnackIndexForSlotName(
+        mealType,
+        mealTypes.map((meal) => ({ name: meal.key, percentage: 0 })),
+      );
+      recipeId = (plan.snacks as PlanSnackItem[] | undefined)?.[snackIndex]?.recipe_id;
+    } else if (mealType === "snacks") {
+      recipeId = (plan.snacks as PlanSnackItem[] | undefined)?.[0]?.recipe_id;
     } else {
       recipeId = (plan[mealType as keyof DailyPlan] as PlanMealSlot | undefined)
         ?.recipe_id;

@@ -2,6 +2,11 @@
 
 import { createAdminClient } from '@/lib/supabase/admin'
 import { getSuggestedRecipeIndex } from '@/lib/utils/meal-suggestions'
+import {
+  getRegularMealStructure,
+  getSnackIndexForSlotName,
+  isCoreRegularMealSlot,
+} from '@/lib/utils/regular-meal-structure'
 
 export interface AdminUserProfile {
   user_id: string
@@ -490,13 +495,8 @@ export async function updateUserMeal({
       const normalizedPercentage = (fastingDistribution[mealType] || 0.2) / totalPercentage
       targetCalories = Math.round(dailyCalories * normalizedPercentage)
     } else {
-      // Regular mode - use meal structure or defaults
-      const mealStructure = targets.meal_structure || [
-        { name: 'breakfast', percentage: 25 },
-        { name: 'lunch', percentage: 35 },
-        { name: 'dinner', percentage: 30 },
-        { name: 'snacks', percentage: 10 },
-      ]
+      // Regular mode - use meal structure from user preferences
+      const mealStructure = getRegularMealStructure(preferences)
       const mealSlot = mealStructure.find((m: any) => m.name === mealType)
       if (mealSlot) {
         targetCalories = Math.round(dailyCalories * (mealSlot.percentage / 100))
@@ -509,10 +509,15 @@ export async function updateUserMeal({
     const servings = Math.round(scaleFactor * 100) / 100 // Round to 2 decimals
 
     // Update the specific meal with calculated servings
-    if (mealType === 'snacks' && snackIndex !== null && snackIndex !== undefined) {
-      // Update specific snack in array (regular mode only)
+    if (!isFastingMode && (!isCoreRegularMealSlot(mealType) || (mealType === 'snacks' && snackIndex !== null && snackIndex !== undefined))) {
+      // Update specific snack in array (regular mode custom snack slots)
+      const regularMealStructure = getRegularMealStructure(preferences)
+      const resolvedSnackIndex =
+        snackIndex !== null && snackIndex !== undefined
+          ? snackIndex
+          : getSnackIndexForSlotName(mealType, regularMealStructure)
       const snacks = Array.isArray(updatedPlan.snacks) ? [...updatedPlan.snacks] : []
-      snacks[snackIndex] = { recipe_id: recipeId, servings }
+      snacks[resolvedSnackIndex >= 0 ? resolvedSnackIndex : 0] = { recipe_id: recipeId, servings }
       updatedPlan.snacks = snacks
     } else if (mealType === 'snack-taraweeh') {
       // snack-taraweeh is ALWAYS an array (matches user dashboard behavior)
@@ -1113,12 +1118,7 @@ export async function getScaledRecipesForMeal({
         return { success: false, error: `Invalid fasting meal type: ${mealType}` }
       }
     } else {
-      const mealStructure = targets.meal_structure || [
-        { name: 'breakfast', percentage: 25 },
-        { name: 'lunch', percentage: 35 },
-        { name: 'dinner', percentage: 30 },
-        { name: 'snacks', percentage: 10 },
-      ]
+      const mealStructure = getRegularMealStructure(preferences)
       const mealSlot = mealStructure.find((m: any) => m.name === mealType)
       if (mealSlot) {
         targetCalories = Math.round(dailyCalories * (mealSlot.percentage / 100))

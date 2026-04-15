@@ -18,12 +18,14 @@ interface SavePlanMealParams {
   date: string // YYYY-MM-DD format
   mealType: 'breakfast' | 'lunch' | 'dinner' | 'snacks' | 'pre-iftar' | 'iftar' | 'full-meal-taraweeh' | 'snack-taraweeh' | 'suhoor'
   recipeId: string
+  snackIndex?: number
   isFastingMode?: boolean // NEW: Indicates if this is a fasting plan
 }
 
 interface RemovePlanMealParams {
   date: string
   mealType: 'breakfast' | 'lunch' | 'dinner' | 'snacks' | 'pre-iftar' | 'iftar' | 'full-meal-taraweeh' | 'snack-taraweeh' | 'suhoor'
+  snackIndex?: number
   isFastingMode?: boolean // NEW: Indicates if this is a fasting plan
 }
 
@@ -44,7 +46,7 @@ export async function savePlanMeal(params: SavePlanMealParams): Promise<ActionRe
     }
 
     console.log('[savePlanMeal] User authenticated:', user.id)
-    const { date, mealType, recipeId, isFastingMode = false } = params
+    const { date, mealType, recipeId, snackIndex, isFastingMode = false } = params
 
     // Use correct plan column based on mode
     const planColumn = isFastingMode ? 'fasting_plan' : 'plan'
@@ -72,11 +74,13 @@ export async function savePlanMeal(params: SavePlanMealParams): Promise<ActionRe
       updatedPlan = ((existingPlan as any)[planColumn] || {}) as DailyPlan
 
       if (mealType === 'snacks' || mealType === 'snack-taraweeh') {
-        // Snacks are stored as array; currently we overwrite with the new snack
-        updatedPlan[mealType] = [{
+        const resolvedSnackIndex = typeof snackIndex === 'number' && snackIndex >= 0 ? snackIndex : 0
+        const snackArray = Array.isArray(updatedPlan[mealType]) ? [...(updatedPlan[mealType] as PlanSnackItem[])] : []
+        snackArray[resolvedSnackIndex] = {
           recipe_id: meal.recipe_id,
           servings: meal.servings,
-        }]
+        }
+        updatedPlan[mealType] = snackArray
       } else {
         // All other meals are single slots
         updatedPlan[mealType] = meal
@@ -84,11 +88,14 @@ export async function savePlanMeal(params: SavePlanMealParams): Promise<ActionRe
     } else {
       // Create new plan
       if (mealType === 'snacks' || mealType === 'snack-taraweeh') {
+        const resolvedSnackIndex = typeof snackIndex === 'number' && snackIndex >= 0 ? snackIndex : 0
+        const snackArray: PlanSnackItem[] = []
+        snackArray[resolvedSnackIndex] = {
+          recipe_id: meal.recipe_id,
+          servings: meal.servings,
+        }
         updatedPlan = {
-          [mealType]: [{
-            recipe_id: meal.recipe_id,
-            servings: meal.servings,
-          }],
+          [mealType]: snackArray,
         }
       } else {
         updatedPlan = {
@@ -143,7 +150,7 @@ export async function removePlanMeal(params: RemovePlanMealParams): Promise<Acti
       return { success: false, error: 'Not authenticated' }
     }
 
-    const { date, mealType, isFastingMode = false } = params
+    const { date, mealType, snackIndex, isFastingMode = false } = params
 
     // Use correct plan column based on mode
     const planColumn = isFastingMode ? 'fasting_plan' : 'plan'
@@ -170,7 +177,13 @@ export async function removePlanMeal(params: RemovePlanMealParams): Promise<Acti
 
     // Remove the meal
     if (mealType === 'snacks' || mealType === 'snack-taraweeh') {
-      updatedPlan[mealType] = undefined
+      if (typeof snackIndex === 'number' && snackIndex >= 0) {
+        const snackArray = Array.isArray(updatedPlan[mealType]) ? [...(updatedPlan[mealType] as PlanSnackItem[])] : []
+        snackArray[snackIndex] = undefined as any
+        updatedPlan[mealType] = snackArray.filter(Boolean)
+      } else {
+        updatedPlan[mealType] = undefined
+      }
     } else {
       updatedPlan[mealType] = undefined
     }

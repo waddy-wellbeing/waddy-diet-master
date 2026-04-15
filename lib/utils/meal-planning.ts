@@ -128,7 +128,7 @@ export function hasMealInPlan(
   if (!plan) return false
 
   if (mealType === 'snacks') {
-    return !!(plan.snacks && plan.snacks.length > 0 && plan.snacks[0]?.recipe_id)
+    return !!(plan.snacks && plan.snacks.some((snack) => !!snack?.recipe_id))
   }
 
   return !!plan[mealType]?.recipe_id
@@ -144,7 +144,9 @@ export function countPlanRecipes(plan: DailyPlan | null | undefined): number {
   if (plan.breakfast?.recipe_id) count++
   if (plan.lunch?.recipe_id) count++
   if (plan.dinner?.recipe_id) count++
-  if (plan.snacks && plan.snacks.length > 0 && plan.snacks[0]?.recipe_id) count++
+  if (plan.snacks) {
+    count += plan.snacks.filter((snack) => !!snack?.recipe_id).length
+  }
 
   return count
 }

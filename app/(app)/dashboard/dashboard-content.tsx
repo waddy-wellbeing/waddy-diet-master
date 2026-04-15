@@ -35,6 +35,11 @@ import {
   buildMealLogError,
   getCurrentPagePath,
 } from "@/lib/utils/analytics";
+import {
+  getRegularMealStructure,
+  getSnackIndexForSlotName,
+  isCoreRegularMealSlot,
+} from "@/lib/utils/regular-meal-structure";
 import { saveFullDayPlan } from "@/lib/actions/daily-plans";
 import { getSuggestedRecipeIndex } from "@/lib/utils/meal-suggestions";
 import type {
@@ -43,10 +48,9 @@ import type {
   DailyPlan,
   DailyTotals,
   RecipeRecord,
-  MealType,
 } from "@/lib/types/nutri";
 
-type MealName = MealType;
+type MealName = string;
 
 // Scaled recipe includes scale_factor and scaled_calories
 interface ScaledRecipe extends RecipeRecord {
@@ -104,18 +108,14 @@ export function DashboardContent({
   const [planSheetDate, setPlanSheetDate] = useState<Date | null>(null);
 
   // Regular mode dashboard - build meal slots from user's meal structure or defaults
+  const regularMealStructure = getRegularMealStructure(profile.preferences);
   const mealSlots = (() => {
     // Use regular meal structure if available
-    if (
-      profile.preferences?.meal_structure &&
-      profile.preferences.meal_structure.length > 0
-    ) {
-      return profile.preferences.meal_structure.map(
-        (slot: { name: string; label?: string }) => ({
+    if (regularMealStructure.length > 0) {
+      return regularMealStructure.map((slot: { name: string; label?: string }) => ({
           name: slot.name,
           label: slot.label,
-        }),
-      );
+        }));
     }
 
     // Fallback to default regular meals
@@ -154,13 +154,17 @@ export function DashboardContent({
           return currentPlan.lunch;
         case "dinner":
           return currentPlan.dinner;
-        case "snacks":
-          return currentPlan.snacks?.[0];
         default:
-          return undefined;
+          if (!isCoreRegularMealSlot(mealType)) {
+            const snackIndex = getSnackIndexForSlotName(mealType, regularMealStructure);
+            if (snackIndex >= 0) {
+              return currentPlan.snacks?.[snackIndex];
+            }
+          }
+          return currentPlan[mealType as keyof DailyPlan] as any;
       }
     },
-    [dailyPlan],
+    [dailyPlan, regularMealStructure],
   );
 
   const getCurrentRecipeIndex = useCallback(
@@ -200,14 +204,7 @@ export function DashboardContent({
           ((prev?.plan as DailyPlan | undefined) || {}) as DailyPlan;
         const nextPlan: DailyPlan = { ...currentPlan };
 
-        if (mealType === "snacks") {
-          nextPlan.snacks = [
-            {
-              recipe_id: recipe.id,
-              servings: recipe.scale_factor || 1,
-            },
-          ];
-        } else {
+        if (isCoreRegularMealSlot(mealType)) {
           switch (mealType) {
             case "breakfast":
               nextPlan.breakfast = {
@@ -230,6 +227,16 @@ export function DashboardContent({
             default:
               break;
           }
+        } else {
+          const snackIndex = getSnackIndexForSlotName(mealType, regularMealStructure);
+          if (snackIndex >= 0) {
+            const snacks = Array.isArray(nextPlan.snacks) ? [...nextPlan.snacks] : [];
+            snacks[snackIndex] = {
+              recipe_id: recipe.id,
+              servings: recipe.scale_factor || 1,
+            };
+            nextPlan.snacks = snacks;
+          }
         }
 
         if (!prev) {
@@ -245,7 +252,7 @@ export function DashboardContent({
         };
       });
     },
-    [],
+    [regularMealStructure],
   );
 
   // Sync state when initial props change (e.g., after router.refresh())
@@ -517,15 +524,15 @@ export function DashboardContent({
 
   // Build meals array dynamically from mealSlots
   const meals = mealSlots.map((slot: { name: string; label?: string }) => ({
-    name: slot.name as MealType,
+    name: slot.name,
     label: slot.label || slot.name,
     targetCalories: mealTargets[slot.name],
     consumedCalories: getLoggedCalories(slot.name),
     isLogged: !!log?.[slot.name as keyof DailyLog]?.items?.length,
     loggedRecipeName: getLoggedRecipeName(log?.[slot.name as keyof DailyLog]),
-    recipe: getCurrentRecipe(slot.name as MealName),
-    recipeCount: getRecipeCount(slot.name as MealName),
-    currentIndex: getCurrentRecipeIndex(slot.name as MealName),
+    recipe: getCurrentRecipe(slot.name),
+    recipeCount: getRecipeCount(slot.name),
+    currentIndex: getCurrentRecipeIndex(slot.name),
     planSlot: (plan as any)?.[slot.name],
   }));
 
@@ -881,9 +888,16 @@ export function DashboardContent({
       // Get the new recipe and save it to plan
       try {
         const { saveMealToPlan } = await import("@/lib/actions/daily-plans");
+        const snackIndex = isCoreRegularMealSlot(mealType)
+          ? undefined
+          : getSnackIndexForSlotName(mealType, regularMealStructure);
         const result = await saveMealToPlan({
           date: selectedDateStr,
-          mealType,
+          mealType: (isCoreRegularMealSlot(mealType) ? mealType : "snacks") as "breakfast" | "lunch" | "dinner" | "snacks",
+          snackIndex:
+            typeof snackIndex === "number" && snackIndex >= 0
+              ? snackIndex
+              : undefined,
           recipeId: newRecipe.id,
           servings: newRecipe.scale_factor || 1,
         });
@@ -939,14 +953,9 @@ export function DashboardContent({
       const { saveMealToPlan } = await import("@/lib/actions/daily-plans");
       const dateStr = format(selectedDate, "yyyy-MM-dd");
 
-      // For each meal type, try to find the next available recipe with better macro match
+      // For each visible meal slot, try to find the next available recipe with better macro match
       const updates = [];
-      for (const mealType of [
-        "breakfast",
-        "lunch",
-        "dinner",
-        "snacks",
-      ] as const) {
+      for (const { name: mealType } of mealSlots) {
         const recipes = recipesByMealType[mealType] || [];
         if (recipes.length === 0) continue;
 
@@ -956,10 +965,18 @@ export function DashboardContent({
         const nextRecipe = recipes[nextIndex];
 
         if (nextRecipe) {
+          const snackIndex = isCoreRegularMealSlot(mealType)
+            ? undefined
+            : getSnackIndexForSlotName(mealType, regularMealStructure);
+
           updates.push(
             saveMealToPlan({
               date: dateStr,
-              mealType,
+              mealType: (isCoreRegularMealSlot(mealType) ? mealType : "snacks") as "breakfast" | "lunch" | "dinner" | "snacks",
+              snackIndex:
+                typeof snackIndex === "number" && snackIndex >= 0
+                  ? snackIndex
+                  : undefined,
               recipeId: nextRecipe.id,
               servings: nextRecipe.scale_factor || 1,
             }),
@@ -1372,7 +1389,7 @@ export function DashboardContent({
         })()}
         onPlanUpdated={handlePlanUpdated}
         isFastingMode={false}
-        selectedMeals={mealSlots.map((slot) => slot.name as MealType)} // Pass selected meals
+        selectedMeals={mealSlots.map((slot) => slot.name)}
       />
     </div>
   );

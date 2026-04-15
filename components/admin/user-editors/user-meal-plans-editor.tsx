@@ -23,6 +23,11 @@ import { Skeleton } from "@/components/ui/skeleton"
 import { Input } from "@/components/ui/input"
 import { toast } from "sonner"
 import { getUserPlans, assignSuggestedPlansForUser, type AdminUserPlan } from "@/lib/actions/admin-plans"
+import {
+  getRegularMealStructure,
+  getSnackIndexForSlotName,
+  isCoreRegularMealSlot,
+} from "@/lib/utils/regular-meal-structure"
 import type { UserWithProfile } from "@/lib/actions/users"
 
 interface UserMealPlansEditorProps {
@@ -430,16 +435,21 @@ function MealPlanDayView({
     )
   }
 
+  const regularMealStructure = getRegularMealStructure({
+    meals_per_day: targets?.meals_per_day,
+    meal_structure: targets?.meal_structure,
+  } as any)
+
   // Determine meal order based on mode
   const mealSlots = isFastingMode
     ? (fastingSelectedMeals && fastingSelectedMeals.length > 0
-        ? fastingSelectedMeals.sort(
+        ? [...fastingSelectedMeals].sort(
             (a, b) =>
               FASTING_MEAL_ORDER.indexOf(a) -
               FASTING_MEAL_ORDER.indexOf(b)
           )
         : FASTING_MEAL_ORDER)
-    : ["breakfast", "lunch", "dinner", "snacks"]
+    : regularMealStructure.map((slot) => slot.name)
 
   // Get meals from plan or fasting_plan
   const getMealData = (mealType: string): { recipe_id?: string; servings?: number } | null => {
@@ -449,8 +459,9 @@ function MealPlanDayView({
     if (isFastingMode && fastingPlan) {
       return fastingPlan[mealType] || null
     } else if (!isFastingMode && plan) {
-      if (mealType === "snacks" && Array.isArray(plan.snacks)) {
-        return plan.snacks[0] || null
+      if (!isCoreRegularMealSlot(mealType) && Array.isArray(plan.snacks)) {
+        const snackIndex = getSnackIndexForSlotName(mealType, regularMealStructure)
+        return snackIndex >= 0 ? plan.snacks[snackIndex] || null : null
       }
       return plan[mealType] || null
     }

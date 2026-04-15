@@ -26,6 +26,11 @@ import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { cn } from "@/lib/utils";
+import {
+  getRegularMealStructure,
+  getSnackIndexForSlotName,
+  isCoreRegularMealSlot,
+} from "@/lib/utils/regular-meal-structure";
 import { RecipePickerSheet } from "@/components/dashboard/recipe-picker-sheet";
 import { toast } from "sonner";
 import {
@@ -248,6 +253,7 @@ function DayPlanView({
   loadingMealKey,
   isFastingMode,
   fastingSelectedMeals,
+  regularMealStructure,
   dailyCalories,
   targets,
 }: {
@@ -259,6 +265,7 @@ function DayPlanView({
   loadingMealKey?: string | null;
   isFastingMode?: boolean;
   fastingSelectedMeals?: string[];
+  regularMealStructure?: { name: string; label?: string; percentage: number }[];
   dailyCalories?: number;
   targets?: any;
 }) {
@@ -306,6 +313,11 @@ function DayPlanView({
     );
   }
 
+  const effectiveRegularStructure =
+    regularMealStructure && regularMealStructure.length > 0
+      ? regularMealStructure
+      : getRegularMealStructure(undefined);
+
   // Helper: Calculate meal target calories (matches backend distribution logic)
   const getMealTargetCalories = (mealType: string): number => {
     if (isFastingMode) {
@@ -332,13 +344,8 @@ function DayPlanView({
         (fastingDistribution[mealType] || 0.2) / totalPercentage;
       return Math.round((dailyCalories || 0) * normalizedPercentage);
     } else {
-      // Regular mode - use meal structure from targets or defaults
-      const mealStructure = targets?.meal_structure || [
-        { name: "breakfast", percentage: 25 },
-        { name: "lunch", percentage: 35 },
-        { name: "dinner", percentage: 30 },
-        { name: "snacks", percentage: 10 },
-      ];
+      // Regular mode - use user meal structure
+      const mealStructure = effectiveRegularStructure;
       const mealSlot = mealStructure.find((m: any) => m.name === mealType);
       if (mealSlot) {
         return Math.round((dailyCalories || 0) * (mealSlot.percentage / 100));
@@ -354,7 +361,7 @@ function DayPlanView({
     const activePlan = isFastingMode ? plan?.fasting_plan : plan?.plan;
 
     // Handle array-based meal types (snacks in regular mode, snack-taraweeh in fasting mode)
-    if (mealType === "snacks" || mealType === "snack-taraweeh") {
+    if (mealType === "snack-taraweeh") {
       const mealData = (activePlan as any)?.[mealType];
 
       // Handle both array format (correct) and object format (legacy bug)
@@ -375,6 +382,20 @@ function DayPlanView({
       }
 
       return { recipe: null, servings: 0 };
+    }
+
+    if (!isFastingMode && !isCoreRegularMealSlot(mealType)) {
+      const snacks = (activePlan as any)?.snacks;
+      if (!Array.isArray(snacks)) return { recipe: null, servings: 0 };
+
+      const snackIndex = getSnackIndexForSlotName(mealType, effectiveRegularStructure);
+      const snack = snackIndex >= 0 ? snacks[snackIndex] : null;
+      if (!snack?.recipe_id) return { recipe: null, servings: 0 };
+
+      return {
+        recipe: recipes[snack.recipe_id] || null,
+        servings: snack.servings || 1,
+      };
     }
 
     // Handle single-slot meal types (all other meals)
@@ -408,12 +429,12 @@ function DayPlanView({
 
   const mealSlots = isFastingMode
     ? fastingSelectedMeals && fastingSelectedMeals.length > 0
-      ? fastingSelectedMeals.sort(
+      ? [...fastingSelectedMeals].sort(
           (a, b) =>
             FASTING_MEAL_ORDER.indexOf(a) - FASTING_MEAL_ORDER.indexOf(b),
         )
       : FASTING_MEAL_ORDER // Show all fasting meals if none selected
-    : ["breakfast", "lunch", "dinner", "snacks"];
+    : effectiveRegularStructure.map((slot) => slot.name);
 
   // Fasting meal emoji mapping
   const fastingMealEmoji: Record<string, string> = {

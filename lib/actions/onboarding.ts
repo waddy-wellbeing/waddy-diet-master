@@ -2,6 +2,7 @@
 
 import { createClient } from '@/lib/supabase/server'
 import { calculateTDEE } from '@/lib/utils/tdee'
+import { buildRegularMealStructureFromCount } from '@/lib/utils/regular-meal-structure'
 import type {
   ProfileBasicInfo,
   ProfileTargets,
@@ -116,6 +117,10 @@ export async function saveOnboardingData(formData: OnboardingFormData): Promise<
       cooking_skill: lifestyle.cookingSkill || undefined,
       max_prep_time_minutes: lifestyle.maxPrepTime,
       meals_per_day: mealsPerDay,
+      meal_structure: buildRegularMealStructureFromCount(mealsPerDay).map((slot) => ({
+        ...slot,
+        target_calories: Math.round(calculations.daily_calories * (slot.percentage / 100)),
+      })),
     }
 
     const profileGoals: ProfileGoals = {

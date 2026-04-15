@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { DashboardContent } from "./dashboard-content";
 import { FastingDashboardContent } from "./fasting-dashboard-content";
 import { format, startOfWeek, endOfWeek, subDays } from "date-fns";
+import { getRegularMealStructure } from "@/lib/utils/regular-meal-structure";
 import type {
   DailyPlan,
   DailyLog,
@@ -160,7 +161,7 @@ export default async function DashboardPage() {
   const dailyFat = profile.targets?.fat_g || 65;
 
   // Use user's saved meal structure if available, otherwise default percentages
-  const userMealStructure = profile.preferences?.meal_structure;
+  const userMealStructure = getRegularMealStructure(profile.preferences);
   const mealTargets: Record<string, number> = {};
 
   if (isFastingModeCheck) {
@@ -192,7 +193,7 @@ export default async function DashboardPage() {
         (fastingDistribution[meal] || 0.2) / totalPercentage;
       mealTargets[meal] = Math.round(dailyCalories * normalizedPercentage);
     }
-  } else if (userMealStructure && userMealStructure.length > 0) {
+  } else if (userMealStructure.length > 0) {
     // Regular mode with custom meal structure
     for (const slot of userMealStructure) {
       mealTargets[slot.name] = Math.round(
@@ -273,7 +274,7 @@ export default async function DashboardPage() {
     }
 
     // Regular mode: use meal structure or defaults
-    if (userMealStructure && userMealStructure.length > 0) {
+    if (userMealStructure.length > 0) {
       return userMealStructure.map((slot: any) => slot.name);
     }
     return ["breakfast", "lunch", "dinner", "snacks"];

@@ -1,6 +1,7 @@
 import { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { getRegularMealStructure } from "@/lib/utils/regular-meal-structure";
 import { MealBuilderContent } from "./meal-builder-content";
 import type { RecipeRecord } from "@/lib/types/nutri";
 
@@ -126,7 +127,7 @@ export default async function MealBuilderPage({ searchParams }: PageProps) {
     : todaysPlan?.plan;
 
   // Use user's saved meal structure if available, otherwise default percentages
-  const userMealStructure = profile.preferences?.meal_structure;
+  const userMealStructure = getRegularMealStructure(profile.preferences);
   const mealTargets: Record<
     string,
     { calories: number; protein: number; carbs: number; fat: number }
@@ -150,7 +151,7 @@ export default async function MealBuilderPage({ searchParams }: PageProps) {
       selectedFastingMeals.length > 0
         ? FASTING_MEAL_ORDER.filter((m) => selectedFastingMeals.includes(m))
         : FASTING_MEAL_ORDER;
-  } else if (userMealStructure && userMealStructure.length > 0) {
+  } else if (userMealStructure.length > 0) {
     mealSlots = (userMealStructure as Array<{ name: string }>).map(
       (slot) => slot.name,
     );
@@ -180,7 +181,7 @@ export default async function MealBuilderPage({ searchParams }: PageProps) {
         fat: Math.round(dailyFat * normalizedPct),
       };
     }
-  } else if (userMealStructure && userMealStructure.length > 0) {
+  } else if (userMealStructure.length > 0) {
     for (const slot of userMealStructure as Array<{
       name: string;
       percentage: number;

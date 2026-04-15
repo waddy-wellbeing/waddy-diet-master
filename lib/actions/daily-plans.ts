@@ -9,6 +9,7 @@ interface SaveMealToPlanParams {
   mealType: 'breakfast' | 'lunch' | 'dinner' | 'snacks' | 'pre-iftar' | 'iftar' | 'full-meal-taraweeh' | 'snack-taraweeh' | 'suhoor'
   recipeId: string
   servings: number
+  snackIndex?: number
   swappedIngredients?: Record<string, { ingredient_id: string; name: string; quantity: number; unit: string }>
   isFastingMode?: boolean // NEW: Indicates if this is a fasting plan
 }
@@ -33,7 +34,7 @@ export async function saveMealToPlan(params: SaveMealToPlanParams): Promise<Save
     }
 
     console.log('User authenticated:', user.id)
-    const { date, mealType, recipeId, servings, swappedIngredients, isFastingMode } = params
+    const { date, mealType, recipeId, servings, snackIndex, swappedIngredients, isFastingMode } = params
     console.log('Recipe ID to save:', recipeId)
     console.log('Fasting mode:', isFastingMode)
 
@@ -68,10 +69,11 @@ export async function saveMealToPlan(params: SaveMealToPlanParams): Promise<Save
       const plan = ((existingPlan as any)[planColumn] || {}) as DailyPlan
 
       if (mealType === 'snacks') {
-        // Keep snacks stored as an array (schema convention). Update the first snack slot.
+        // Keep snacks stored as an array (schema convention). Update the requested snack slot.
+        const resolvedSnackIndex = typeof snackIndex === 'number' && snackIndex >= 0 ? snackIndex : 0
         const nextSnacks: SnackRecipeItem[] = Array.isArray(plan.snacks) ? [...(plan.snacks as SnackRecipeItem[])] : []
-        nextSnacks[0] = {
-          ...(nextSnacks[0] || {}),
+        nextSnacks[resolvedSnackIndex] = {
+          ...(nextSnacks[resolvedSnackIndex] || {}),
           recipe_id: meal.recipe_id,
           servings: meal.servings,
           swapped: meal.swapped,
@@ -88,15 +90,16 @@ export async function saveMealToPlan(params: SaveMealToPlanParams): Promise<Save
     } else {
       // Create new plan
       if (mealType === 'snacks') {
+        const resolvedSnackIndex = typeof snackIndex === 'number' && snackIndex >= 0 ? snackIndex : 0
+        const snackArray: SnackRecipeItem[] = []
+        snackArray[resolvedSnackIndex] = {
+          recipe_id: meal.recipe_id,
+          servings: meal.servings,
+          swapped: meal.swapped,
+          swapped_ingredients: meal.swapped_ingredients,
+        } as SnackRecipeItem
         updatedPlan = {
-          snacks: [
-            {
-              recipe_id: meal.recipe_id,
-              servings: meal.servings,
-              swapped: meal.swapped,
-              swapped_ingredients: meal.swapped_ingredients,
-            } as SnackRecipeItem,
-          ],
+          snacks: snackArray,
         } as DailyPlan
       } else {
         updatedPlan = {
