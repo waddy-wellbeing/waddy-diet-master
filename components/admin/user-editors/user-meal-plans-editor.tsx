@@ -9,58 +9,76 @@ import {
   Loader2,
   Plus,
   AlertCircle,
+  Save,
+  Sparkles,
 } from "lucide-react"
 import {
   Card,
   CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
 } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
 import { toast } from "sonner"
-import { getUserPlans, assignSuggestedPlansForUser, type AdminUserPlan } from "@/lib/actions/admin-plans"
 import {
-  getRegularMealStructure,
+  getUserPlans,
+  assignSuggestedPlansForUser,
+  getScaledRecipesForMeal,
+  updateUserMeal,
+  type AdminUserPlan,
+} from "@/lib/actions/admin-plans"
+import { assignMealStructure } from "@/lib/actions/users"
+import {
   getSnackIndexForSlotName,
   isCoreRegularMealSlot,
 } from "@/lib/utils/regular-meal-structure"
 import type { UserWithProfile } from "@/lib/actions/users"
+import type { MealSlot } from "@/lib/types/nutri"
 
 interface UserMealPlansEditorProps {
   user: UserWithProfile
   onUpdate?: (user: UserWithProfile) => void
 }
 
-// Meal emoji mapping for regular and fasting modes
-const MEAL_EMOJI: Record<string, string> = {
-  breakfast: "🌅",
-  lunch: "🍽️",
-  dinner: "🌙",
-  snacks: "🍪",
-  "pre-iftar": "🥤",
-  iftar: "🕌",
-  "full-meal-taraweeh": "🕯️",
-  "snack-taraweeh": "🍪",
-  suhoor: "⏰",
+interface EditableMealSlot extends MealSlot {
+  tempId: number
 }
 
-// Meal labels - matching exactly what users see in dashboard
+interface SuggestedRecipe {
+  id: string
+  name: string
+  image_url: string | null
+  scale_factor: number
+  scaled_calories: number
+  macro_similarity_score: number
+}
+
+// Meal emoji mapping for regular and fasting modes
+const MEAL_EMOJI: Record<string, string> = {
+  breakfast: "\u{1F305}",
+  lunch: "\u{1F37D}\uFE0F",
+  dinner: "\u{1F319}",
+  snacks: "\u{1F36A}",
+  "pre-iftar": "\u{1F964}",
+  iftar: "\u{1F54C}",
+  "full-meal-taraweeh": "\u{1F56F}\uFE0F",
+  "snack-taraweeh": "\u{1F36A}",
+  suhoor: "\u23F0",
+}
+
+// Meal labels
 const MEAL_LABELS: Record<string, string> = {
-  // Regular meal labels (English - shown when not in Ramadan mode)
   breakfast: "Breakfast",
   lunch: "Lunch",
   dinner: "Dinner",
   snacks: "Snacks",
-  // Fasting meal labels (Arabic - matching dashboard when Ramadan is enabled)
-  "pre-iftar": "كسر صيام",
-  "iftar": "إفطار",
-  "full-meal-taraweeh": "وجبة بعد التراويح",
-  "snack-taraweeh": "سناك بعد التراويح",
-  "suhoor": "سحور",
+  "pre-iftar": "\u0643\u0633\u0631 \u0635\u064A\u0627\u0645",
+  "iftar": "\u0625\u0641\u0637\u0627\u0631",
+  "full-meal-taraweeh": "\u0648\u062C\u0628\u0629 \u0628\u0639\u062F \u0627\u0644\u062A\u0631\u0627\u0648\u064A\u062D",
+  "snack-taraweeh": "\u0633\u0646\u0627\u0643 \u0628\u0639\u062F \u0627\u0644\u062A\u0631\u0627\u0648\u064A\u062D",
+  "suhoor": "\u0633\u062D\u0648\u0631",
 }
 
 const FASTING_MEAL_ORDER = [
@@ -71,6 +89,42 @@ const FASTING_MEAL_ORDER = [
   "suhoor",
 ]
 
+const DEFAULT_STRUCTURES: Record<string, Omit<MealSlot, "target_calories">[]> = {
+  "3-meals": [
+    { name: "breakfast", label: "Breakfast", percentage: 25 },
+    { name: "lunch", label: "Lunch", percentage: 40 },
+    { name: "dinner", label: "Dinner", percentage: 35 },
+  ],
+  "3-meals-snack": [
+    { name: "breakfast", label: "Breakfast", percentage: 25 },
+    { name: "lunch", label: "Lunch", percentage: 35 },
+    { name: "afternoon", label: "Afternoon Snack", percentage: 10 },
+    { name: "dinner", label: "Dinner", percentage: 30 },
+  ],
+  "4-meals": [
+    { name: "breakfast", label: "Breakfast", percentage: 20 },
+    { name: "mid_morning", label: "Mid-Morning Snack", percentage: 15 },
+    { name: "lunch", label: "Lunch", percentage: 30 },
+    { name: "dinner", label: "Dinner", percentage: 35 },
+  ],
+  "5-meals": [
+    { name: "breakfast", label: "Breakfast", percentage: 20 },
+    { name: "mid_morning", label: "Mid-Morning Snack", percentage: 10 },
+    { name: "lunch", label: "Lunch", percentage: 30 },
+    { name: "afternoon", label: "Afternoon Snack", percentage: 10 },
+    { name: "dinner", label: "Dinner", percentage: 30 },
+  ],
+}
+
+const MEAL_OPTIONS = [
+  { value: "breakfast", label: "Breakfast" },
+  { value: "mid_morning", label: "Mid-Morning Snack" },
+  { value: "lunch", label: "Lunch" },
+  { value: "afternoon", label: "Afternoon Snack" },
+  { value: "dinner", label: "Dinner" },
+  { value: "evening", label: "Evening Snack" },
+]
+
 interface PlanData {
   plans: AdminUserPlan[]
   recipes: Record<string, any>
@@ -78,6 +132,31 @@ interface PlanData {
   fastingSelectedMeals: string[]
   dailyCalories: number
   targets: any
+}
+
+function normalizeStructure(structure: MealSlot[] = []): MealSlot[] {
+  const total = structure.reduce((sum, meal) => sum + (meal.percentage || 0), 0)
+  if (total > 0 && total <= 1.5) {
+    return structure.map((meal) => ({ ...meal, percentage: meal.percentage * 100 }))
+  }
+  return structure
+}
+
+function getInitialStructure(user: UserWithProfile): EditableMealSlot[] {
+  const existingStructure = user.profile?.preferences?.meal_structure
+  const requestedMeals = user.profile?.preferences?.meals_per_day || 3
+  const initialStructure = existingStructure
+    ? normalizeStructure(existingStructure)
+    : requestedMeals === 4
+      ? DEFAULT_STRUCTURES["4-meals"]
+      : requestedMeals === 5
+        ? DEFAULT_STRUCTURES["5-meals"]
+        : DEFAULT_STRUCTURES["3-meals"]
+
+  return initialStructure.map((slot, idx) => ({
+    ...slot,
+    tempId: idx,
+  }))
 }
 
 export function UserMealPlansEditor({ user, onUpdate }: UserMealPlansEditorProps) {
@@ -90,6 +169,12 @@ export function UserMealPlansEditor({ user, onUpdate }: UserMealPlansEditorProps
   const [selectedDate, setSelectedDate] = useState<string>(
     new Date().toISOString().split("T")[0]
   )
+  const [mealSlots, setMealSlots] = useState<EditableMealSlot[]>(getInitialStructure(user))
+  const [savingStructure, setSavingStructure] = useState(false)
+  const [savingStructureSuccess, setSavingStructureSuccess] = useState(false)
+  const [suggestionsByMeal, setSuggestionsByMeal] = useState<Record<string, SuggestedRecipe[]>>({})
+  const [loadingSuggestionsMeal, setLoadingSuggestionsMeal] = useState<string | null>(null)
+  const [assigningMealKey, setAssigningMealKey] = useState<string | null>(null)
 
   const loadPlans = async () => {
     setLoading(true)
@@ -114,6 +199,92 @@ export function UserMealPlansEditor({ user, onUpdate }: UserMealPlansEditorProps
     loadPlans()
   }, [user.id])
 
+  useEffect(() => {
+    setMealSlots(getInitialStructure(user))
+  }, [user.id, user.profile?.preferences?.meal_structure, user.profile?.preferences?.meals_per_day])
+
+  const totalPercentage = mealSlots.reduce((sum, slot) => sum + (slot.percentage || 0), 0)
+  const isStructureValid = totalPercentage === 100
+
+  const handlePercentageChange = (index: number, value: string) => {
+    const next = [...mealSlots]
+    next[index] = { ...next[index], percentage: parseInt(value, 10) || 0 }
+    setMealSlots(next)
+  }
+
+  const handleNameChange = (index: number, value: string) => {
+    const option = MEAL_OPTIONS.find((o) => o.value === value)
+    const next = [...mealSlots]
+    next[index] = { ...next[index], name: value, label: option?.label }
+    setMealSlots(next)
+  }
+
+  const applyPreset = (preset: string) => {
+    const structure = DEFAULT_STRUCTURES[preset]
+    if (!structure) return
+    setMealSlots(
+      structure.map((slot, idx) => ({
+        ...slot,
+        tempId: Date.now() + idx,
+      }))
+    )
+  }
+
+  const addSlot = () => {
+    setMealSlots([
+      ...mealSlots,
+      {
+        tempId: Date.now(),
+        name: "afternoon",
+        label: "Afternoon Snack",
+        percentage: 0,
+      },
+    ])
+  }
+
+  const removeSlot = (index: number) => {
+    if (mealSlots.length <= 2) return
+    setMealSlots(mealSlots.filter((_, i) => i !== index))
+  }
+
+  const handleSaveStructure = async () => {
+    if (!isStructureValid) return
+    setSavingStructure(true)
+
+    const cleanedSlots: MealSlot[] = mealSlots.map(({ name, label, percentage }) => ({
+      name,
+      label,
+      percentage,
+    }))
+
+    const result = await assignMealStructure(user.id, cleanedSlots)
+    setSavingStructure(false)
+
+    if (!result.success) {
+      toast.error(result.error || "Failed to save meal structure")
+      return
+    }
+
+    setSavingStructureSuccess(true)
+    setTimeout(() => setSavingStructureSuccess(false), 1800)
+
+    onUpdate?.({
+      ...user,
+      profile: user.profile
+        ? {
+            ...user.profile,
+            preferences: {
+              ...user.profile.preferences,
+              meals_per_day: cleanedSlots.length,
+              meal_structure: cleanedSlots,
+            },
+          }
+        : null,
+    })
+
+    toast.success("Meal distribution saved")
+  }
+
   const handleAssignSuggestions = async () => {
     setAssigning(true)
 
@@ -136,6 +307,68 @@ export function UserMealPlansEditor({ user, onUpdate }: UserMealPlansEditorProps
 
     await loadPlans()
     setAssigning(false)
+  }
+
+  const handleLoadSuggestions = async (mealType: string) => {
+    if (!planData) return
+    setLoadingSuggestionsMeal(mealType)
+
+    const result = await getScaledRecipesForMeal({
+      userId: user.id,
+      mealType,
+      isFastingMode: planData.isFastingMode,
+    })
+
+    setLoadingSuggestionsMeal(null)
+
+    if (!result.success || !result.data) {
+      toast.error(result.error || "Failed to load suggested meals")
+      return
+    }
+
+    const suggestions = result.data
+
+    setSuggestionsByMeal((prev) => ({
+      ...prev,
+      [mealType]: suggestions.slice(0, 3).map((item) => ({
+        id: item.id,
+        name: item.name,
+        image_url: item.image_url,
+        scale_factor: item.scale_factor,
+        scaled_calories: item.scaled_calories,
+        macro_similarity_score: item.macro_similarity_score,
+      })),
+    }))
+  }
+
+  const handleQuickAssignMeal = async (mealType: string, recipeId: string) => {
+    if (!planData) return
+    const key = `${mealType}:${recipeId}`
+    setAssigningMealKey(key)
+
+    const snackIndex =
+      !planData.isFastingMode && !isCoreRegularMealSlot(mealType)
+        ? getSnackIndexForSlotName(mealType, mealSlots as MealSlot[])
+        : undefined
+
+    const result = await updateUserMeal({
+      userId: user.id,
+      planDate: selectedDate,
+      mealType,
+      recipeId,
+      snackIndex: snackIndex !== undefined && snackIndex >= 0 ? snackIndex : undefined,
+      isFastingMode: planData.isFastingMode,
+    })
+
+    setAssigningMealKey(null)
+
+    if (!result.success) {
+      toast.error(result.error || "Failed to assign meal")
+      return
+    }
+
+    toast.success("Meal assigned")
+    await loadPlans()
   }
 
   if (loading) {
@@ -165,74 +398,278 @@ export function UserMealPlansEditor({ user, onUpdate }: UserMealPlansEditorProps
     )
   }
 
+  // Inline meal data for selected date
+  const dayPlan = planData.plans.find((p) => p.plan_date === selectedDate)
+
+  const getMealData = (mealType: string): { recipe_id?: string; servings?: number } | null => {
+    const plan = (dayPlan?.plan || {}) as Record<string, any>
+    const fastingPlan = (dayPlan?.fasting_plan || {}) as Record<string, any>
+
+    if (planData.isFastingMode && fastingPlan) {
+      const value = fastingPlan[mealType]
+      if (mealType === "snack-taraweeh" && Array.isArray(value)) {
+        return value[0] || null
+      }
+      return value || null
+    } else if (!planData.isFastingMode && plan) {
+      if (!isCoreRegularMealSlot(mealType) && Array.isArray(plan.snacks)) {
+        const snackIndex = getSnackIndexForSlotName(mealType, mealSlots as MealSlot[])
+        return snackIndex >= 0 ? plan.snacks[snackIndex] || null : null
+      }
+      return plan[mealType] || null
+    }
+    return null
+  }
+
   return (
     <div className="space-y-6">
       <div>
-        <h3 className="text-lg font-semibold mb-2">Meal Plans Calendar</h3>
+        <h3 className="text-lg font-semibold mb-2">Meals Composer</h3>
         <p className="text-sm text-muted-foreground">
-          {planData.isFastingMode && "🌙 "}
-          View and manage user's meal plans
+          {planData.isFastingMode && "\u{1F319} "}
+          Configure meal distribution and assign planned meals in one place
           {planData.isFastingMode && " (Ramadan Mode)"}
         </p>
       </div>
 
       <Card>
-        <CardHeader className="pb-3">
-          <CardTitle className="text-base">Assign Suggested Plan</CardTitle>
-          <CardDescription>
-            Default is 7 days. Admin can change to 3-14 days.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-3">
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
-            <div className="w-full sm:w-40">
-              <p className="mb-1 text-xs text-muted-foreground">Days</p>
-              <Input
-                type="number"
-                min={3}
-                max={14}
-                value={daysToAssign}
-                onChange={(e) => setDaysToAssign(Number(e.target.value || 7))}
-              />
+        <CardContent className="pt-6 space-y-6">
+          {/* Quick Presets */}
+          <div className="space-y-2">
+            <Label className="text-xs uppercase tracking-wide text-muted-foreground">Quick Presets</Label>
+            <div className="flex flex-wrap gap-2">
+              <Button variant="outline" size="sm" onClick={() => applyPreset("3-meals")}>
+                3 Meals
+              </Button>
+              <Button variant="outline" size="sm" onClick={() => applyPreset("3-meals-snack")}>
+                3 Meals + Snack
+              </Button>
+              <Button variant="outline" size="sm" onClick={() => applyPreset("4-meals")}>
+                4 Meals
+              </Button>
+              <Button variant="outline" size="sm" onClick={() => applyPreset("5-meals")}>
+                5 Meals
+              </Button>
             </div>
-            <Button
-              onClick={handleAssignSuggestions}
-              disabled={assigning}
-              className="sm:min-w-[220px]"
-            >
-              {assigning ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-              Assign Suggested Meals
+          </div>
+
+          {/* Date Navigator (compact inline) */}
+          <DateNavigator
+            selectedDate={selectedDate}
+            onDateChange={setSelectedDate}
+            plans={planData.plans}
+          />
+
+          {/* Meal Slots (unified: distribution + assignment) */}
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <Label className="text-xs uppercase tracking-wide text-muted-foreground">
+                Meal Slots &middot; {planData.dailyCalories ? `${planData.dailyCalories} kcal target` : "No target"}
+              </Label>
+              <Button variant="ghost" size="sm" className="text-xs" onClick={addSlot}>
+                <Plus className="mr-1 h-3 w-3" />
+                Add Slot
+              </Button>
+            </div>
+
+            {mealSlots.map((slot, index) => {
+              const mealType = slot.name
+              const mealData = getMealData(mealType)
+              const recipe = mealData?.recipe_id ? planData.recipes[mealData.recipe_id] : null
+              const servings = mealData?.servings ?? 1
+              const mealSuggestions = suggestionsByMeal[mealType] || []
+              const slotCalories = planData.dailyCalories > 0
+                ? Math.round((planData.dailyCalories * slot.percentage) / 100)
+                : 0
+
+              return (
+                <div key={slot.tempId} className="rounded-lg border bg-muted/30 overflow-hidden">
+                  {/* Distribution row */}
+                  <div className="flex items-center gap-3 p-3">
+                    <span className="text-xl">{MEAL_EMOJI[mealType] || "\u{1F37D}\uFE0F"}</span>
+                    <select
+                      value={mealType}
+                      onChange={(e) => handleNameChange(index, e.target.value)}
+                      className="flex-1 rounded-md border bg-background p-2 text-sm"
+                    >
+                      {MEAL_OPTIONS.map((option) => (
+                        <option key={option.value} value={option.value}>
+                          {option.label}
+                        </option>
+                      ))}
+                    </select>
+
+                    <div className="flex items-center gap-1">
+                      <Input
+                        type="number"
+                        min={0}
+                        max={100}
+                        className="w-16 text-center text-sm"
+                        value={slot.percentage}
+                        onChange={(e) => handlePercentageChange(index, e.target.value)}
+                      />
+                      <span className="text-xs text-muted-foreground">%</span>
+                    </div>
+
+                    {slotCalories > 0 && (
+                      <span className="text-xs text-muted-foreground whitespace-nowrap">
+                        {slotCalories} cal
+                      </span>
+                    )}
+
+                    <Badge variant={recipe ? "default" : "secondary"} className="text-[10px] whitespace-nowrap">
+                      {recipe ? "Planned" : "Unassigned"}
+                    </Badge>
+
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-7 w-7 flex-shrink-0"
+                      onClick={() => removeSlot(index)}
+                      disabled={mealSlots.length <= 2}
+                    >
+                      x
+                    </Button>
+                  </div>
+
+                  {/* Assignment details */}
+                  <div className="border-t bg-background/50 px-3 py-2 space-y-2">
+                    {recipe ? (
+                      <div className="flex items-start gap-2 rounded-md bg-muted/40 p-2">
+                        {recipe.image_url && (
+                          <div className="relative h-10 w-10 flex-shrink-0 overflow-hidden rounded">
+                            <Image src={recipe.image_url} alt={recipe.name} fill className="object-cover" />
+                          </div>
+                        )}
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate text-sm font-semibold">{recipe.name}</p>
+                          <p className="text-xs text-muted-foreground">
+                            {mealData?.servings && `${mealData.servings} serving${mealData.servings !== 1 ? "s" : ""} \u00B7 `}
+                            {recipe.nutrition_per_serving?.calories &&
+                              `${Math.round(recipe.nutrition_per_serving.calories * servings)} kcal`}
+                          </p>
+                        </div>
+                      </div>
+                    ) : (
+                      <p className="text-xs text-muted-foreground italic">No meal assigned</p>
+                    )}
+
+                    <div className="flex items-center gap-2">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="h-7 text-xs"
+                        onClick={() => handleLoadSuggestions(mealType)}
+                        disabled={loadingSuggestionsMeal === mealType}
+                      >
+                        {loadingSuggestionsMeal === mealType ? (
+                          <Loader2 className="mr-1 h-3 w-3 animate-spin" />
+                        ) : (
+                          <Sparkles className="mr-1 h-3 w-3" />
+                        )}
+                        Suggest
+                      </Button>
+                      {mealSuggestions.length > 0 && (
+                        <span className="text-[10px] text-muted-foreground">{mealSuggestions.length} options</span>
+                      )}
+                    </div>
+
+                    {mealSuggestions.length > 0 && (
+                      <div className="space-y-1.5">
+                        {mealSuggestions.map((suggestion) => {
+                          const assignKey = `${mealType}:${suggestion.id}`
+                          return (
+                            <div
+                              key={suggestion.id}
+                              className="flex items-center justify-between gap-2 rounded-md border p-1.5"
+                            >
+                              <div className="min-w-0 flex-1">
+                                <p className="truncate text-xs font-medium">{suggestion.name}</p>
+                                <p className="text-[10px] text-muted-foreground">
+                                  {suggestion.scaled_calories} kcal &middot; {suggestion.scale_factor}x &middot; score{" "}
+                                  {suggestion.macro_similarity_score}
+                                </p>
+                              </div>
+                              <Button
+                                size="sm"
+                                className="h-6 text-[10px] px-2"
+                                onClick={() => handleQuickAssignMeal(mealType, suggestion.id)}
+                                disabled={assigningMealKey === assignKey}
+                              >
+                                {assigningMealKey === assignKey ? (
+                                  <Loader2 className="h-3 w-3 animate-spin" />
+                                ) : (
+                                  "Assign"
+                                )}
+                              </Button>
+                            </div>
+                          )
+                        })}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+
+          {/* Total + Save */}
+          <div
+            className={`flex items-center justify-between rounded-lg p-3 ${
+              isStructureValid ? "bg-green-500/10" : "bg-destructive/10"
+            }`}
+          >
+            <span className="text-sm font-medium">Total</span>
+            <span className={`text-sm font-semibold ${isStructureValid ? "text-green-700" : "text-destructive"}`}>
+              {totalPercentage}%
+            </span>
+          </div>
+
+          <div className="flex items-center gap-3">
+            <Button onClick={handleSaveStructure} disabled={savingStructure || !isStructureValid}>
+              {savingStructure ? (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              ) : (
+                <Save className="mr-2 h-4 w-4" />
+              )}
+              {savingStructureSuccess ? "Saved \u2713" : "Save Distribution"}
             </Button>
           </div>
 
-          <label className="flex items-center gap-2 text-sm text-muted-foreground">
-            <input
-              type="checkbox"
-              checked={overwriteExisting}
-              onChange={(e) => setOverwriteExisting(e.target.checked)}
-            />
-            Overwrite existing plans in this range
-          </label>
+          {/* Bulk Quick Assign */}
+          <div className="border-t pt-4 space-y-3">
+            <Label className="text-xs uppercase tracking-wide text-muted-foreground">Bulk Assign</Label>
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
+              <div className="w-full sm:w-32">
+                <p className="mb-1 text-xs text-muted-foreground">Days</p>
+                <Input
+                  type="number"
+                  min={3}
+                  max={14}
+                  value={daysToAssign}
+                  onChange={(e) => setDaysToAssign(Number(e.target.value || 7))}
+                />
+              </div>
+              <Button
+                onClick={handleAssignSuggestions}
+                disabled={assigning}
+                className="sm:min-w-[180px]"
+              >
+                {assigning ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                Assign Suggested Meals
+              </Button>
+            </div>
+            <label className="flex items-center gap-2 text-xs text-muted-foreground">
+              <input
+                type="checkbox"
+                checked={overwriteExisting}
+                onChange={(e) => setOverwriteExisting(e.target.checked)}
+              />
+              Overwrite existing plans
+            </label>
+          </div>
         </CardContent>
       </Card>
-
-      {/* Date Navigator */}
-      <DateNavigator
-        selectedDate={selectedDate}
-        onDateChange={setSelectedDate}
-        plans={planData.plans}
-      />
-
-      {/* Meal Plan for Selected Date */}
-      <MealPlanDayView
-        date={selectedDate}
-        plans={planData.plans}
-        recipes={planData.recipes}
-        isFastingMode={planData.isFastingMode}
-        fastingSelectedMeals={planData.fastingSelectedMeals}
-        dailyCalories={planData.dailyCalories}
-        targets={planData.targets}
-      />
 
       {/* Plan Summary Stats */}
       <PlannedDaysSummary
@@ -311,236 +748,95 @@ function DateNavigator({
   const hasPlannedNext = plannedDates.has(nextDateStr)
 
   return (
-    <Card className="bg-muted/50">
-      <CardContent className="pt-6">
-        <input
-          ref={dateInputRef}
-          type="date"
-          value={selectedDate}
-          onChange={(e) => onDateChange(e.target.value)}
-          className="sr-only"
-          aria-label="Choose date"
-        />
+    <div className="rounded-lg bg-muted/50 p-3">
+      <input
+        ref={dateInputRef}
+        type="date"
+        value={selectedDate}
+        onChange={(e) => onDateChange(e.target.value)}
+        className="sr-only"
+        aria-label="Choose date"
+      />
 
-        <div className="flex items-center justify-between gap-3">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={goToPreviousDay}
-            className="h-8 w-8 p-0"
-          >
-            <ChevronLeft className="h-4 w-4" />
-          </Button>
+      <div className="flex items-center justify-between gap-2">
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={goToPreviousDay}
+          className="h-8 w-8 p-0"
+        >
+          <ChevronLeft className="h-4 w-4" />
+        </Button>
 
-          <div className="flex-1">
-            <div className="grid grid-cols-1 gap-2 md:grid-cols-3">
-              <Button
-                variant="outline"
-                className="h-auto justify-start px-3 py-2 text-left"
-                onClick={() => onDateChange(previousDateStr)}
-              >
-                <div className="flex w-full items-center justify-between gap-2">
-                  <span className="text-sm text-muted-foreground">{formatDayChip(previousDate)}</span>
-                  {hasPlannedPrev && <Badge className="text-[10px]">Planned</Badge>}
-                </div>
-              </Button>
-
-              <div className="rounded-md border bg-background px-3 py-2">
-                <div className="flex items-center justify-center gap-2 text-center">
-                  <span className="font-semibold">
-                    {new Date(selectedDate).toLocaleDateString("en-US", {
-                      weekday: "short",
-                      month: "short",
-                      day: "numeric",
-                      year: "numeric",
-                    })}
-                  </span>
-                  {selectedDate === toLocalDateString(new Date()) && (
-                    <Badge variant="secondary" className="text-xs">
-                      Today
-                    </Badge>
-                  )}
-                  {hasPlanned && (
-                    <Badge className="text-xs">
-                      ✓ Planned
-                    </Badge>
-                  )}
-                </div>
+        <div className="flex-1">
+          <div className="grid grid-cols-1 gap-2 md:grid-cols-3">
+            <Button
+              variant="outline"
+              className="h-auto justify-start px-2 py-1.5 text-left"
+              onClick={() => onDateChange(previousDateStr)}
+            >
+              <div className="flex w-full items-center justify-between gap-1">
+                <span className="text-xs text-muted-foreground">{formatDayChip(previousDate)}</span>
+                {hasPlannedPrev && <Badge className="text-[10px]">Planned</Badge>}
               </div>
+            </Button>
 
-              <Button
-                variant="outline"
-                className="h-auto justify-end px-3 py-2 text-right"
-                onClick={() => onDateChange(nextDateStr)}
-              >
-                <div className="flex w-full items-center justify-between gap-2">
-                  {hasPlannedNext && <Badge className="text-[10px]">Planned</Badge>}
-                  <span className="text-sm text-muted-foreground">{formatDayChip(nextDate)}</span>
-                </div>
-              </Button>
-            </div>
-          </div>
-
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={openDatePicker}
-            className="h-8 w-8 p-0"
-            aria-label="Open date picker"
-          >
-            <Calendar className="h-4 w-4" />
-          </Button>
-
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={goToNextDay}
-            className="h-8 w-8 p-0"
-          >
-            <ChevronRight className="h-4 w-4" />
-          </Button>
-        </div>
-      </CardContent>
-    </Card>
-  )
-}
-
-function MealPlanDayView({
-  date,
-  plans,
-  recipes,
-  isFastingMode,
-  fastingSelectedMeals,
-  dailyCalories,
-  targets,
-}: {
-  date: string
-  plans: AdminUserPlan[]
-  recipes: Record<string, any>
-  isFastingMode: boolean
-  fastingSelectedMeals: string[]
-  dailyCalories: number
-  targets: any
-}) {
-  const dayPlan = plans.find((p) => p.plan_date === date)
-
-  if (!dayPlan) {
-    return (
-      <Card className="border-dashed">
-        <CardContent className="pt-6 text-center text-muted-foreground">
-          <Plus className="mx-auto mb-2 h-5 w-5 opacity-50" />
-          No meal plan for this date
-        </CardContent>
-      </Card>
-    )
-  }
-
-  const regularMealStructure = getRegularMealStructure({
-    meals_per_day: targets?.meals_per_day,
-    meal_structure: targets?.meal_structure,
-  } as any)
-
-  // Determine meal order based on mode
-  const mealSlots = isFastingMode
-    ? (fastingSelectedMeals && fastingSelectedMeals.length > 0
-        ? [...fastingSelectedMeals].sort(
-            (a, b) =>
-              FASTING_MEAL_ORDER.indexOf(a) -
-              FASTING_MEAL_ORDER.indexOf(b)
-          )
-        : FASTING_MEAL_ORDER)
-    : regularMealStructure.map((slot) => slot.name)
-
-  // Get meals from plan or fasting_plan
-  const getMealData = (mealType: string): { recipe_id?: string; servings?: number } | null => {
-    const plan = dayPlan.plan as Record<string, any>
-    const fastingPlan = dayPlan.fasting_plan as Record<string, any>
-
-    if (isFastingMode && fastingPlan) {
-      return fastingPlan[mealType] || null
-    } else if (!isFastingMode && plan) {
-      if (!isCoreRegularMealSlot(mealType) && Array.isArray(plan.snacks)) {
-        const snackIndex = getSnackIndexForSlotName(mealType, regularMealStructure)
-        return snackIndex >= 0 ? plan.snacks[snackIndex] || null : null
-      }
-      return plan[mealType] || null
-    }
-    return null
-  }
-
-  return (
-    <Card>
-      <CardHeader className="pb-3">
-        <div className="flex items-start justify-between">
-          <div>
-            <CardTitle className="text-base">Daily Meals</CardTitle>
-            <CardDescription className="text-xs">
-              {dailyCalories ? `${dailyCalories} kcal target` : "No calorie target set"}
-            </CardDescription>
-          </div>
-          {isFastingMode && (
-            <Badge className="ml-2">🌙 Ramadan</Badge>
-          )}
-        </div>
-      </CardHeader>
-      <CardContent className="space-y-3">
-        {mealSlots.map((mealType) => {
-          const mealData = getMealData(mealType)
-          const recipe = mealData?.recipe_id ? recipes[mealData.recipe_id] : null
-          const servings = mealData?.servings ?? 1
-
-          return (
-            <div key={mealType} className="flex items-start gap-3 rounded-lg border p-3">
-              <div className="text-2xl">{MEAL_EMOJI[mealType] || "🍽️"}</div>
-              <div className="flex-1 min-w-0">
-                <p className="text-sm font-medium">
-                  {MEAL_LABELS[mealType]}
-                </p>
-                {recipe ? (
-                  <div className="mt-2 space-y-2">
-                    <div className="flex items-start gap-2">
-                      {recipe.image_url && (
-                        <div className="relative h-12 w-12 flex-shrink-0 rounded overflow-hidden">
-                          <Image
-                            src={recipe.image_url}
-                            alt={recipe.name}
-                            fill
-                            className="object-cover"
-                          />
-                        </div>
-                      )}
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-semibold truncate">
-                          {recipe.name}
-                        </p>
-                        {mealData?.servings && (
-                          <p className="text-xs text-muted-foreground">
-                            {mealData.servings} serving{mealData.servings !== 1 ? "s" : ""}
-                          </p>
-                        )}
-                        {recipe.nutrition_per_serving?.calories && (
-                          <p className="text-xs text-muted-foreground">
-                            {Math.round(
-                              recipe.nutrition_per_serving.calories *
-                                servings
-                            )}{" "}
-                            kcal
-                          </p>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                ) : (
-                  <p className="text-xs text-muted-foreground mt-1">
-                    No meal assigned
-                  </p>
+            <div className="rounded-md border bg-background px-2 py-1.5">
+              <div className="flex items-center justify-center gap-2 text-center">
+                <span className="text-sm font-semibold">
+                  {new Date(selectedDate).toLocaleDateString("en-US", {
+                    weekday: "short",
+                    month: "short",
+                    day: "numeric",
+                    year: "numeric",
+                  })}
+                </span>
+                {selectedDate === toLocalDateString(new Date()) && (
+                  <Badge variant="secondary" className="text-[10px]">
+                    Today
+                  </Badge>
+                )}
+                {hasPlanned && (
+                  <Badge className="text-[10px]">
+                    \u2713 Planned
+                  </Badge>
                 )}
               </div>
             </div>
-          )
-        })}
-      </CardContent>
-    </Card>
+
+            <Button
+              variant="outline"
+              className="h-auto justify-end px-2 py-1.5 text-right"
+              onClick={() => onDateChange(nextDateStr)}
+            >
+              <div className="flex w-full items-center justify-between gap-1">
+                {hasPlannedNext && <Badge className="text-[10px]">Planned</Badge>}
+                <span className="text-xs text-muted-foreground">{formatDayChip(nextDate)}</span>
+              </div>
+            </Button>
+          </div>
+        </div>
+
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={openDatePicker}
+          className="h-8 w-8 p-0"
+          aria-label="Open date picker"
+        >
+          <Calendar className="h-4 w-4" />
+        </Button>
+
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={goToNextDay}
+          className="h-8 w-8 p-0"
+        >
+          <ChevronRight className="h-4 w-4" />
+        </Button>
+      </div>
+    </div>
   )
 }
 
@@ -579,43 +875,32 @@ function MealPlansLoadingSkeleton() {
   return (
     <div className="space-y-6">
       <div>
-        <h3 className="text-lg font-semibold mb-2">Meal Plans Calendar</h3>
+        <h3 className="text-lg font-semibold mb-2">Meals Composer</h3>
         <p className="text-sm text-muted-foreground">
-          Loading meal plans...
+          Loading meals setup...
         </p>
       </div>
 
-      {/* Date Navigator Skeleton */}
-      <Card className="bg-muted/50">
-        <CardContent className="pt-6">
-          <div className="flex items-center justify-between gap-4">
-            <Skeleton className="h-8 w-8" />
-            <Skeleton className="h-6 flex-1 max-w-xs" />
-            <Skeleton className="h-8 w-8" />
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Meals Skeleton */}
       <Card>
-        <CardHeader className="pb-3">
-          <Skeleton className="h-5 w-24" />
-        </CardHeader>
-        <CardContent className="space-y-3">
-          {[1, 2, 3, 4].map((i) => (
-            <div key={i} className="flex items-start gap-3 p-3 rounded-lg border">
-              <Skeleton className="h-8 w-8 rounded" />
-              <div className="flex-1 space-y-2">
-                <Skeleton className="h-4 w-24" />
-                <Skeleton className="h-4 w-32" />
-                <Skeleton className="h-4 w-20" />
+        <CardContent className="pt-6 space-y-4">
+          <Skeleton className="h-8 w-48" />
+          <Skeleton className="h-12 w-full rounded-lg" />
+          {[1, 2, 3].map((i) => (
+            <div key={i} className="rounded-lg border p-3 space-y-2">
+              <div className="flex items-center gap-3">
+                <Skeleton className="h-6 w-6 rounded" />
+                <Skeleton className="h-8 flex-1" />
+                <Skeleton className="h-8 w-16" />
+                <Skeleton className="h-5 w-16" />
               </div>
+              <Skeleton className="h-10 w-full" />
             </div>
           ))}
+          <Skeleton className="h-10 w-full rounded-lg" />
+          <Skeleton className="h-10 w-40" />
         </CardContent>
       </Card>
 
-      {/* Summary Skeleton */}
       <Card className="bg-muted/50">
         <CardContent className="pt-6">
           <div className="grid grid-cols-2 gap-4">

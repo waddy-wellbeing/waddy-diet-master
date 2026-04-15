@@ -32,7 +32,6 @@ import {
   PreferencesEditor,
   GoalsEditor,
   PlanStatusEditor,
-  MealStructureEditor,
   UserMealPlansEditor 
 } from '@/components/admin/user-editors'
 import type { PlanStatus } from '@/lib/types/nutri'
@@ -199,10 +198,7 @@ export default function UserDetailPage() {
         </TabsContent>
 
         <TabsContent value="meals">
-          <div className="space-y-6">
-            <MealStructureEditor user={user} onUpdate={handleUserUpdate} />
-            <UserMealPlansEditor user={user} onUpdate={handleUserUpdate} />
-          </div>
+          <UserMealPlansEditor user={user} onUpdate={handleUserUpdate} />
         </TabsContent>
 
         <TabsContent value="status">
