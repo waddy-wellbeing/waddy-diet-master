@@ -1237,3 +1237,83 @@ export async function getScaledRecipesForMeal({
     return { success: false, error: 'Failed to fetch scaled recipes' }
   }
 }
+
+
+export async function updateMealSupplements({
+  userId,
+  planDate,
+  mealType,
+  supplements,
+  snackIndex,
+  isFastingMode,
+}: {
+  userId: string
+  planDate: string
+  mealType: string
+  supplements: MealSupplement[]
+  snackIndex?: number
+  isFastingMode?: boolean
+}): Promise<{ success: boolean; error?: string }> {
+  try {
+    const parsedSupplements = mealSupplementsArraySchema.safeParse(supplements)
+    if (!parsedSupplements.success) {
+      return {
+        success: false,
+        error: parsedSupplements.error.issues[0]?.message || 'Invalid supplement data',
+      }
+    }
+
+    const supabase = createAdminClient()
+    const { data: existingPlan, error: fetchError } = await supabase
+      .from('daily_plans')
+      .select('plan, fasting_plan')
+      .eq('user_id', userId)
+      .eq('plan_date', planDate)
+      .maybeSingle()
+
+    if (fetchError) {
+      return { success: false, error: fetchError.message }
+    }
+
+    const columnName = isFastingMode ? 'fasting_plan' : 'plan'
+    const otherColumnName = isFastingMode ? 'plan' : 'fasting_plan'
+    const currentPlan = ((existingPlan as any)?.[columnName] || {}) as Record<string, any>
+    const updatedPlan = { ...currentPlan }
+
+    if (!isFastingMode && !isCoreRegularMealSlot(mealType)) {
+      const snacks = Array.isArray(updatedPlan.snacks) ? [...updatedPlan.snacks] : []
+      const resolvedSnackIndex = snackIndex !== undefined && snackIndex >= 0 ? snackIndex : 0
+      const snack = (snacks[resolvedSnackIndex] || {}) as Record<string, any>
+      snacks[resolvedSnackIndex] = { ...snack, supplements: parsedSupplements.data }
+      updatedPlan.snacks = snacks
+    } else if (mealType === 'snack-taraweeh') {
+      const snackTaraweeh = Array.isArray(updatedPlan['snack-taraweeh']) ? [...updatedPlan['snack-taraweeh']] : []
+      const snack = (snackTaraweeh[0] || {}) as Record<string, any>
+      snackTaraweeh[0] = { ...snack, supplements: parsedSupplements.data }
+      updatedPlan['snack-taraweeh'] = snackTaraweeh
+    } else {
+      const meal = (updatedPlan[mealType] || {}) as Record<string, any>
+      updatedPlan[mealType] = { ...meal, supplements: parsedSupplements.data }
+    }
+
+    const upsertPayload: Record<string, any> = {
+      user_id: userId,
+      plan_date: planDate,
+      updated_at: new Date().toISOString(),
+      [columnName]: updatedPlan,
+    }
+
+    const otherColumn = (existingPlan as any)?.[otherColumnName]
+    if (otherColumn) upsertPayload[otherColumnName] = otherColumn
+
+    const { error } = await supabase
+      .from('daily_plans')
+      .upsert(upsertPayload, { onConflict: 'user_id,plan_date' })
+
+    if (error) return { success: false, error: error.message }
+    return { success: true }
+  } catch (error) {
+    console.error('Error in updateMealSupplements:', error)
+    return { success: false, error: 'Failed to update supplements' }
+  }
+}

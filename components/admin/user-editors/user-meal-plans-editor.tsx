@@ -4,13 +4,16 @@ import { useState, useEffect, useRef } from "react"
 import Image from "next/image"
 import {
   Calendar,
+  ChevronDown,
   ChevronLeft,
   ChevronRight,
   Loader2,
+  Pill,
   Plus,
   AlertCircle,
   Save,
   Sparkles,
+  Trash2,
 } from "lucide-react"
 import {
   Card,
@@ -27,6 +30,7 @@ import {
   assignSuggestedPlansForUser,
   getScaledRecipesForMeal,
   updateUserMeal,
+  updateMealSupplements,
   type AdminUserPlan,
 } from "@/lib/actions/admin-plans"
 import { assignMealStructure } from "@/lib/actions/users"
@@ -35,7 +39,7 @@ import {
   isCoreRegularMealSlot,
 } from "@/lib/utils/regular-meal-structure"
 import type { UserWithProfile } from "@/lib/actions/users"
-import type { MealSlot } from "@/lib/types/nutri"
+import type { MealSlot, MealSupplement, SupplementTiming } from "@/lib/types/nutri"
 
 interface UserMealPlansEditorProps {
   user: UserWithProfile
@@ -175,6 +179,9 @@ export function UserMealPlansEditor({ user, onUpdate }: UserMealPlansEditorProps
   const [suggestionsByMeal, setSuggestionsByMeal] = useState<Record<string, SuggestedRecipe[]>>({})
   const [loadingSuggestionsMeal, setLoadingSuggestionsMeal] = useState<string | null>(null)
   const [assigningMealKey, setAssigningMealKey] = useState<string | null>(null)
+  const [expandedSupplements, setExpandedSupplements] = useState<Record<string, boolean>>({})
+  const [supplementEdits, setSupplementEdits] = useState<Record<string, MealSupplement[]>>({})
+  const [savingSupplementsMeal, setSavingSupplementsMeal] = useState<string | null>(null)
 
   const loadPlans = async () => {
     setLoading(true)
@@ -421,6 +428,129 @@ export function UserMealPlansEditor({ user, onUpdate }: UserMealPlansEditorProps
     return null
   }
 
+  const getMealSupplements = (mealType: string): MealSupplement[] => {
+    const plan = (dayPlan?.plan || {}) as Record<string, any>
+    const fastingPlan = (dayPlan?.fasting_plan || {}) as Record<string, any>
+
+    if (planData.isFastingMode && fastingPlan) {
+      const value = fastingPlan[mealType]
+      if (mealType === "snack-taraweeh" && Array.isArray(value)) {
+        return Array.isArray(value[0]?.supplements) ? value[0].supplements : []
+      }
+      return Array.isArray(value?.supplements) ? value.supplements : []
+    }
+
+    if (!planData.isFastingMode && !isCoreRegularMealSlot(mealType) && Array.isArray(plan.snacks)) {
+      const snackIndex = getSnackIndexForSlotName(mealType, mealSlots as MealSlot[])
+      const snackSlot = snackIndex >= 0 ? plan.snacks[snackIndex] : null
+      return Array.isArray(snackSlot?.supplements) ? snackSlot.supplements : []
+    }
+
+    return Array.isArray(plan[mealType]?.supplements) ? plan[mealType].supplements : []
+  }
+
+  const ensureSupplementDrafts = (mealType: string) => {
+    setSupplementEdits((prev) => {
+      if (prev[mealType]) return prev
+      return {
+        ...prev,
+        [mealType]: [...getMealSupplements(mealType)],
+      }
+    })
+  }
+
+  const toggleSupplements = (mealType: string) => {
+    ensureSupplementDrafts(mealType)
+    setExpandedSupplements((prev) => ({
+      ...prev,
+      [mealType]: !prev[mealType],
+    }))
+  }
+
+  const addSupplement = (mealType: string) => {
+    ensureSupplementDrafts(mealType)
+    setSupplementEdits((prev) => ({
+      ...prev,
+      [mealType]: [
+        ...(prev[mealType] || []),
+        {
+          name: "",
+          dosage: "",
+          timing: "with",
+        },
+      ],
+    }))
+  }
+
+  const updateSupplementField = (
+    mealType: string,
+    index: number,
+    field: keyof MealSupplement,
+    value: string | number | undefined,
+  ) => {
+    setSupplementEdits((prev) => {
+      const items = [...(prev[mealType] || [])]
+      const current = items[index]
+      if (!current) return prev
+
+      items[index] = {
+        ...current,
+        [field]: value,
+      }
+
+      return {
+        ...prev,
+        [mealType]: items,
+      }
+    })
+  }
+
+  const removeSupplement = (mealType: string, index: number) => {
+    setSupplementEdits((prev) => ({
+      ...prev,
+      [mealType]: (prev[mealType] || []).filter((_, i) => i !== index),
+    }))
+  }
+
+  const saveSupplements = async (mealType: string) => {
+    if (!planData) return
+
+    setSavingSupplementsMeal(mealType)
+
+    const payload = (supplementEdits[mealType] || []).map((item) => ({
+      name: item.name.trim(),
+      dosage: item.dosage.trim(),
+      timing: item.timing as SupplementTiming,
+      after_minutes: item.after_minutes,
+      note: item.note?.trim() || undefined,
+    }))
+
+    const snackIndex =
+      !planData.isFastingMode && !isCoreRegularMealSlot(mealType)
+        ? getSnackIndexForSlotName(mealType, mealSlots as MealSlot[])
+        : undefined
+
+    const result = await updateMealSupplements({
+      userId: user.id,
+      planDate: selectedDate,
+      mealType,
+      supplements: payload,
+      snackIndex: snackIndex !== undefined && snackIndex >= 0 ? snackIndex : undefined,
+      isFastingMode: planData.isFastingMode,
+    })
+
+    setSavingSupplementsMeal(mealType)
+
+    if (!result.success) {
+      toast.error(result.error || "Failed to save supplements")
+      return
+    }
+
+    toast.success("Supplements saved")
+    await loadPlans()
+    setSavingSupplementsMeal(null)
+  }
+
   return (
     <div className="space-y-6">
       <div>
@@ -478,6 +608,7 @@ export function UserMealPlansEditor({ user, onUpdate }: UserMealPlansEditorProps
               const recipe = mealData?.recipe_id ? planData.recipes[mealData.recipe_id] : null
               const servings = mealData?.servings ?? 1
               const mealSuggestions = suggestionsByMeal[mealType] || []
+              const supplements = supplementEdits[mealType] || getMealSupplements(mealType)
               const slotCalories = planData.dailyCalories > 0
                 ? Math.round((planData.dailyCalories * slot.percentage) / 100)
                 : 0
@@ -574,39 +705,137 @@ export function UserMealPlansEditor({ user, onUpdate }: UserMealPlansEditorProps
                       )}
                     </div>
 
-                    {mealSuggestions.length > 0 && (
-                      <div className="space-y-1.5">
-                        {mealSuggestions.map((suggestion) => {
-                          const assignKey = `${mealType}:${suggestion.id}`
-                          return (
-                            <div
-                              key={suggestion.id}
-                              className="flex items-center justify-between gap-2 rounded-md border p-1.5"
-                            >
-                              <div className="min-w-0 flex-1">
-                                <p className="truncate text-xs font-medium">{suggestion.name}</p>
-                                <p className="text-[10px] text-muted-foreground">
-                                  {suggestion.scaled_calories} kcal &middot; {suggestion.scale_factor}x &middot; score{" "}
-                                  {suggestion.macro_similarity_score}
-                                </p>
+                    rotate-180
+                    <div className="rounded-md border border-primary/20 bg-primary/5 p-2">
+                      <button
+                        type="button"
+                        onClick={() => toggleSupplements(mealType)}
+                        className="flex w-full items-center justify-between text-xs font-medium"
+                      >
+                        <span className="inline-flex items-center gap-1.5">
+                          <Pill className="h-3 w-3" />
+                          Supplements
+                          <Badge variant="secondary" className="h-5 text-[10px] px-1.5">
+                            {supplements.length}
+                          </Badge>
+                        </span>
+                        <ChevronDown
+                          className={`h-3.5 w-3.5 transition-transform ${expandedSupplements[mealType] ? "rotate-180" : ""}`}
+                        />
+                      </button>
+
+                      {expandedSupplements[mealType] && (
+                        <div className="mt-2 space-y-2">
+                          {supplements.length === 0 && (
+                            <p className="text-[11px] text-muted-foreground">No supplements assigned for this meal.</p>
+                          )}
+
+                          {supplements.map((supplement, supplementIndex) => (
+                            <div key={`${mealType}-supp-${supplementIndex}`} className="space-y-2 rounded-md border bg-background p-2">
+                              <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                                <Input
+                                  placeholder="Supplement name"
+                                  value={supplement.name}
+                                  onChange={(e) =>
+                                    updateSupplementField(mealType, supplementIndex, "name", e.target.value)
+                                  }
+                                  className="h-8 text-xs"
+                                />
+                                <Input
+                                  placeholder="Dosage (e.g., 500mg)"
+                                  value={supplement.dosage}
+                                  onChange={(e) =>
+                                    updateSupplementField(mealType, supplementIndex, "dosage", e.target.value)
+                                  }
+                                  className="h-8 text-xs"
+                                />
                               </div>
-                              <Button
-                                size="sm"
-                                className="h-6 text-[10px] px-2"
-                                onClick={() => handleQuickAssignMeal(mealType, suggestion.id)}
-                                disabled={assigningMealKey === assignKey}
-                              >
-                                {assigningMealKey === assignKey ? (
-                                  <Loader2 className="h-3 w-3 animate-spin" />
+
+                              <div className="grid grid-cols-1 gap-2 sm:grid-cols-[130px_1fr_auto]">
+                                <select
+                                  value={supplement.timing}
+                                  onChange={(e) =>
+                                    updateSupplementField(mealType, supplementIndex, "timing", e.target.value as SupplementTiming)
+                                  }
+                                  className="h-8 rounded-md border bg-background px-2 text-xs"
+                                >
+                                  <option value="before">Before meal</option>
+                                  <option value="with">With meal</option>
+                                  <option value="after">After meal</option>
+                                </select>
+
+                                {supplement.timing === "after" ? (
+                                  <Input
+                                    placeholder="After minutes"
+                                    type="number"
+                                    min={0}
+                                    value={supplement.after_minutes ?? ""}
+                                    onChange={(e) =>
+                                      updateSupplementField(
+                                        mealType,
+                                        supplementIndex,
+                                        "after_minutes",
+                                        e.target.value === "" ? undefined : Number(e.target.value),
+                                      )
+                                    }
+                                    className="h-8 text-xs"
+                                  />
                                 ) : (
-                                  "Assign"
+                                  <Input
+                                    placeholder="Optional note"
+                                    value={supplement.note || ""}
+                                    onChange={(e) =>
+                                      updateSupplementField(
+                                        mealType,
+                                        supplementIndex,
+                                        "note",
+                                        e.target.value || undefined,
+                                      )
+                                    }
+                                    className="h-8 text-xs"
+                                  />
                                 )}
-                              </Button>
+
+                                <Button
+                                  type="button"
+                                  variant="ghost"
+                                  size="icon"
+                                  className="h-8 w-8 text-destructive"
+                                  onClick={() => removeSupplement(mealType, supplementIndex)}
+                                >
+                                  <Trash2 className="h-3.5 w-3.5" />
+                                </Button>
+                              </div>
                             </div>
-                          )
-                        })}
-                      </div>
-                    )}
+                          ))}
+
+                          <div className="flex items-center gap-2">
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              className="h-7 text-xs"
+                              onClick={() => addSupplement(mealType)}
+                            >
+                              <Plus className="mr-1 h-3 w-3" />
+                              Add Supplement
+                            </Button>
+                            <Button
+                              type="button"
+                              size="sm"
+                              className="h-7 text-xs"
+                              onClick={() => saveSupplements(mealType)}
+                              disabled={savingSupplementsMeal === mealType}
+                            >
+                              {savingSupplementsMeal === mealType ? (
+                                <Loader2 className="mr-1 h-3 w-3 animate-spin" />
+                              ) : null}
+                              Save Supplements
+                            </Button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
                   </div>
                 </div>
               )
