@@ -199,6 +199,18 @@ export interface RecipeNutrition {
 // DAILY PLANS
 // =============================================================================
 
+/** Timing of a supplement relative to its meal */
+export type SupplementTiming = 'before' | 'with' | 'after'
+
+/** A single supplement recommendation attached to a meal slot */
+export interface MealSupplement {
+  name: string
+  dosage: string           // Free-text e.g. "1000 IU", "500 mg"
+  timing: SupplementTiming
+  after_minutes?: number   // Optional offset when timing === 'after'
+  note?: string            // Optional instruction text
+}
+
 /** A single meal slot in the plan */
 export interface PlanMealSlot {
   recipe_id: string
@@ -211,6 +223,7 @@ export interface PlanMealSlot {
     quantity: number
     unit: string
   }>
+  supplements?: MealSupplement[]
 }
 
 /** A snack item (can be recipe or ingredient) */

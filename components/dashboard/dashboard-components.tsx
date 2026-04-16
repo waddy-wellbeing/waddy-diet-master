@@ -426,6 +426,13 @@ interface MealCardProps {
           unit: string;
         }
       >;
+      supplements?: {
+        name: string;
+        dosage: string;
+        timing: 'before' | 'with' | 'after';
+        after_minutes?: number;
+        note?: string;
+      }[];
     } | null;
   };
   isToday?: boolean;

@@ -7,6 +7,8 @@ import {
   getSnackIndexForSlotName,
   isCoreRegularMealSlot,
 } from '@/lib/utils/regular-meal-structure'
+import type { MealSupplement } from '@/lib/types/nutri'
+import { mealSupplementsArraySchema } from '@/lib/validators/supplements'
 
 export interface AdminUserProfile {
   user_id: string
