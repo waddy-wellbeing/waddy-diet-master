@@ -533,7 +533,7 @@ export function DashboardContent({
     recipe: getCurrentRecipe(slot.name),
     recipeCount: getRecipeCount(slot.name),
     currentIndex: getCurrentRecipeIndex(slot.name),
-    planSlot: (plan as any)?.[slot.name],
+    planSlot: getPlanSlot(slot.name),
   }));
 
   const greeting = () => {

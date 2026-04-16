@@ -705,7 +705,6 @@ export function UserMealPlansEditor({ user, onUpdate }: UserMealPlansEditorProps
                       )}
                     </div>
 
-                    rotate-180
                     <div className="rounded-md border border-primary/20 bg-primary/5 p-2">
                       <button
                         type="button"
