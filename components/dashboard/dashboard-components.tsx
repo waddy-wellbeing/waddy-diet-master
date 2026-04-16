@@ -7,6 +7,11 @@ import { motion, AnimatePresence } from "framer-motion";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import {
   ChevronLeft,
   ChevronRight,
   Flame,
@@ -456,7 +461,6 @@ export function MealCard({
   const [swipeX, setSwipeX] = useState(0);
   const [isDragging, setIsDragging] = useState(false);
   const [justSwapped, setJustSwapped] = useState(false);
-  const [showSupplements, setShowSupplements] = useState(false);
   const [showHint, setShowHint] = useState(
     typeof window !== "undefined"
       ? !sessionStorage.getItem(`swap-hint-${meal.name}`)
@@ -669,30 +673,57 @@ export function MealCard({
                     </motion.span>
                   )}
                   {meal.planSlot?.supplements && meal.planSlot.supplements.length > 0 && (
-                    <button
-                      type="button"
-                      className="text-[10px] px-2 py-1 bg-gradient-to-r from-blue-500/20 to-blue-400/10 text-blue-700 dark:text-blue-300 rounded-full font-semibold border border-blue-400/30 hover:bg-blue-500/25 transition-colors"
-                      title="View supplement instructions"
-                      onClick={(e: React.MouseEvent) => {
-                        e.stopPropagation();
-                        setShowSupplements((prev) => !prev);
-                        const details = meal.planSlot?.supplements
-                          ?.map((supp) => {
-                            const timing =
+                    <Popover>
+                      <PopoverTrigger asChild>
+                        <button
+                          type="button"
+                          className="text-[10px] px-2 py-1 bg-gradient-to-r from-blue-500/20 to-blue-400/10 text-blue-700 dark:text-blue-300 rounded-full font-semibold border border-blue-400/30 hover:bg-blue-500/25 transition-colors"
+                          title="View supplement instructions"
+                          onClick={(e: React.MouseEvent) => e.stopPropagation()}
+                        >
+                          <Pill className="inline h-3 w-3 mr-0.5" />
+                          {meal.planSlot.supplements.length}
+                        </button>
+                      </PopoverTrigger>
+                      <PopoverContent
+                        align="end"
+                        side="bottom"
+                        sideOffset={8}
+                        className="w-72 border-blue-400/40 bg-popover p-3 shadow-lg"
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        <p className="mb-2 text-[10px] uppercase tracking-wide text-blue-700 dark:text-blue-300 font-semibold">
+                          Supplement Instructions
+                        </p>
+                        <div className="space-y-1.5">
+                          {meal.planSlot.supplements.map((supp, index) => {
+                            const timingLabel =
                               supp.timing === "before"
                                 ? "Before meal"
                                 : supp.timing === "with"
                                   ? "With meal"
-                                  : "After meal";
-                            return supp.name + (supp.dosage ? " (" + supp.dosage + ")" : "") + " - " + timing + (supp.note ? " - " + supp.note : "");
-                          })
-                          .join("\n");
-                        if (details) window.alert(details);
-                      }}
-                    >
-                      <Pill className="inline h-3 w-3 mr-0.5" />
-                      {meal.planSlot.supplements.length}
-                    </button>
+                                  : "After meal" +
+                                    (supp.after_minutes
+                                      ? " (" + supp.after_minutes + " min)"
+                                      : "");
+
+                            return (
+                              <p
+                                key={meal.name + "-supp-" + index}
+                                className="text-[11px] text-muted-foreground leading-relaxed"
+                              >
+                                <span className="font-medium text-foreground">
+                                  {supp.name}
+                                </span>
+                                {supp.dosage ? " (" + supp.dosage + ")" : ""}
+                                {" - " + timingLabel}
+                                {supp.note ? " - " + supp.note : ""}
+                              </p>
+                            );
+                          })}
+                        </div>
+                      </PopoverContent>
+                    </Popover>
                   )}
                 </div>
 
@@ -733,6 +764,7 @@ export function MealCard({
                     )}
                 </div>
               </div>
+
 
               {/* Action buttons - only for today */}
               <div className="flex items-center gap-1.5 mt-2 flex-wrap">
