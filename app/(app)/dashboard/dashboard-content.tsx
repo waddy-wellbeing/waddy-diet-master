@@ -41,6 +41,7 @@ import {
   getSnackIndexForSlotName,
   isCoreRegularMealSlot,
 } from "@/lib/utils/regular-meal-structure";
+import { savePlanMeal } from "@/lib/actions/meal-planning";
 import { saveFullDayPlan } from "@/lib/actions/daily-plans";
 import { getSuggestedRecipeIndex } from "@/lib/utils/meal-suggestions";
 import type {
@@ -107,6 +108,10 @@ export function DashboardContent({
   // Meal planning sheet state
   const [planSheetOpen, setPlanSheetOpen] = useState(false);
   const [planSheetDate, setPlanSheetDate] = useState<Date | null>(null);
+
+  // Quick search sheet state
+  const [searchSheetOpen, setSearchSheetOpen] = useState(false);
+  const [searchMealName, setSearchMealName] = useState<string | null>(null);
 
   // Regular mode dashboard - build meal slots from user's meal structure or defaults
   const regularMealStructure = getRegularMealStructure(profile.preferences);
@@ -481,6 +486,69 @@ export function DashboardContent({
       ) {
         await fetchDayData(selectedDate);
       }
+    }
+  };
+
+  const handleSearchMeal = (mealName: string) => {
+    setSearchMealName(mealName);
+    setSearchSheetOpen(true);
+  };
+
+  const handleSearchRecipeSelected = async (recipeId: string) => {
+    if (!searchMealName) return;
+
+    setSearchSheetOpen(false);
+    setLoadingMeal(searchMealName);
+
+    try {
+      const snackIndex = isCoreRegularMealSlot(searchMealName)
+        ? undefined
+        : getSnackIndexForSlotName(searchMealName, regularMealStructure);
+
+      const result = await savePlanMeal({
+        date: format(selectedDate, "yyyy-MM-dd"),
+        mealType: isCoreRegularMealSlot(searchMealName)
+          ? (searchMealName as "breakfast" | "lunch" | "dinner")
+          : "snacks",
+        recipeId,
+        snackIndex:
+          typeof snackIndex === "number" && snackIndex >= 0
+            ? snackIndex
+            : undefined,
+      });
+
+      if (!result.success) {
+        toast.error(result.error || "Failed to update plan");
+        return;
+      }
+
+      toast.success("Recipe updated in plan");
+      await handlePlanUpdated();
+      await fetchDayData(selectedDate);
+
+      trackEvent(
+        buildButtonClickEvent(
+          "dashboard",
+          "search_assign_recipe",
+          getCurrentPagePath(),
+          {
+            meal_type: searchMealName,
+            recipe_id: recipeId,
+            date: format(selectedDate, "yyyy-MM-dd"),
+          },
+        ),
+      );
+    } catch (error) {
+      captureError(
+        buildMealLogError(
+          searchMealName,
+          error instanceof Error ? error.message : "Unknown error",
+        ),
+      );
+      toast.error("Failed to update plan");
+    } finally {
+      setLoadingMeal(null);
+      setSearchMealName(null);
     }
   };
 
@@ -1334,6 +1402,7 @@ export function DashboardContent({
                 onLogMeal={handleLogMeal}
                 onUnlogMeal={handleUnlogMeal}
                 onSwapMeal={handleSwapMeal}
+                onSearchMeal={handleSearchMeal}
                 onAddFood={() => {
                   // Navigate to meal builder or open add food modal
                   console.log("Add food to", meal.name);
@@ -1391,6 +1460,16 @@ export function DashboardContent({
         onPlanUpdated={handlePlanUpdated}
         isFastingMode={false}
         selectedMeals={mealSlots.map((slot) => slot.name)}
+      />
+
+      <RecipePickerSheet
+        open={searchSheetOpen}
+        onOpenChange={(open) => {
+          setSearchSheetOpen(open);
+          if (!open) setSearchMealName(null);
+        }}
+        mealType={searchMealName}
+        onRecipeSelected={handleSearchRecipeSelected}
       />
     </div>
   );

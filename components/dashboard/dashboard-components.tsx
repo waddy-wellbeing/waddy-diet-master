@@ -24,6 +24,7 @@ import {
   Loader2,
   ExternalLink,
   Pill,
+  Search,
 } from "lucide-react";
 import type { ProfileTargets, DailyPlan, DailyLog } from "@/lib/types/nutri";
 import {
@@ -445,6 +446,7 @@ interface MealCardProps {
   onLogMeal?: (mealName: string) => void;
   onUnlogMeal?: (mealName: string) => void;
   onSwapMeal?: (mealName: string, direction: "left" | "right") => void;
+  onSearchMeal?: (mealName: string) => void;
   onAddFood?: () => void;
   isLoading?: boolean;
 }
@@ -455,6 +457,7 @@ export function MealCard({
   onLogMeal,
   onUnlogMeal,
   onSwapMeal,
+  onSearchMeal,
   onAddFood,
   isLoading = false,
 }: MealCardProps) {
@@ -470,6 +473,7 @@ export function MealCard({
   const progress = meal.isLogged ? 100 : 0;
   const hasRecipe = !!meal.recipe;
   const canSwipe = meal.recipeCount > 1 && isToday;
+  const canSearch = meal.recipeCount > 0 && isToday;
 
   // Use scaled calories if available, otherwise use target
   const displayCalories =
@@ -824,11 +828,27 @@ export function MealCard({
                   </Button>
                 )}
 
+                {canSearch && (
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className={cn("h-7 text-xs px-1.5", !canSwipe && "ml-auto")}
+                    onClick={(e: React.MouseEvent) => {
+                      e.stopPropagation();
+                      onSearchMeal?.(meal.name);
+                    }}
+                    title={`Search ${meal.label} alternatives`}
+                  >
+                    <Search className="h-3 w-3 sm:mr-1" />
+                    <span className="hidden sm:inline">Search</span>
+                  </Button>
+                )}
+
                 {canSwipe && (
                   <Button
                     size="sm"
                     variant="ghost"
-                    className="h-7 text-xs px-1.5 ml-auto"
+                    className={cn("h-7 text-xs px-1.5", !canSearch && "ml-auto")}
                     onClick={(e: React.MouseEvent) => {
                       e.stopPropagation();
                       onSwapMeal?.(meal.name, "right");

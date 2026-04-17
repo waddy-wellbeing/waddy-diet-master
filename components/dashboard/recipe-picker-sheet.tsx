@@ -26,17 +26,7 @@ import { RamadanBadge } from "@/components/dashboard/ramadan-badge";
 interface RecipePickerSheetProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  mealType:
-    | "breakfast"
-    | "lunch"
-    | "dinner"
-    | "snacks"
-    | "pre-iftar"
-    | "iftar"
-    | "full-meal-taraweeh"
-    | "snack-taraweeh"
-    | "suhoor"
-    | null;
+  mealType: string | null;
   onRecipeSelected: (recipeId: string) => void;
 }
 
@@ -45,6 +35,13 @@ const MEAL_TYPE_LABELS: Record<string, string> = {
   lunch: "Lunch",
   dinner: "Dinner",
   snacks: "Snacks",
+  mid_morning: "Mid-Morning Snack",
+  afternoon: "Afternoon Snack",
+  evening: "Evening Snack",
+  snack: "Snack",
+  snack_1: "Snack 1",
+  snack_2: "Snack 2",
+  snack_3: "Snack 3",
   // Fasting meal labels
   "pre-iftar": "ما قبل الإفطار",
   iftar: "الإفطار",

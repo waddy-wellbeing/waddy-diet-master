@@ -435,12 +435,9 @@ export function FastingDashboardContent({
     if (!searchMealName) return;
     setSearchSheetOpen(false);
 
-    const fastingSlots = ["pre-iftar", "iftar", "full-meal-taraweeh", "snack-taraweeh", "suhoor"];
-    const mealTypeForSave = fastingSlots.includes(searchMealName) ? searchMealName : searchMealName;
-
     const result = await savePlanMeal({
       date: format(selectedDate, "yyyy-MM-dd"),
-      mealType: mealTypeForSave,
+      mealType: searchMealName as FastingMealType,
       recipeId,
       isFastingMode: true,
     });
