@@ -20,11 +20,14 @@ export async function searchRecipes({
       lunch: ["lunch", "one pot", "side dishes"],
       dinner: ["dinner", "one pot", "side dishes"],
       snacks: ["snack", "snacks & sweets", "smoothies"],
+      mid_morning: ["snack", "snacks & sweets", "smoothies"],
+      afternoon: ["snack", "snacks & sweets", "smoothies"],
+      evening: ["snack", "snacks & sweets", "smoothies"],
       // Fasting meal mappings
       "pre-iftar": ["pre-iftar", "smoothies"],
-      "iftar": ["lunch"],
-      "full-meal-taraweeh": ["lunch", "dinner"],
-      "snack-taraweeh": ["snack"],
+      "iftar": ["lunch", "one pot"],
+      "full-meal-taraweeh": ["lunch", "dinner", "one pot"],
+      "snack-taraweeh": ["snack", "snacks & sweets"],
       "suhoor": ["breakfast", "dinner"],
     }
     
@@ -62,39 +65,39 @@ export async function searchRecipes({
       return []
     }
     
-    // No need for JavaScript filtering - meal_type filter applied at database level when not searching
-    const filtered = recipes
-    
-    // Sort recipes: Ramadan recommendations first for fasting meals
+    // Tag each recipe with whether it matches the target meal type
     const isFastingMeal = ['pre-iftar', 'iftar', 'full-meal-taraweeh', 'snack-taraweeh', 'suhoor'].includes(mealType)
-    
-    if (isFastingMeal) {
-      filtered.sort((a, b) => {
+    const tagged = recipes.map((r) => ({
+      ...r,
+      is_suitable: acceptedTypes.length === 0
+        ? true
+        : (r.meal_type as string[] | null)?.some((t) =>
+            acceptedTypes.some((a) => t.toLowerCase() === a.toLowerCase())
+          ) ?? false,
+    }))
+
+    // Sort: suitable first, then by Ramadan tag, then alphabetically
+    tagged.sort((a, b) => {
+      // 1. Suitable for this meal type first
+      if (a.is_suitable !== b.is_suitable) return a.is_suitable ? -1 : 1
+
+      // 2. Ramadan recommendations for fasting meals
+      if (isFastingMeal) {
         const aRamadan = (a.recommendation_group as string[] | null)?.includes('ramadan') ? 1 : 0
         const bRamadan = (b.recommendation_group as string[] | null)?.includes('ramadan') ? 1 : 0
-        
-        // Ramadan tag takes priority
         if (aRamadan !== bRamadan) return bRamadan - aRamadan
-        
-        // For pre-iftar: prioritize "pre-iftar" type over "smoothies"
+
         if (mealType === 'pre-iftar') {
-          const aHasPreIftar = (a.meal_type || []).some((t: string) => 
-            t.toLowerCase() === 'pre-iftar'
-          )
-          const bHasPreIftar = (b.meal_type || []).some((t: string) => 
-            t.toLowerCase() === 'pre-iftar'
-          )
-          
-          if (aHasPreIftar && !bHasPreIftar) return -1
-          if (!aHasPreIftar && bHasPreIftar) return 1
+          const aHas = (a.meal_type || []).some((t: string) => t.toLowerCase() === 'pre-iftar')
+          const bHas = (b.meal_type || []).some((t: string) => t.toLowerCase() === 'pre-iftar')
+          if (aHas !== bHas) return aHas ? -1 : 1
         }
-        
-        return 0
-      })
-    }
-    
-    // Return limited results
-    return filtered.slice(0, limit)
+      }
+
+      return 0
+    })
+
+    return tagged.slice(0, limit)
   } catch (error) {
     console.error('Unexpected error in searchRecipes:', error)
     return []
