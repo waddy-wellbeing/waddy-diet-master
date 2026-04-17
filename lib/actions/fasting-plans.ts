@@ -42,6 +42,8 @@ export async function generateFastingPlan(
 
     const dailyCalories = profile.targets?.daily_calories
     const fastingMealsPerDay = profile.preferences?.fasting_meals_per_day
+    const userCookingSkill = (profile.preferences?.cooking_skill as 'beginner' | 'intermediate' | 'advanced') || 'intermediate'
+    const maxPrepTimeMinutes = profile.preferences?.max_prep_time_minutes as number | undefined
 
     if (!dailyCalories) {
       return { 
@@ -79,7 +81,7 @@ export async function generateFastingPlan(
 
     console.log('Fasting meals with calculated calories:', fastingMealsWithCalories)
 
-    // 4. Fetch all public recipes (we'll add filtering later)
+    // 4. Fetch all public recipes
     const { data: allRecipes, error: recipesError } = await supabase
       .from('recipes')
       .select(`
@@ -87,7 +89,10 @@ export async function generateFastingPlan(
         name,
         meal_type,
         nutrition_per_serving,
-        recommendation_group
+        recommendation_group,
+        difficulty,
+        prep_time_minutes,
+        cook_time_minutes
       `)
       .eq('is_public', true)
       .not('nutrition_per_serving', 'is', null)
@@ -133,6 +138,13 @@ export async function generateFastingPlan(
         const baseCalories = recipe.nutrition_per_serving?.calories
         if (!baseCalories || baseCalories <= 0) continue
 
+        // Time filter: skip recipes that exceed the user's max prep time
+        const recipePrep = (recipe as any).prep_time_minutes as number | null
+        const recipeCook = (recipe as any).cook_time_minutes as number | null
+        const hasTiming = recipePrep !== null || recipeCook !== null
+        const totalTime = (recipePrep || 0) + (recipeCook || 0)
+        if (maxPrepTimeMinutes && hasTiming && totalTime > maxPrepTimeMinutes) continue
+
         // Calculate scale factor to hit exact target calories
         const scaleFactor = targetCalories / baseCalories
 
@@ -157,10 +169,30 @@ export async function generateFastingPlan(
           proteinScore * 0.5 + carbsScore * 0.3 + fatScore * 0.2
         )
 
+        // Cooking difficulty bonus: rewards recipes appropriate for the user's skill level
+        const difficultyRaw = ((recipe as any).difficulty as string | null)?.toLowerCase() || null
+        const normalizedDifficulty = !difficultyRaw
+          ? null
+          : difficultyRaw === 'easy' || difficultyRaw === 'simple'
+          ? 'easy'
+          : difficultyRaw === 'hard' || difficultyRaw === 'difficult'
+          ? 'hard'
+          : 'medium'
+        let cookingBonus = 0
+        if (normalizedDifficulty) {
+          if (userCookingSkill === 'beginner') {
+            cookingBonus = normalizedDifficulty === 'easy' ? 20 : normalizedDifficulty === 'medium' ? 5 : -15
+          } else if (userCookingSkill === 'intermediate') {
+            cookingBonus = normalizedDifficulty === 'easy' ? 5 : normalizedDifficulty === 'medium' ? 20 : 5
+          } else {
+            cookingBonus = normalizedDifficulty === 'easy' ? 5 : normalizedDifficulty === 'medium' ? 10 : 20
+          }
+        }
+
         suitableRecipes.push({
           id: recipe.id,
           scaleFactor,
-          macroScore,
+          macroScore: Math.max(0, macroScore + cookingBonus),
           isRamadanRec: Array.isArray(recipe.recommendation_group) && recipe.recommendation_group.includes('ramadan')
         })
       }

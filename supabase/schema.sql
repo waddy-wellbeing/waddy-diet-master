@@ -135,6 +135,10 @@ CREATE INDEX recipes_tags_idx ON recipes USING GIN(tags);
 CREATE INDEX recipes_recommendation_group_idx ON recipes USING GIN(recommendation_group);
 CREATE INDEX recipes_created_by_idx ON recipes(created_by);
 CREATE INDEX recipes_cuisine_idx ON recipes(cuisine);
+CREATE INDEX recipes_difficulty_idx ON recipes(difficulty) WHERE difficulty IS NOT NULL;
+CREATE INDEX recipes_prep_time_idx ON recipes(prep_time_minutes) WHERE prep_time_minutes IS NOT NULL;
+CREATE INDEX recipes_cook_time_idx ON recipes(cook_time_minutes) WHERE cook_time_minutes IS NOT NULL;
+CREATE INDEX recipes_public_difficulty_idx ON recipes(is_public, difficulty) WHERE is_public = TRUE AND difficulty IS NOT NULL;
 
 -- =============================================================================
 -- DAILY PLANS

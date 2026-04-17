@@ -776,9 +776,13 @@ export async function assignSuggestedPlansForUser({
       return ['breakfast', 'lunch', 'dinner', 'snacks']
     })()
 
+    // Extract user cooking preferences for recipe filtering
+    const userCookingSkill = (preferences.cooking_skill as 'beginner' | 'intermediate' | 'advanced') || 'intermediate'
+    const maxPrepTimeMinutes = preferences.max_prep_time_minutes as number | undefined
+
     const { data: allRecipes, error: recipesError } = await supabase
       .from('recipes')
-      .select('id, meal_type, recommendation_group, nutrition_per_serving')
+      .select('id, meal_type, recommendation_group, nutrition_per_serving, difficulty, prep_time_minutes, cook_time_minutes')
       .eq('is_public', true)
       .not('nutrition_per_serving', 'is', null)
 
@@ -826,6 +830,14 @@ export async function assignSuggestedPlansForUser({
         const baseCalories = nutritionData?.calories
         if (!baseCalories || baseCalories <= 0) continue
 
+        // Time filter: skip recipes that exceed the user's max prep time
+        // Recipes with no timing data are included (we don't penalise unknowns)
+        const recipePrep = recipe.prep_time_minutes as number | null
+        const recipeCook = recipe.cook_time_minutes as number | null
+        const hasTiming = recipePrep !== null || recipeCook !== null
+        const totalTime = (recipePrep || 0) + (recipeCook || 0)
+        if (maxPrepTimeMinutes && hasTiming && totalTime > maxPrepTimeMinutes) continue
+
         const scaleFactor = targetCalories / baseCalories
         const isWithinCalorieRange = scaleFactor >= minScale && scaleFactor <= maxScale
 
@@ -850,10 +862,32 @@ export async function assignSuggestedPlansForUser({
           proteinScore * 0.5 + carbsScore * 0.3 + fatScore * 0.2,
         )
 
+        // Cooking difficulty bonus: rewards recipes that match the user's skill level
+        // Range: -15 (too hard for beginner) to +20 (perfect skill match)
+        const difficultyRaw = (recipe.difficulty as string | null)?.toLowerCase() || null
+        const normalizedDifficulty = !difficultyRaw
+          ? null
+          : difficultyRaw === 'easy' || difficultyRaw === 'simple'
+          ? 'easy'
+          : difficultyRaw === 'hard' || difficultyRaw === 'difficult'
+          ? 'hard'
+          : 'medium'
+        let cookingBonus = 0
+        if (normalizedDifficulty) {
+          if (userCookingSkill === 'beginner') {
+            cookingBonus = normalizedDifficulty === 'easy' ? 20 : normalizedDifficulty === 'medium' ? 5 : -15
+          } else if (userCookingSkill === 'intermediate') {
+            cookingBonus = normalizedDifficulty === 'easy' ? 5 : normalizedDifficulty === 'medium' ? 20 : 5
+          } else {
+            // advanced: slight preference for challenging recipes
+            cookingBonus = normalizedDifficulty === 'easy' ? 5 : normalizedDifficulty === 'medium' ? 10 : 20
+          }
+        }
+
         suitableRecipes.push({
           id: recipe.id,
           scale_factor: Math.round(scaleFactor * 100) / 100,
-          score: isWithinCalorieRange ? macroSimilarityScore : -1,
+          score: isWithinCalorieRange ? Math.max(0, macroSimilarityScore + cookingBonus) : -1,
           meal_type: recipeMealTypes,
           recommendation_group: recipe.recommendation_group || [],
         })
