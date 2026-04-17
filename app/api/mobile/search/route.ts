@@ -14,10 +14,14 @@ export function OPTIONS() {
  * GET /api/mobile/search?q=<query>
  *
  * Search public recipes by name (case-insensitive).
- * Returns up to 20 results.
+ * Returns up to `limit` results (default: 100, max: 200).
  */
 export async function GET(request: NextRequest) {
   const q = request.nextUrl.searchParams.get('q')?.trim()
+  const rawLimit = Number(request.nextUrl.searchParams.get('limit') || '100')
+  const limit = Number.isFinite(rawLimit)
+    ? Math.max(1, Math.min(200, Math.floor(rawLimit)))
+    : 100
 
   if (!q) {
     return errorResponse('Missing required query param: q')
@@ -32,7 +36,7 @@ export async function GET(request: NextRequest) {
     .eq('status', 'complete')
     .ilike('name', `%${q}%`)
     .order('name')
-    .limit(20)
+    .limit(limit)
 
   if (error) {
     console.error('[mobile/search] Supabase error:', error.message)

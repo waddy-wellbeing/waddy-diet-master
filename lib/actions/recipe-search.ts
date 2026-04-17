@@ -13,21 +13,24 @@ export async function searchRecipes({
 }): Promise<any[]> {
   try {
     const supabase = await createClient()
+
+    // Keep compatibility with legacy and corrected snack meal_type values in the DB.
+    const snackAliases = ["snack", "snacks & sweetes", "snacks & sweets", "smoothies"]
     
     // Meal type mapping for proper recipe filtering
     const mealTypeMapping: Record<string, string[]> = {
       breakfast: ["breakfast", "smoothies"],
       lunch: ["lunch", "one pot", "side dishes"],
       dinner: ["dinner", "one pot", "side dishes"],
-      snacks: ["snack", "snacks & sweets", "smoothies"],
-      mid_morning: ["snack", "snacks & sweets", "smoothies"],
-      afternoon: ["snack", "snacks & sweets", "smoothies"],
-      evening: ["snack", "snacks & sweets", "smoothies"],
+      snacks: snackAliases,
+      mid_morning: snackAliases,
+      afternoon: snackAliases,
+      evening: snackAliases,
       // Fasting meal mappings
       "pre-iftar": ["pre-iftar", "smoothies"],
       "iftar": ["lunch", "one pot"],
       "full-meal-taraweeh": ["lunch", "dinner", "one pot"],
-      "snack-taraweeh": ["snack", "snacks & sweets"],
+      "snack-taraweeh": ["snack", "snacks & sweetes", "snacks & sweets"],
       "suhoor": ["breakfast", "dinner"],
     }
     

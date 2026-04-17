@@ -7,6 +7,11 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { ChevronLeft, ChevronRight, Calendar, Clock, Flame, Beef, Wheat } from 'lucide-react'
+import {
+  getRegularMealStructure,
+  getSnackIndexForSlotName,
+  isCoreRegularMealSlot,
+} from '@/lib/utils/regular-meal-structure'
 import type { DailyPlanRecord, DailyPlan, PlanMealSlot } from '@/lib/types/nutri'
 
 interface Recipe {
@@ -44,11 +49,46 @@ export function PlanContent({
   const dailyCarbs = profile?.targets?.carbs_g || 250
   const dailyFat = profile?.targets?.fat_g || 65
 
+  const mealStructure = getRegularMealStructure(profile?.preferences)
+  const mealOrder = useMemo(
+    () =>
+      mealStructure.length > 0
+        ? mealStructure.map((slot) => slot.name)
+        : ['breakfast', 'lunch', 'dinner', 'snacks'],
+    [mealStructure],
+  )
+
+  const effectiveStructure = useMemo(
+    () => mealOrder.map((name) => ({ name, percentage: 0 })),
+    [mealOrder],
+  )
+
+  const getPlanMealBySlotName = (slotName: string) => {
+    if (!selectedPlan?.plan) return null
+
+    if (isCoreRegularMealSlot(slotName)) {
+      return selectedPlan.plan[slotName as keyof DailyPlan] as PlanMealSlot | null
+    }
+
+    const snackIndex = getSnackIndexForSlotName(slotName, effectiveStructure)
+    if (snackIndex < 0) return null
+
+    const snacks = selectedPlan.plan.snacks
+    return Array.isArray(snacks) ? snacks[snackIndex] || null : null
+  }
+
   const mealLabels: Record<string, string> = {
     breakfast: '🥞 Breakfast',
     lunch: '🍽️ Lunch',
     dinner: '🍖 Dinner',
     snacks: '🍎 Snacks',
+    snack: '🍎 Snack',
+    snack_1: '🍎 Snack 1',
+    snack_2: '🍎 Snack 2',
+    snack_3: '🍎 Snack 3',
+    mid_morning: '☕ Mid-Morning Snack',
+    afternoon: '🍪 Afternoon Snack',
+    evening: '🥜 Evening Snack',
   }
 
   const renderMealCard = (mealType: string, meal: any) => {
@@ -301,12 +341,13 @@ export function PlanContent({
           <div className="space-y-4">
             <h3 className="text-lg font-semibold">Today's Meals</h3>
             <div className="grid gap-4 md:grid-cols-2">
-              {selectedPlan.plan.breakfast && renderMealCard('breakfast', selectedPlan.plan.breakfast)}
-              {selectedPlan.plan.lunch && renderMealCard('lunch', selectedPlan.plan.lunch)}
-              {selectedPlan.plan.dinner && renderMealCard('dinner', selectedPlan.plan.dinner)}
-              {selectedPlan.plan.snacks && selectedPlan.plan.snacks.length > 0 && (
-                renderMealCard('snacks', selectedPlan.plan.snacks[0])
-              )}
+              {mealOrder
+                .map((slotName) => {
+                  const meal = getPlanMealBySlotName(slotName)
+                  if (!meal) return null
+                  return renderMealCard(slotName, meal)
+                })
+                .filter(Boolean)}
             </div>
           </div>
 

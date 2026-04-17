@@ -25,15 +25,15 @@ const REGULAR_MEAL_CONFIG: MealRatioConfig[] = [
   { name: 'breakfast', percentage: 25, acceptedMealTypes: ['breakfast', 'smoothies'] },
   { name: 'lunch', percentage: 35, acceptedMealTypes: ['lunch', 'one pot', 'dinner'] },
   { name: 'dinner', percentage: 25, acceptedMealTypes: ['dinner', 'lunch', 'one pot'] },
-  { name: 'snacks', percentage: 15, acceptedMealTypes: ['snacks & sweetes', 'side dishes', 'snack'] },
+  { name: 'snacks', percentage: 15, acceptedMealTypes: ['snacks & sweetes', 'snacks & sweets', 'side dishes', 'snack'] },
 ]
 
 const FASTING_MEAL_CONFIG: MealRatioConfig[] = [
   { name: 'suhoor', percentage: 20, acceptedMealTypes: ['breakfast', 'dinner'] },
-  { name: 'pre-iftar', percentage: 10, acceptedMealTypes: ['snacks & sweetes', 'side dishes'] },
+  { name: 'pre-iftar', percentage: 10, acceptedMealTypes: ['snacks & sweetes', 'snacks & sweets', 'side dishes'] },
   { name: 'iftar', percentage: 40, acceptedMealTypes: ['lunch', 'dinner', 'one pot'] },
   { name: 'full-meal-taraweeh', percentage: 15, acceptedMealTypes: ['lunch', 'dinner', 'one pot'] },
-  { name: 'snack-taraweeh', percentage: 15, acceptedMealTypes: ['snacks & sweetes', 'side dishes', 'snack'] },
+  { name: 'snack-taraweeh', percentage: 15, acceptedMealTypes: ['snacks & sweetes', 'snacks & sweets', 'side dishes', 'snack'] },
 ]
 
 /** Preflight */
@@ -53,6 +53,10 @@ export function OPTIONS() {
  */
 export async function GET(request: NextRequest) {
   const uid = request.nextUrl.searchParams.get('uid')
+  const rawAlternativesLimit = Number(request.nextUrl.searchParams.get('alternatives_limit') || '20')
+  const alternativesLimit = Number.isFinite(rawAlternativesLimit)
+    ? Math.max(1, Math.min(100, Math.floor(rawAlternativesLimit)))
+    : 20
 
   if (!uid) {
     return errorResponse('Missing required query param: uid')
@@ -91,7 +95,7 @@ export async function GET(request: NextRequest) {
       .select('id, name, image_url, nutrition_per_serving, meal_type')
       .eq('is_public', true)
       .eq('status', 'complete')
-      .limit(100), // Fetch more for better alternatives
+      .limit(500), // Fetch more for broader alternatives
   ])
 
   if (profileResult.error || !profileResult.data) {
@@ -242,7 +246,7 @@ export async function GET(request: NextRequest) {
       return aScaleDiff - bScaleDiff
     })
 
-    // ── 7.3 Return top 3 alternatives (or fewer if not available) ──────
+    // ── 7.3 Return alternatives (configurable limit, default 20) ────────
     // If planned recipe exists, ensure it's first
     if (plannedRecipeId) {
       const plannedIndex = scoredRecipes.findIndex((r) => r.id === plannedRecipeId)
@@ -252,7 +256,7 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    dailyPlanResponse[slotName] = scoredRecipes.slice(0, 3)
+    dailyPlanResponse[slotName] = scoredRecipes.slice(0, alternativesLimit)
   }
 
   // ── Response ──────────────────────────────────────────────────────────

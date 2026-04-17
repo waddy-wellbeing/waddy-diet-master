@@ -231,7 +231,7 @@ export function MealBuilderContent({
     const all = recipesByMealType[selectedMeal] || [];
     const q = debouncedQuery.trim();
 
-    if (!q) return all.slice(0, 20);
+    if (!q) return all.slice(0, 100);
 
     // Normalize text for better matching (remove diacritics, handle both Arabic and English)
     const normalize = (text: string): string => {

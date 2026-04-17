@@ -485,6 +485,35 @@ export default async function DashboardPage() {
     : (dailyPlan?.plan as DailyPlan | undefined);
   const selectedRecipeIndices: Record<string, number> = {};
 
+  const getPlannedRecipeIdForSlot = (slot: string): string | undefined => {
+    if (!plan) return undefined;
+
+    if (isFastingModeCheck) {
+      if (slot === "snack-taraweeh") {
+        const snackSlot = (plan as DailyPlan)[slot as keyof DailyPlan] as any;
+        return Array.isArray(snackSlot)
+          ? snackSlot[0]?.recipe_id
+          : snackSlot?.recipe_id;
+      }
+
+      return (plan as Record<string, any>)[slot]?.recipe_id;
+    }
+
+    if (slot === "breakfast" || slot === "lunch" || slot === "dinner") {
+      return (plan as Record<string, any>)[slot]?.recipe_id;
+    }
+
+    const snackSlots = userMealStructure
+      .map((meal) => meal.name)
+      .filter((name) => !["breakfast", "lunch", "dinner"].includes(name));
+    const snackIndex = snackSlots.indexOf(slot);
+
+    if (snackIndex < 0) return undefined;
+
+    const snacks = (plan as DailyPlan).snacks;
+    return Array.isArray(snacks) ? snacks[snackIndex]?.recipe_id : undefined;
+  }
+
   // Initialize with 0 for all meal slots
   for (const slot of mealSlots) {
     selectedRecipeIndices[slot] = 0;
@@ -493,7 +522,7 @@ export default async function DashboardPage() {
   // If plan exists, find the index of the planned recipe in the available recipes
   if (plan) {
     for (const slot of mealSlots) {
-      const plannedRecipeId = (plan as Record<string, any>)[slot]?.recipe_id;
+      const plannedRecipeId = getPlannedRecipeIdForSlot(slot);
       if (plannedRecipeId) {
         const idx = recipesByMealType[slot].findIndex(
           (r) => r.id === plannedRecipeId,

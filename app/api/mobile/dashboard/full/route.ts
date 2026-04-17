@@ -29,15 +29,15 @@ const REGULAR_MEAL_CONFIG: MealRatioConfig[] = [
   { name: 'breakfast', percentage: 25, acceptedMealTypes: ['breakfast', 'smoothies'] },
   { name: 'lunch', percentage: 35, acceptedMealTypes: ['lunch', 'one pot', 'dinner'] },
   { name: 'dinner', percentage: 25, acceptedMealTypes: ['dinner', 'lunch', 'one pot'] },
-  { name: 'snacks', percentage: 15, acceptedMealTypes: ['snacks & sweetes', 'side dishes', 'snack'] },
+  { name: 'snacks', percentage: 15, acceptedMealTypes: ['snacks & sweetes', 'snacks & sweets', 'side dishes', 'snack'] },
 ]
 
 const FASTING_MEAL_CONFIG: MealRatioConfig[] = [
   { name: 'suhoor', percentage: 20, acceptedMealTypes: ['breakfast', 'dinner'] },
-  { name: 'pre-iftar', percentage: 10, acceptedMealTypes: ['snacks & sweetes', 'side dishes'] },
+  { name: 'pre-iftar', percentage: 10, acceptedMealTypes: ['snacks & sweetes', 'snacks & sweets', 'side dishes'] },
   { name: 'iftar', percentage: 40, acceptedMealTypes: ['lunch', 'dinner', 'one pot'] },
   { name: 'full-meal-taraweeh', percentage: 15, acceptedMealTypes: ['lunch', 'dinner', 'one pot'] },
-  { name: 'snack-taraweeh', percentage: 15, acceptedMealTypes: ['snacks & sweetes', 'side dishes', 'snack'] },
+  { name: 'snack-taraweeh', percentage: 15, acceptedMealTypes: ['snacks & sweetes', 'snacks & sweets', 'side dishes', 'snack'] },
 ]
 
 interface ScaledRecipe {

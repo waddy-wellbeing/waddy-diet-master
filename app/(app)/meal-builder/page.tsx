@@ -223,18 +223,19 @@ export default async function MealBuilderPage({ searchParams }: PageProps) {
   }
 
   // Meal type mapping
+  const snackAliases = ["snack", "snacks & sweetes", "snacks & sweets", "smoothies"];
   const mealTypeMapping: Record<string, string[]> = {
     breakfast: ["breakfast", "smoothies"],
-    mid_morning: ["snack", "snacks & sweetes", "smoothies"],
+    mid_morning: snackAliases,
     lunch: ["lunch", "one pot", "dinner", "side dishes"],
-    afternoon: ["snack", "snacks & sweetes", "smoothies"],
+    afternoon: snackAliases,
     dinner: ["dinner", "lunch", "one pot", "side dishes", "breakfast"],
-    snack: ["snack", "snacks & sweetes", "smoothies"],
-    snacks: ["snack", "snacks & sweetes", "smoothies"],
-    snack_1: ["snack", "snacks & sweetes", "smoothies"],
-    snack_2: ["snack", "snacks & sweetes", "smoothies"],
-    snack_3: ["snack", "snacks & sweetes", "smoothies"],
-    evening: ["snack", "snacks & sweetes", "smoothies"],
+    snack: snackAliases,
+    snacks: snackAliases,
+    snack_1: snackAliases,
+    snack_2: snackAliases,
+    snack_3: snackAliases,
+    evening: snackAliases,
     // Fasting meal types
     "pre-iftar": ["pre-iftar", "smoothies"], // Pre-iftar first, then smoothies as fallback
     iftar: ["lunch"], // Main breaking fast meal - lunch recipes only
