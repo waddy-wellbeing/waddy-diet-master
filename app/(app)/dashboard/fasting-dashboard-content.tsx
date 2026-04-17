@@ -26,6 +26,7 @@ import {
   QuickStats,
 } from "@/components/dashboard/dashboard-components";
 import { MealPlanSheet } from "@/components/dashboard/meal-plan-sheet";
+import { RecipePickerSheet } from "@/components/dashboard/recipe-picker-sheet";
 import { useAnalytics } from "@/components/analytics/analytics-provider";
 import { logout } from "@/lib/utils/logout";
 import { createClient } from "@/lib/supabase/client";
@@ -36,6 +37,7 @@ import {
   getCurrentPagePath,
 } from "@/lib/utils/analytics";
 import { saveFullDayPlan } from "@/lib/actions/daily-plans";
+import { savePlanMeal } from "@/lib/actions/meal-planning";
 import { getSuggestedRecipeIndex } from "@/lib/utils/meal-suggestions";
 import type {
   Profile,
@@ -107,6 +109,10 @@ export function FastingDashboardContent({
   // Meal planning sheet state
   const [planSheetOpen, setPlanSheetOpen] = useState(false);
   const [planSheetDate, setPlanSheetDate] = useState<Date | null>(null);
+
+  // Recipe search sheet state
+  const [searchSheetOpen, setSearchSheetOpen] = useState(false);
+  const [searchMealName, setSearchMealName] = useState<string | null>(null);
 
   // Fasting mode is always enabled for this dashboard
   const isFastingMode = true;
@@ -418,6 +424,36 @@ export function FastingDashboardContent({
         await fetchDayData(selectedDate);
       }
     }
+  };
+
+  const handleSearchMeal = (mealName: string) => {
+    setSearchMealName(mealName);
+    setSearchSheetOpen(true);
+  };
+
+  const handleSearchRecipeSelected = async (recipeId: string) => {
+    if (!searchMealName) return;
+    setSearchSheetOpen(false);
+
+    const fastingSlots = ["pre-iftar", "iftar", "full-meal-taraweeh", "snack-taraweeh", "suhoor"];
+    const mealTypeForSave = fastingSlots.includes(searchMealName) ? searchMealName : searchMealName;
+
+    const result = await savePlanMeal({
+      date: format(selectedDate, "yyyy-MM-dd"),
+      mealType: mealTypeForSave,
+      recipeId,
+      isFastingMode: true,
+    });
+
+    if (result.success) {
+      toast.success("Recipe updated in plan");
+      await fetchDayData(selectedDate);
+      await handlePlanUpdated();
+    } else {
+      toast.error(result.error || "Failed to update plan");
+    }
+
+    setSearchMealName(null);
   };
 
   // Build meal data using mealTargets for proper calorie allocation
@@ -1271,6 +1307,7 @@ export function FastingDashboardContent({
                 onLogMeal={handleLogMeal}
                 onUnlogMeal={handleUnlogMeal}
                 onSwapMeal={handleSwapMeal}
+                onSearchMeal={handleSearchMeal}
                 onAddFood={() => {
                   // Navigate to meal builder or open add food modal
                   console.log("Add food to", meal.name);
@@ -1328,6 +1365,21 @@ export function FastingDashboardContent({
         onPlanUpdated={handlePlanUpdated}
         isFastingMode={true}
         selectedMeals={mealSlots.map((slot) => slot.name as MealName)} // Pass selected meals
+      />
+
+      {/* Recipe Search Sheet — search all recipes for this fasting meal type */}
+      <RecipePickerSheet
+        open={searchSheetOpen}
+        onOpenChange={(open) => {
+          setSearchSheetOpen(open);
+          if (!open) setSearchMealName(null);
+        }}
+        mealType={
+          searchMealName
+            ? (searchMealName as any)
+            : null
+        }
+        onRecipeSelected={handleSearchRecipeSelected}
       />
     </div>
   );

@@ -26,6 +26,7 @@ import {
   QuickStats,
 } from "@/components/dashboard/dashboard-components";
 import { MealPlanSheet } from "@/components/dashboard/meal-plan-sheet";
+import { RecipePickerSheet } from "@/components/dashboard/recipe-picker-sheet";
 import { useAnalytics } from "@/components/analytics/analytics-provider";
 import { logout } from "@/lib/utils/logout";
 import { createClient } from "@/lib/supabase/client";

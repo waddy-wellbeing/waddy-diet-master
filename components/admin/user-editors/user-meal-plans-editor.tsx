@@ -12,8 +12,10 @@ import {
   Plus,
   AlertCircle,
   Save,
+  Search,
   Sparkles,
   Trash2,
+  X,
 } from "lucide-react"
 import {
   Card,
@@ -34,6 +36,7 @@ import {
   type AdminUserPlan,
 } from "@/lib/actions/admin-plans"
 import { assignMealStructure } from "@/lib/actions/users"
+import { searchRecipes } from "@/lib/actions/recipe-search"
 import {
   getSnackIndexForSlotName,
   isCoreRegularMealSlot,
@@ -182,6 +185,33 @@ export function UserMealPlansEditor({ user, onUpdate }: UserMealPlansEditorProps
   const [expandedSupplements, setExpandedSupplements] = useState<Record<string, boolean>>({})
   const [supplementEdits, setSupplementEdits] = useState<Record<string, MealSupplement[]>>({})
   const [savingSupplementsMeal, setSavingSupplementsMeal] = useState<string | null>(null)
+  const [searchQueryByMeal, setSearchQueryByMeal] = useState<Record<string, string>>({})
+  const [searchResultsByMeal, setSearchResultsByMeal] = useState<Record<string, any[]>>({})
+  const [searchingByMeal, setSearchingByMeal] = useState<Record<string, boolean>>({})
+  const searchTimersRef = useRef<Record<string, ReturnType<typeof setTimeout>>>({})
+
+  const handleSearchChange = (mealType: string, query: string) => {
+    setSearchQueryByMeal((prev) => ({ ...prev, [mealType]: query }))
+    if (searchTimersRef.current[mealType]) {
+      clearTimeout(searchTimersRef.current[mealType])
+    }
+    if (!query.trim()) {
+      setSearchResultsByMeal((prev) => ({ ...prev, [mealType]: [] }))
+      setSearchingByMeal((prev) => ({ ...prev, [mealType]: false }))
+      return
+    }
+    setSearchingByMeal((prev) => ({ ...prev, [mealType]: true }))
+    searchTimersRef.current[mealType] = setTimeout(async () => {
+      try {
+        const results = await searchRecipes({ query, mealType })
+        setSearchResultsByMeal((prev) => ({ ...prev, [mealType]: results }))
+      } catch {
+        setSearchResultsByMeal((prev) => ({ ...prev, [mealType]: [] }))
+      } finally {
+        setSearchingByMeal((prev) => ({ ...prev, [mealType]: false }))
+      }
+    }, 300)
+  }
 
   const loadPlans = async () => {
     setLoading(true)
@@ -701,9 +731,100 @@ export function UserMealPlansEditor({ user, onUpdate }: UserMealPlansEditorProps
                         Suggest
                       </Button>
                       {mealSuggestions.length > 0 && (
-                        <span className="text-[10px] text-muted-foreground">{mealSuggestions.length} options</span>
+                        <span className="text-[10px] text-muted-foreground">{mealSuggestions.length} suggestions</span>
                       )}
                     </div>
+
+                    {/* Search input */}
+                    <div className="relative">
+                      <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3 w-3 text-muted-foreground pointer-events-none" />
+                      <Input
+                        placeholder="Search recipes..."
+                        value={searchQueryByMeal[mealType] || ""}
+                        onChange={(e) => handleSearchChange(mealType, e.target.value)}
+                        className="h-7 pl-7 pr-7 text-xs"
+                      />
+                      {(searchQueryByMeal[mealType] || searchingByMeal[mealType]) && (
+                        <button
+                          type="button"
+                          onClick={() => handleSearchChange(mealType, "")}
+                          className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                        >
+                          {searchingByMeal[mealType] ? (
+                            <Loader2 className="h-3 w-3 animate-spin" />
+                          ) : (
+                            <X className="h-3 w-3" />
+                          )}
+                        </button>
+                      )}
+                    </div>
+
+                    {/* Suggestions or search results */}
+                    {(() => {
+                      const query = searchQueryByMeal[mealType] || ""
+                      const isSearchActive = query.trim().length > 0
+                      const searchResults = searchResultsByMeal[mealType] || []
+
+                      const items = isSearchActive
+                        ? searchResults.map((r) => ({
+                            id: r.id,
+                            name: r.name,
+                            image_url: r.image_url || null,
+                            calories: r.nutrition_per_serving?.calories
+                              ? Math.round(r.nutrition_per_serving.calories)
+                              : null,
+                            badge: null as string | null,
+                          }))
+                        : mealSuggestions.map((s) => ({
+                            id: s.id,
+                            name: s.name,
+                            image_url: s.image_url,
+                            calories: s.scaled_calories ? Math.round(s.scaled_calories) : null,
+                            badge: `${Math.round(s.macro_similarity_score)}%`,
+                          }))
+
+                      if (items.length === 0) return null
+
+                      return (
+                        <div className="space-y-1 max-h-44 overflow-y-auto rounded-md border bg-muted/20 p-1">
+                          <p className="px-1 text-[10px] text-muted-foreground">
+                            {isSearchActive
+                              ? `${items.length} result${items.length !== 1 ? "s" : ""}`
+                              : "AI suggestions — click to assign"}
+                          </p>
+                          {items.map((item) => {
+                            const isAssigning = assigningMealKey === `${mealType}:${item.id}`
+                            return (
+                              <button
+                                key={item.id}
+                                type="button"
+                                disabled={isAssigning}
+                                onClick={() => handleQuickAssignMeal(mealType, item.id)}
+                                className="flex w-full items-center gap-2 rounded border bg-background px-2 py-1.5 text-left hover:bg-muted disabled:opacity-50 transition-colors"
+                              >
+                                {item.image_url && (
+                                  <div className="relative h-8 w-8 flex-shrink-0 overflow-hidden rounded">
+                                    <Image src={item.image_url} alt={item.name} fill className="object-cover" />
+                                  </div>
+                                )}
+                                <div className="min-w-0 flex-1">
+                                  <p className="truncate text-xs font-medium">{item.name}</p>
+                                  {item.calories !== null && (
+                                    <p className="text-[10px] text-muted-foreground">{item.calories} kcal</p>
+                                  )}
+                                </div>
+                                {item.badge && (
+                                  <Badge variant="secondary" className="text-[10px] flex-shrink-0">
+                                    {item.badge}
+                                  </Badge>
+                                )}
+                                {isAssigning && <Loader2 className="h-3 w-3 animate-spin flex-shrink-0" />}
+                              </button>
+                            )
+                          })}
+                        </div>
+                      )
+                    })()}
 
                     <div className="rounded-md border border-primary/20 bg-primary/5 p-2">
                       <button
