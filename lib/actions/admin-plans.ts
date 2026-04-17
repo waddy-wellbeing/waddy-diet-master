@@ -1134,12 +1134,38 @@ export async function getScaledRecipesForMeal({
       return { success: false, error: `Could not determine target calories for meal type "${mealType}"` }
     }
 
-    // Fetch all recipes
-    const { data: allRecipes, error: recipesError } = await supabase
+    // Meal-type → accepted recipe meal_type values (mirrors recipe-search.ts mapping)
+    // Named snack slots (mid_morning, afternoon, evening, etc.) map to snack types
+    const mealTypeMapping: Record<string, string[]> = {
+      breakfast: ['breakfast', 'smoothies'],
+      lunch: ['lunch', 'one pot', 'side dishes'],
+      dinner: ['dinner', 'one pot', 'side dishes'],
+      snacks: ['snack', 'snacks & sweets', 'smoothies'],
+      // Named snack slots
+      mid_morning: ['snack', 'snacks & sweets', 'smoothies'],
+      afternoon: ['snack', 'snacks & sweets', 'smoothies'],
+      evening: ['snack', 'snacks & sweets', 'smoothies'],
+      // Fasting meals
+      'pre-iftar': ['pre-iftar', 'smoothies'],
+      iftar: ['lunch', 'one pot'],
+      'full-meal-taraweeh': ['lunch', 'dinner', 'one pot'],
+      'snack-taraweeh': ['snack', 'snacks & sweets'],
+      suhoor: ['breakfast', 'dinner'],
+    }
+    const acceptedMealTypes = mealTypeMapping[mealType] ?? []
+
+    // Fetch recipes filtered by meal type at DB level (no meal type → fetch all)
+    let recipesQuery = supabase
       .from('recipes')
       .select('id, name, image_url, meal_type, recommendation_group, nutrition_per_serving')
       .eq('is_public', true)
       .not('nutrition_per_serving', 'is', null)
+
+    if (acceptedMealTypes.length > 0) {
+      recipesQuery = recipesQuery.overlaps('meal_type', acceptedMealTypes)
+    }
+
+    const { data: allRecipes, error: recipesError } = await recipesQuery
 
     if (recipesError) {
       return { success: false, error: recipesError.message }
