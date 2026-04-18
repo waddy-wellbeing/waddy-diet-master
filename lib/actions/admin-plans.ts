@@ -747,8 +747,8 @@ export async function assignSuggestedPlansForUser({
       snack_3: ['snack', 'snacks & sweetes', 'smoothies'],
       evening: ['snack', 'snacks & sweetes', 'smoothies'],
       'pre-iftar': ['pre-iftar', 'smoothies'],
-      iftar: ['lunch'],
-      'full-meal-taraweeh': ['lunch', 'dinner'],
+      iftar: ['lunch', 'one pot'],
+      'full-meal-taraweeh': ['lunch', 'dinner', 'one pot'],
       'snack-taraweeh': ['snack'],
       suhoor: ['breakfast', 'dinner'],
     }
