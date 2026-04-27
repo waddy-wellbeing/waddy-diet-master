@@ -1022,8 +1022,12 @@ export function DashboardContent({
       const { saveMealToPlan } = await import("@/lib/actions/daily-plans");
       const dateStr = format(selectedDate, "yyyy-MM-dd");
 
-      // For each visible meal slot, try to find the next available recipe with better macro match
-      const updates = [];
+      // For each visible meal slot, prepare the next recipe candidate.
+      const updates: Array<{
+        mealType: string;
+        nextIndex: number;
+        save: () => Promise<{ success: true } | { success: false; error: string }>;
+      }> = [];
       for (const { name: mealType } of mealSlots) {
         const recipes = recipesByMealType[mealType] || [];
         if (recipes.length === 0) continue;
@@ -1039,28 +1043,39 @@ export function DashboardContent({
             : getSnackIndexForSlotName(mealType, regularMealStructure);
 
           updates.push(
-            saveMealToPlan({
-              date: dateStr,
-              mealType: (isCoreRegularMealSlot(mealType) ? mealType : "snacks") as "breakfast" | "lunch" | "dinner" | "snacks",
-              snackIndex:
-                typeof snackIndex === "number" && snackIndex >= 0
-                  ? snackIndex
-                  : undefined,
-              recipeId: nextRecipe.id,
-              servings: nextRecipe.scale_factor || 1,
-            }),
+            {
+              mealType,
+              nextIndex,
+              save: () =>
+                saveMealToPlan({
+                  date: dateStr,
+                  mealType: (isCoreRegularMealSlot(mealType) ? mealType : "snacks") as "breakfast" | "lunch" | "dinner" | "snacks",
+                  snackIndex:
+                    typeof snackIndex === "number" && snackIndex >= 0
+                      ? snackIndex
+                      : undefined,
+                  recipeId: nextRecipe.id,
+                  servings: nextRecipe.scale_factor || 1,
+                }),
+            },
           );
-
-          // Update the selected index
-          setSelectedIndices((prev) => ({
-            ...prev,
-            [mealType]: nextIndex,
-          }));
         }
       }
 
-      // Execute all updates in parallel
-      await Promise.all(updates);
+      // Execute updates sequentially to avoid stale write races on the same daily row.
+      let failedUpdates = 0;
+      for (const update of updates) {
+        const result = await update.save();
+        if (result.success) {
+          setSelectedIndices((prev) => ({
+            ...prev,
+            [update.mealType]: update.nextIndex,
+          }));
+        } else {
+          failedUpdates += 1;
+          captureError(buildMealLogError(update.mealType, result.error));
+        }
+      }
 
       // Refresh data
       await fetchDayData(selectedDate);
@@ -1078,9 +1093,15 @@ export function DashboardContent({
         ),
       );
 
-      toast.success("Meals shuffled! Check the new suggestions.", {
-        description: "Selected recipes with better macro matches",
-      });
+      if (failedUpdates > 0) {
+        toast.error("Some meals could not be shuffled.", {
+          description: "Your existing meal choices were kept for failed updates.",
+        });
+      } else {
+        toast.success("Meals shuffled! Check the new suggestions.", {
+          description: "Selected recipes with better macro matches",
+        });
+      }
     } catch (error) {
       captureError(
         buildMealLogError(

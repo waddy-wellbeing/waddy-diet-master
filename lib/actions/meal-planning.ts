@@ -49,12 +49,13 @@ export async function savePlanMeal(params: SavePlanMealParams): Promise<ActionRe
     const { date, mealType, recipeId, snackIndex, isFastingMode = false } = params
 
     // Use correct plan column based on mode
-    const planColumn = isFastingMode ? 'fasting_plan' : 'plan'
+    const planColumn: 'plan' | 'fasting_plan' = isFastingMode ? 'fasting_plan' : 'plan'
+    const otherPlanColumn: 'plan' | 'fasting_plan' = planColumn === 'plan' ? 'fasting_plan' : 'plan'
 
     // Get existing plan for this date
     const { data: existingPlan } = await supabase
       .from('daily_plans')
-      .select(`${planColumn}, daily_totals`)
+      .select('plan, fasting_plan, daily_totals')
       .eq('user_id', user.id)
       .eq('plan_date', date)
       .maybeSingle()
@@ -68,10 +69,12 @@ export async function savePlanMeal(params: SavePlanMealParams): Promise<ActionRe
     }
 
     let updatedPlan: DailyPlan
+    const existingPlanData = (existingPlan as any) || {}
+    const preservedOtherPlan = (existingPlanData[otherPlanColumn] || null) as DailyPlan | null
 
     if (existingPlan) {
       // Update existing plan - FIX: Handle case where fasting_plan column is null
-      updatedPlan = ((existingPlan as any)[planColumn] || {}) as DailyPlan
+      updatedPlan = { ...(existingPlanData[planColumn] || {}) } as DailyPlan
 
       if (mealType === 'snacks' || mealType === 'snack-taraweeh') {
         const resolvedSnackIndex = typeof snackIndex === 'number' && snackIndex >= 0 ? snackIndex : 0
@@ -116,6 +119,7 @@ export async function savePlanMeal(params: SavePlanMealParams): Promise<ActionRe
         user_id: user.id,
         plan_date: date,
         [planColumn]: updatedPlan,
+        [otherPlanColumn]: preservedOtherPlan,
         daily_totals: updatedTotals,
       }, {
         onConflict: 'user_id,plan_date',

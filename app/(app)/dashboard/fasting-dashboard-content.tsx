@@ -927,8 +927,11 @@ export function FastingDashboardContent({
         | DailyPlan
         | undefined;
 
-      // For each meal type, try to find the next available recipe with better macro match
-      const updates = [];
+      // For each meal type, prepare the next recipe candidate.
+      const updates: Array<{
+        mealType: string;
+        save: () => Promise<{ success: true; data: void } | { success: false; error: string }>;
+      }> = [];
       for (const slot of mealSlots) {
         const mealType = slot.name;
         const recipes = recipesByMealType[mealType] || [];
@@ -951,18 +954,29 @@ export function FastingDashboardContent({
 
         if (nextRecipe) {
           updates.push(
-            savePlanMeal({
-              date: dateStr,
-              mealType: mealType as any,
-              recipeId: nextRecipe.id,
-              isFastingMode: true, // Save to fasting_plan column
-            }),
+            {
+              mealType,
+              save: () =>
+                savePlanMeal({
+                  date: dateStr,
+                  mealType: mealType as any,
+                  recipeId: nextRecipe.id,
+                  isFastingMode: true, // Save to fasting_plan column
+                }),
+            },
           );
         }
       }
 
-      // Execute all updates in parallel
-      await Promise.all(updates);
+      // Execute updates sequentially to avoid stale write races on the same daily row.
+      let failedUpdates = 0;
+      for (const update of updates) {
+        const result = await update.save();
+        if (!result.success) {
+          failedUpdates += 1;
+          captureError(buildMealLogError(update.mealType, result.error));
+        }
+      }
 
       // Refresh data
       await fetchDayData(selectedDate);
@@ -980,9 +994,15 @@ export function FastingDashboardContent({
         ),
       );
 
-      toast.success("Meals shuffled! Check the new suggestions.", {
-        description: "Selected recipes with better macro matches",
-      });
+      if (failedUpdates > 0) {
+        toast.error("Some meals could not be shuffled.", {
+          description: "Your existing meal choices were kept for failed updates.",
+        });
+      } else {
+        toast.success("Meals shuffled! Check the new suggestions.", {
+          description: "Selected recipes with better macro matches",
+        });
+      }
     } catch (error) {
       captureError(
         buildMealLogError(

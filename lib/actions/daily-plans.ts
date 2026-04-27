@@ -39,12 +39,13 @@ export async function saveMealToPlan(params: SaveMealToPlanParams): Promise<Save
     console.log('Fasting mode:', isFastingMode)
 
     // Determine which plan column to use (always use daily_totals for totals)
-    const planColumn = isFastingMode ? 'fasting_plan' : 'plan'
+    const planColumn: 'plan' | 'fasting_plan' = isFastingMode ? 'fasting_plan' : 'plan'
+    const otherPlanColumn: 'plan' | 'fasting_plan' = planColumn === 'plan' ? 'fasting_plan' : 'plan'
 
     // Get existing plan for this date
     const { data: existingPlan } = await supabase
       .from('daily_plans')
-      .select(`${planColumn}, daily_totals, mode`)
+      .select('plan, fasting_plan, daily_totals, mode')
       .eq('user_id', user.id)
       .eq('plan_date', date)
       .maybeSingle()
@@ -63,10 +64,12 @@ export async function saveMealToPlan(params: SaveMealToPlanParams): Promise<Save
 
     let updatedPlan: DailyPlan
     let updatedTotals: DailyTotals
+    const existingPlanData = (existingPlan as any) || {}
+    const preservedOtherPlan = (existingPlanData[otherPlanColumn] || null) as DailyPlan | null
 
     if (existingPlan) {
       // Update existing plan
-      const plan = ((existingPlan as any)[planColumn] || {}) as DailyPlan
+      const plan = { ...(existingPlanData[planColumn] || {}) } as DailyPlan
 
       if (mealType === 'snacks') {
         // Keep snacks stored as an array (schema convention). Update the requested snack slot.
@@ -116,6 +119,8 @@ export async function saveMealToPlan(params: SaveMealToPlanParams): Promise<Save
       plan_date: date,
     }
     upsertData[planColumn] = updatedPlan
+    // Preserve the untouched plan column so one mode update cannot clobber the other.
+    upsertData[otherPlanColumn] = preservedOtherPlan
     upsertData['daily_totals'] = updatedTotals // Always use daily_totals, not fasting_daily_totals
 
     const { error: upsertError } = await supabase
