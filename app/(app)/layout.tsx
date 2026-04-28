@@ -16,6 +16,11 @@ export default async function AppLayout({
     redirect('/login')
   }
 
+  // If an admin has forced a password reset, send the user to the update-password page
+  if (user.user_metadata?.force_password_reset === true) {
+    redirect('/update-password?forced=true')
+  }
+
   // Check if user has completed onboarding
   // Use maybeSingle() to handle case where profile doesn't exist yet for new users
   const { data: profile } = await supabase
