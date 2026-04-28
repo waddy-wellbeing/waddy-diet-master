@@ -77,6 +77,14 @@ export default function ForgotPasswordPage() {
                   If an account exists for that email, you&apos;ll receive a password reset link shortly.
                 </p>
               </div>
+              <div className="p-3 bg-muted/50 rounded-lg text-sm space-y-1 text-muted-foreground">
+                <p className="font-medium text-foreground">Didn&apos;t receive it?</p>
+                <ul className="list-disc list-inside space-y-0.5">
+                  <li>Check your spam or junk folder</li>
+                  <li>Make sure you used the right email address</li>
+                  <li>The link expires in 1 hour — request a new one if needed</li>
+                </ul>
+              </div>
               <Button
                 variant="outline"
                 className="w-full"

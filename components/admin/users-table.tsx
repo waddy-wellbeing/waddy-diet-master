@@ -44,9 +44,11 @@ import {
   Loader2,
   Moon,
   Sun,
+  KeyRound,
 } from 'lucide-react'
 import { UserWithProfile, updatePlanStatus, getUsers, adminToggleFastingMode } from '@/lib/actions/users'
 import { PlanAssignmentDialog } from './plan-assignment-dialog'
+import { ResetPasswordDialog } from './reset-password-dialog'
 import type { PlanStatus } from '@/lib/types/nutri'
 import { cn } from '@/lib/utils'
 
@@ -70,6 +72,8 @@ export function UsersTable({ initialUsers, initialCount }: UsersTableProps) {
   const [statusFilter, setStatusFilter] = useState<PlanStatus | 'all'>('all')
   const [selectedUser, setSelectedUser] = useState<UserWithProfile | null>(null)
   const [showAssignDialog, setShowAssignDialog] = useState(false)
+  const [showResetPasswordDialog, setShowResetPasswordDialog] = useState(false)
+  const [resetPasswordUser, setResetPasswordUser] = useState<UserWithProfile | null>(null)
   const [page, setPage] = useState(1)
   const [isSearching, setIsSearching] = useState(false)
   const [totalCount, setTotalCount] = useState(initialCount)
@@ -155,6 +159,11 @@ export function UsersTable({ initialUsers, initialCount }: UsersTableProps) {
   function handleAssignClick(user: UserWithProfile) {
     setSelectedUser(user)
     setShowAssignDialog(true)
+  }
+
+  function handleResetPasswordClick(user: UserWithProfile) {
+    setResetPasswordUser(user)
+    setShowResetPasswordDialog(true)
   }
 
   function handleAssignSuccess(userId: string, mealCount: number) {
@@ -359,6 +368,13 @@ export function UsersTable({ initialUsers, initialCount }: UsersTableProps) {
                             <UserCog className="h-4 w-4 mr-2" />
                             Assign Meal Plan
                           </DropdownMenuItem>
+                          <DropdownMenuItem
+                            onClick={() => handleResetPasswordClick(user)}
+                            className="text-amber-600 dark:text-amber-400 focus:text-amber-600 dark:focus:text-amber-400"
+                          >
+                            <KeyRound className="h-4 w-4 mr-2" />
+                            Reset Password
+                          </DropdownMenuItem>
                           <DropdownMenuSeparator />
                           {status !== 'active' && (
                             <DropdownMenuItem onClick={() => handleStatusChange(user.id, 'active')}>
@@ -432,6 +448,14 @@ export function UsersTable({ initialUsers, initialCount }: UsersTableProps) {
         open={showAssignDialog}
         onOpenChange={setShowAssignDialog}
         onSuccess={handleAssignSuccess}
+      />
+
+      {/* Reset Password Dialog */}
+      <ResetPasswordDialog
+        key={showResetPasswordDialog ? `reset-${resetPasswordUser?.id}` : 'reset-closed'}
+        user={resetPasswordUser}
+        open={showResetPasswordDialog}
+        onOpenChange={setShowResetPasswordDialog}
       />
     </div>
   )
