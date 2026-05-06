@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { createClient } from '@/lib/supabase/client'
@@ -11,7 +11,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { toast } from 'sonner'
-import { Loader2 } from 'lucide-react'
+import { Loader2, ShieldAlert } from 'lucide-react'
 import Link from 'next/link'
 
 /**
@@ -29,12 +29,19 @@ import Link from 'next/link'
  *    → Never hits the server; @supabase/ssr automatically parses it
  *      client-side and fires PASSWORD_RECOVERY via onAuthStateChange.
  *
+ * 4. Admin-forced reset (?forced=true)
+ *    → User is already logged in; the app layout detected force_password_reset
+ *      flag in user_metadata and redirected here.
+ *
  * On iOS the session cookie may not yet be visible to the server when the
  * page first renders (new browser tab from mail app), so we intentionally
  * skip the server-side auth guard and do all gating here with getUser().
  */
 export function UpdatePasswordForm() {
   const router = useRouter()
+  const searchParams = useSearchParams()
+  const isForced = searchParams.get('forced') === 'true'
+
   const [isLoading, setIsLoading] = useState(false)
   // null = checking, true = ready, false = no valid session found
   const [sessionReady, setSessionReady] = useState<boolean | null>(null)
@@ -51,7 +58,8 @@ export function UpdatePasswordForm() {
     const supabase = createClient()
 
     // First, check if a session already exists (covers PKCE + OTP flows
-    // where the callback route already set the cookie before redirecting here)
+    // where the callback route already set the cookie before redirecting here,
+    // and admin-forced resets where the user is already logged in)
     supabase.auth.getUser().then(({ data: { user } }) => {
       if (user) {
         setSessionReady(true)
@@ -90,7 +98,11 @@ export function UpdatePasswordForm() {
     setIsLoading(true)
     const supabase = createClient()
 
-    const { error } = await supabase.auth.updateUser({ password: data.password })
+    // Update password and clear the force_password_reset flag in one call
+    const { error } = await supabase.auth.updateUser({
+      password: data.password,
+      data: { force_password_reset: false },
+    })
 
     if (error) {
       toast.error(error.message)
@@ -159,10 +171,20 @@ export function UpdatePasswordForm() {
           </div>
           <CardTitle className="text-2xl font-bold">Set new password</CardTitle>
           <CardDescription>
-            Enter your new password below. Make sure it&apos;s at least 6 characters.
+            {isForced
+              ? 'Your account requires a password update. Please set a new password to continue.'
+              : "Enter your new password below. Make sure it's at least 6 characters."}
           </CardDescription>
         </CardHeader>
         <CardContent>
+          {isForced && (
+            <div className="mb-4 flex items-start gap-2 rounded-lg bg-amber-50 dark:bg-amber-950 border border-amber-200 dark:border-amber-800 p-3 text-sm">
+              <ShieldAlert className="h-4 w-4 text-amber-600 dark:text-amber-400 mt-0.5 shrink-0" />
+              <p className="text-amber-700 dark:text-amber-300">
+                A temporary password was set for your account. Please choose a new secure password to proceed.
+              </p>
+            </div>
+          )}
           <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
             <div className="space-y-2">
               <Label htmlFor="password">New password</Label>
@@ -210,3 +232,4 @@ export function UpdatePasswordForm() {
     </div>
   )
 }
+
