@@ -1,0 +1,15 @@
+.git
+.github
+.next
+.vercel
+node_modules
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.env*
+.DS_Store
+coverage
+docs/datasets/images
+docs/datasets/images-optimized
+images
+database-mock
