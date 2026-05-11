@@ -216,12 +216,13 @@ CREATE TABLE public.daily_plans (
   is_generated boolean NOT NULL DEFAULT true,
   created_at timestamp with time zone NOT NULL DEFAULT now(),
   updated_at timestamp with time zone NOT NULL DEFAULT now(),
+  fasting_plan jsonb,
   CONSTRAINT daily_plans_pkey PRIMARY KEY (id),
   CONSTRAINT daily_plans_user_id_fkey FOREIGN KEY (user_id) REFERENCES auth.users(id)
 );
 ```
 
-**plan JSONB Structure:**
+**plan/fasting_plan JSONB Structure:**
 
 ```json
 {
@@ -342,12 +343,11 @@ CREATE TABLE public.profiles (
   email character varying,
   avatar_url text,
   mobile text UNIQUE,
+  country_code character varying,
   CONSTRAINT profiles_pkey PRIMARY KEY (id),
   CONSTRAINT profiles_user_id_fkey FOREIGN KEY (user_id) REFERENCES auth.users(id)
 );
 ```
-
-**Note:** Email and name are stored in BOTH direct columns AND basic_info JSONB for flexibility.
 
 ### push_subscriptions
 
@@ -411,9 +411,9 @@ CREATE TABLE public.recipes (
   name character varying NOT NULL UNIQUE,
   description text,
   image_url character varying,
-  meal_type ARRAY,
+  meal_type text[],
   cuisine character varying,
-  tags ARRAY,
+  tags text[],
   prep_time_minutes integer,
   cook_time_minutes integer,
   servings integer NOT NULL DEFAULT 1,
@@ -432,6 +432,7 @@ CREATE TABLE public.recipes (
   status USER-DEFINED NOT NULL DEFAULT 'draft'::recipe_status,
   validation_errors jsonb DEFAULT '[]'::jsonb,
   last_validated_at timestamp with time zone,
+  recommendation_group text[] DEFAULT '{}'::text[],
   CONSTRAINT recipes_pkey PRIMARY KEY (id),
   CONSTRAINT recipes_created_by_fkey FOREIGN KEY (created_by) REFERENCES auth.users(id)
 );
