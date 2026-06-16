@@ -519,14 +519,16 @@ export async function updateUserMeal({
           ? snackIndex
           : getSnackIndexForSlotName(mealType, regularMealStructure)
       const snacks = Array.isArray(updatedPlan.snacks) ? [...updatedPlan.snacks] : []
-      snacks[resolvedSnackIndex >= 0 ? resolvedSnackIndex : 0] = { recipe_id: recipeId, servings }
+      const snackIdx = resolvedSnackIndex >= 0 ? resolvedSnackIndex : 0
+      snacks[snackIdx] = { ...(snacks[snackIdx] || {}), recipe_id: recipeId, servings }
       updatedPlan.snacks = snacks
     } else if (mealType === 'snack-taraweeh') {
       // snack-taraweeh is ALWAYS an array (matches user dashboard behavior)
-      updatedPlan['snack-taraweeh'] = [{ recipe_id: recipeId, servings }]
+      const existing = Array.isArray(updatedPlan['snack-taraweeh']) ? updatedPlan['snack-taraweeh'][0] : undefined
+      updatedPlan['snack-taraweeh'] = [{ ...(existing || {}), recipe_id: recipeId, servings }]
     } else {
-      // Update meal (breakfast/lunch/dinner or other fasting meals)
-      updatedPlan[mealType] = { recipe_id: recipeId, servings }
+      // Update meal (breakfast/lunch/dinner or other fasting meals) - preserve supplements etc.
+      updatedPlan[mealType] = { ...(updatedPlan[mealType] || {}), recipe_id: recipeId, servings }
     }
 
     console.log(`[Admin] Updated ${mealType} with recipe ${recipeId}, servings: ${servings} (target: ${targetCalories} cal, base: ${baseCalories} cal)`)

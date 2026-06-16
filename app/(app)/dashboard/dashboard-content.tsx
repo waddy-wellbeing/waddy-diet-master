@@ -496,6 +496,7 @@ export function DashboardContent({
 
   const handleSearchRecipeSelected = async (recipeId: string) => {
     if (!searchMealName) return;
+    if (loadingMeal) return; // Block concurrent plan writes
 
     setSearchSheetOpen(false);
     setLoadingMeal(searchMealName);
@@ -658,7 +659,7 @@ export function DashboardContent({
         .select("*")
         .eq("user_id", profile.user_id)
         .eq("log_date", dateStr)
-        .single();
+        .maybeSingle();
 
       const currentLog = (existingLog?.log || {}) as DailyLog;
       const currentTotals = (existingLog?.logged_totals || {}) as DailyTotals;
@@ -771,7 +772,7 @@ export function DashboardContent({
         .select("*")
         .eq("user_id", profile.user_id)
         .eq("log_date", dateStr)
-        .single();
+        .maybeSingle();
 
       if (!existingLog) return;
 

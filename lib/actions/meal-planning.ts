@@ -80,13 +80,18 @@ export async function savePlanMeal(params: SavePlanMealParams): Promise<ActionRe
         const resolvedSnackIndex = typeof snackIndex === 'number' && snackIndex >= 0 ? snackIndex : 0
         const snackArray = Array.isArray(updatedPlan[mealType]) ? [...(updatedPlan[mealType] as PlanSnackItem[])] : []
         snackArray[resolvedSnackIndex] = {
+          ...(snackArray[resolvedSnackIndex] || {}),
           recipe_id: meal.recipe_id,
           servings: meal.servings,
         }
         updatedPlan[mealType] = snackArray
       } else {
-        // All other meals are single slots
-        updatedPlan[mealType] = meal
+        // All other meals are single slots - preserve existing fields (e.g. supplements)
+        updatedPlan[mealType] = {
+          ...((updatedPlan[mealType] as PlanMealSlot | undefined) || {}),
+          recipe_id: meal.recipe_id,
+          servings: meal.servings,
+        }
       }
     } else {
       // Create new plan

@@ -84,7 +84,14 @@ export async function saveMealToPlan(params: SaveMealToPlanParams): Promise<Save
         }
         plan.snacks = nextSnacks
       } else {
-        ;(plan as any)[mealType] = meal
+        const existingSlot = (plan as any)[mealType] || {}
+        ;(plan as any)[mealType] = {
+          ...existingSlot,
+          recipe_id: meal.recipe_id,
+          servings: meal.servings,
+          swapped: meal.swapped,
+          swapped_ingredients: meal.swapped_ingredients,
+        }
       }
 
       // Recalculate totals

@@ -433,6 +433,7 @@ export function FastingDashboardContent({
 
   const handleSearchRecipeSelected = async (recipeId: string) => {
     if (!searchMealName) return;
+    if (loadingMeal) return; // Block concurrent plan writes
     setSearchSheetOpen(false);
 
     const result = await savePlanMeal({
@@ -574,7 +575,7 @@ export function FastingDashboardContent({
         .select("*")
         .eq("user_id", profile.user_id)
         .eq("log_date", dateStr)
-        .single();
+        .maybeSingle();
 
       const currentLog = (existingLog?.log || {}) as DailyLog;
       const currentTotals = (existingLog?.logged_totals || {}) as DailyTotals;
@@ -687,7 +688,7 @@ export function FastingDashboardContent({
         .select("*")
         .eq("user_id", profile.user_id)
         .eq("log_date", dateStr)
-        .single();
+        .maybeSingle();
 
       if (!existingLog) return;
 
